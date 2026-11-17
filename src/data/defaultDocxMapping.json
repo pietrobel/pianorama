@@ -1,0 +1,142 @@
+{
+  "schemaVersion": "1.0.0",
+  "templateFileName": "Modello_programmazione_scuola_SECONDARIA_DI_I_GRADO.docx",
+  "typography": {
+    "fontFamily": "Garamond",
+    "headingColorHex": "1F3864",
+    "bodySizePt": 11,
+    "headingSizePt": 13,
+    "checkedGlyph": "☒",
+    "uncheckedGlyph": "☐"
+  },
+  "institutionHeader": {
+    "ministry": "Ministero dell'Istruzione e del Merito",
+    "schoolName": "Istituto Comprensivo \"Beato Don Pino Puglisi\" — Villafrati-Mezzojuso",
+    "addressLine": "Corso San Marco n° 59 - 90030 Villafrati (PA) - Distretto 12/50 - Codice Fiscale 97168730824",
+    "contactsLine": "0916172589 – 0916851027 · www.icvillafratimezzojuso.edu.it · paic817007@istruzione.it · paic817007@pec.istruzione.it"
+  },
+  "sections": [
+    {
+      "id": "dati_generali",
+      "sectionTitle": "PROGRAMMAZIONE DISCIPLINARE",
+      "appPath": "datiGenerali",
+      "templateTarget": "Intestazione documento e tabella dati identificativi (Scuola, Plesso, Anno Scolastico, Classe, Disciplina, Docente)",
+      "renderType": "table_row"
+    },
+    {
+      "id": "composizione_classe",
+      "sectionTitle": "COMPOSIZIONE DELLA CLASSE",
+      "appPath": "composizione",
+      "templateTarget": "Tabella 5 colonne: Alunni | Maschi | Femmine | Ripetenti | Con Bisogni Educativi Speciali (BES)",
+      "renderType": "table_row"
+    },
+    {
+      "id": "situazione_tipologia",
+      "sectionTitle": "SITUAZIONE DELLA CLASSE — TIPOLOGIA",
+      "appPath": "situazione.tipologie",
+      "templateTarget": "Tabella Situazione della classe > riga Tipologia (caselle di spunta)",
+      "renderType": "checkbox_list",
+      "options": [
+        "tranquilla",
+        "vivace",
+        "collaborativa",
+        "poco collaborativa",
+        "motivata",
+        "poco motivata",
+        "problematica"
+      ]
+    },
+    {
+      "id": "situazione_livello",
+      "sectionTitle": "SITUAZIONE DELLA CLASSE — LIVELLO",
+      "appPath": "situazione.livello",
+      "templateTarget": "Tabella Situazione della classe > riga Livello",
+      "renderType": "checkbox_list",
+      "options": ["medio-alto", "medio", "medio-basso", "basso"]
+    },
+    {
+      "id": "situazione_mezzi",
+      "sectionTitle": "MEZZI UTILIZZATI PER INDIVIDUARE LE RISORSE ED I BISOGNI DEGLI ALUNNI",
+      "appPath": "situazione.mezziIndividuazione",
+      "templateTarget": "Tabella Situazione della classe > riga Mezzi utilizzati",
+      "renderType": "checkbox_list",
+      "options": [
+        "Curriculum scolastico fornito dalla scuola precedente",
+        "Informazioni fornite dai precedenti docenti e/o dai genitori",
+        "Prove di ingresso",
+        "Osservazioni sistematiche scritte ed orali appositamente predisposte"
+      ]
+    },
+    {
+      "id": "situazione_caratteristiche",
+      "sectionTitle": "SITUAZIONE DELLA CLASSE — CARATTERISTICHE ETEROGENEE",
+      "appPath": "situazione.caratteristicheDimensioni",
+      "templateTarget": "Paragrafi discorsivi nella sezione Situazione della classe (solo dimensioni con righe attive non impostate su nessuno)",
+      "renderType": "narrative"
+    },
+    {
+      "id": "analisi_partenza_testo",
+      "sectionTitle": "ANALISI DELLA SITUAZIONE DI PARTENZA",
+      "appPath": "analisiPartenza.descrizioneDisciplinare",
+      "templateTarget": "Sezione Analisi della situazione di partenza > Situazione di partenza degli alunni in relazione alla disciplina",
+      "renderType": "narrative"
+    },
+    {
+      "id": "analisi_partenza_livelli",
+      "sectionTitle": "LIVELLI DI PARTENZA RILEVATI",
+      "appPath": "analisiPartenza.livelli",
+      "templateTarget": "Tabella 4 colonne: Livello basso | Livello medio/basso | Livello medio | Livello alto (solo conteggi aggregati)",
+      "renderType": "table_row"
+    },
+    {
+      "id": "analisi_partenza_fonti",
+      "sectionTitle": "FONTI DI RILEVAZIONE DEI DATI",
+      "appPath": "analisiPartenza.fontiRilevazione",
+      "templateTarget": "Sezione Analisi della situazione di partenza > Fonti di rilevazione + campo Altro",
+      "renderType": "checkbox_list",
+      "options": [
+        "griglie, questionari conoscitivi, test socio-metrici",
+        "tecniche di osservazione",
+        "test d'ingresso",
+        "colloqui con gli alunni",
+        "colloqui con le famiglie",
+        "colloqui con i docenti della scuola dell'infanzia/primaria"
+      ]
+    },
+    {
+      "id": "interventi_livelli",
+      "sectionTitle": "STRATEGIE ED INTERVENTI PER IL POTENZIAMENTO, IL CONSOLIDAMENTO ED IL RECUPERO",
+      "appPath": "interventi",
+      "templateTarget": "Tabella Gruppi di livello (Potenziamento, Consolidamento, Recupero) + riquadro Alunni con BES e interventi programmati",
+      "renderType": "table_2col"
+    },
+    {
+      "id": "curricolo_competenze",
+      "sectionTitle": "TRAGUARDI PER LO SVILUPPO DELLE COMPETENZE IN RELAZIONE AL CURRICOLO VERTICALE DEL NOSTRO ISTITUTO",
+      "appPath": "curricolo",
+      "templateTarget": "Nota introduttiva, Traguardi/Competenze, Tabella 2 colonne ABILITÀ | CONOSCENZE, Attività programmate",
+      "renderType": "table_2col"
+    },
+    {
+      "id": "metodi_strumenti",
+      "sectionTitle": "CRITERI METODOLOGICI, STRATEGIE, STRUMENTI",
+      "appPath": "metodiStrumenti",
+      "templateTarget": "Premessa metodologica, Tabella 2 colonne METODI | MEZZI E STRUMENTI, Ausili didattici, Didattica Digitale Integrata",
+      "renderType": "table_2col"
+    },
+    {
+      "id": "verifiche_modalita",
+      "sectionTitle": "VERIFICHE IN ITINERE: MODALITÀ",
+      "appPath": "verificheValutazione",
+      "templateTarget": "Tabella 2 colonne SCRITTA | ORALE + Altri tipi di prove",
+      "renderType": "table_2col"
+    },
+    {
+      "id": "valutazione_firma",
+      "sectionTitle": "VALUTAZIONE",
+      "appPath": "verificheValutazione.criteriValutazione",
+      "templateTarget": "Testo criteri di valutazione e riga firma Il/La Docente",
+      "renderType": "narrative"
+    }
+  ]
+}

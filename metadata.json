@@ -1,0 +1,6 @@
+{
+  "name": "PIANORAMA",
+  "description": "Il laboratorio dei piani di lavoro: applicazione offline-first per creare, compilare, gestire ed esportare in DOCX e PDF le programmazioni didattiche disciplinari della scuola secondaria di primo grado.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

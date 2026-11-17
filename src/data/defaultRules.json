@@ -1,0 +1,267 @@
+[
+  {
+    "id": "rule-livello-medio-basso",
+    "nome": "Recupero mirato per livello medio-basso o basso",
+    "descrizione": "Quando il livello complessivo della classe è medio-basso o basso, propone strategie di recupero e consolidamento di base dalla libreria locale.",
+    "attiva": true,
+    "priorita": 1,
+    "matchMode": "any",
+    "condizioni": [
+      {
+        "field": "situazione.livello",
+        "operator": "equals",
+        "value": "medio-basso"
+      },
+      {
+        "field": "situazione.livello",
+        "operator": "equals",
+        "value": "basso"
+      }
+    ],
+    "azioni": [
+      {
+        "id": "act-rec-1",
+        "targetSection": "interventi.recupero",
+        "actionType": "check_option",
+        "label": "Attiva lavori differenziati per singoli alunni e/o gruppi",
+        "valueText": "lavori differenziati per singoli alunni e/o gruppi",
+        "libraryCategory": "strategia_recupero"
+      },
+      {
+        "id": "act-rec-2",
+        "targetSection": "interventi.recupero",
+        "actionType": "check_option",
+        "label": "Attiva esercizi di lettura e tecnica di comprensione",
+        "valueText": "esercizi di lettura e tecnica di comprensione",
+        "libraryCategory": "strategia_recupero"
+      },
+      {
+        "id": "act-cons-1",
+        "targetSection": "interventi.consolidamento",
+        "actionType": "check_option",
+        "label": "Attiva individuazione dei concetti chiave e schematizzazione",
+        "valueText": "individuazione dei concetti chiave e successiva schematizzazione",
+        "libraryCategory": "strategia_consolidamento"
+      },
+      {
+        "id": "act-met-gruppi",
+        "targetSection": "metodiStrumenti.metodi",
+        "actionType": "check_option",
+        "label": "Includi Lavoro per gruppi di livello",
+        "valueText": "Lavoro per gruppi di livello",
+        "libraryCategory": "metodologia"
+      }
+    ]
+  },
+  {
+    "id": "rule-bes-presenti",
+    "nome": "Misure inclusive per alunni con BES",
+    "descrizione": "Se il conteggio aggregato degli alunni con BES è maggiore di zero, propone interventi inclusivi generici e coerenti con PDP/PEI senza dati personali.",
+    "attiva": true,
+    "priorita": 1,
+    "matchMode": "all",
+    "condizioni": [
+      {
+        "field": "composizione.bes",
+        "operator": "gt",
+        "value": 0
+      }
+    ],
+    "azioni": [
+      {
+        "id": "act-bes-1",
+        "targetSection": "interventi.besInterventiProgrammati",
+        "actionType": "append_text",
+        "label": "Inserisci nota operativa inclusiva (strumenti compensativi e misure dispensative secondo PDP/PEI)",
+        "valueText": "Per gli alunni con Bisogni Educativi Speciali si prevedono percorsi personalizzati in coerenza con i rispettivi PDP/PEI, privilegiando mappe concettuali, mediatori visivi, tempi distesi per le verifiche, prove strutturate o graduate e valorizzazione dei canali orali e laboratoriali."
+      },
+      {
+        "id": "act-bes-2",
+        "targetSection": "interventi.recupero",
+        "actionType": "check_option",
+        "label": "Attiva coinvolgimento in attività individualizzate",
+        "valueText": "coinvolgimento in attività individualizzate",
+        "libraryCategory": "strategia_recupero"
+      }
+    ]
+  },
+  {
+    "id": "rule-livello-medio-alto",
+    "nome": "Potenziamento per livello medio-alto o fascia alta numerosa",
+    "descrizione": "Quando la classe presenta livello medio-alto o almeno 4 alunni nella fascia alta, propone strategie di approfondimento e compiti di realtà.",
+    "attiva": true,
+    "priorita": 2,
+    "matchMode": "any",
+    "condizioni": [
+      {
+        "field": "situazione.livello",
+        "operator": "equals",
+        "value": "medio-alto"
+      },
+      {
+        "field": "analisiPartenza.livelli.altoAlunni",
+        "operator": "gte",
+        "value": 4
+      }
+    ],
+    "azioni": [
+      {
+        "id": "act-pot-1",
+        "targetSection": "interventi.potenziamento",
+        "actionType": "check_option",
+        "label": "Attiva approfondimento e rielaborazione dei contenuti disciplinari",
+        "valueText": "approfondimento e rielaborazione dei contenuti disciplinari",
+        "libraryCategory": "strategia_potenziamento"
+      },
+      {
+        "id": "act-pot-2",
+        "targetSection": "interventi.potenziamento",
+        "actionType": "check_option",
+        "label": "Attiva ricerche e attività laboratoriali",
+        "valueText": "ricerche e attività laboratoriali",
+        "libraryCategory": "strategia_potenziamento"
+      },
+      {
+        "id": "act-str-compiti",
+        "targetSection": "metodiStrumenti.mezziEStrumenti",
+        "actionType": "check_option",
+        "label": "Includi Compiti di realtà negli strumenti",
+        "valueText": "Compiti di realtà",
+        "libraryCategory": "strumento"
+      }
+    ]
+  },
+  {
+    "id": "rule-classe-vivace-poco-motivata",
+    "nome": "Didattica attiva per classi vivaci o poco motivate",
+    "descrizione": "Se la tipologia della classe include 'vivace', 'poco motivata' o 'poco collaborativa', suggerisce didattica laboratoriale, cooperative learning e autobiografia cognitiva.",
+    "attiva": true,
+    "priorita": 2,
+    "matchMode": "any",
+    "condizioni": [
+      {
+        "field": "situazione.tipologie",
+        "operator": "includes",
+        "value": "poco motivata"
+      },
+      {
+        "field": "situazione.tipologie",
+        "operator": "includes",
+        "value": "poco collaborativa"
+      },
+      {
+        "field": "situazione.tipologie",
+        "operator": "includes",
+        "value": "vivace"
+      }
+    ],
+    "azioni": [
+      {
+        "id": "act-mot-1",
+        "targetSection": "metodiStrumenti.metodi",
+        "actionType": "check_option",
+        "label": "Includi Cooperative learning",
+        "valueText": "Cooperative learning",
+        "libraryCategory": "metodologia"
+      },
+      {
+        "id": "act-mot-2",
+        "targetSection": "metodiStrumenti.metodi",
+        "actionType": "check_option",
+        "label": "Includi Didattica laboratoriale",
+        "valueText": "Didattica laboratoriale",
+        "libraryCategory": "metodologia"
+      },
+      {
+        "id": "act-mot-3",
+        "targetSection": "metodiStrumenti.mezziEStrumenti",
+        "actionType": "check_option",
+        "label": "Includi Giochi didattici e compiti di realtà",
+        "valueText": "Giochi didattici",
+        "libraryCategory": "strumento"
+      }
+    ]
+  },
+  {
+    "id": "rule-classe-terza-esame",
+    "nome": "Preparazione al colloquio e alle prove di Classe Terza",
+    "descrizione": "Per la classe Terza propone modalità di verifica argomentative, relazioni e sviluppo della consapevolezza metacognitiva in vista dell'Esame di Stato.",
+    "attiva": true,
+    "priorita": 3,
+    "matchMode": "all",
+    "condizioni": [
+      {
+        "field": "datiGenerali.classe",
+        "operator": "equals",
+        "value": "Terza"
+      }
+    ],
+    "azioni": [
+      {
+        "id": "act-terza-1",
+        "targetSection": "verificheValutazione.verificheScritte",
+        "actionType": "check_option",
+        "label": "Includi Componimenti, relazioni, sintesi",
+        "valueText": "Componimenti, relazioni, sintesi",
+        "libraryCategory": "verifica_scritta"
+      },
+      {
+        "id": "act-terza-2",
+        "targetSection": "verificheValutazione.verificheOrali",
+        "actionType": "check_option",
+        "label": "Includi Relazione su attività svolte",
+        "valueText": "Relazione su attività svolte",
+        "libraryCategory": "verifica_orale"
+      },
+      {
+        "id": "act-terza-3",
+        "targetSection": "metodiStrumenti.mezziEStrumenti",
+        "actionType": "check_option",
+        "label": "Includi Autobiografia cognitiva",
+        "valueText": "Autobiografia cognitiva",
+        "libraryCategory": "strumento"
+      }
+    ]
+  },
+  {
+    "id": "rule-fascia-bassa-numerosa",
+    "nome": "Attenzione alla fascia di partenza bassa (>= 4 alunni)",
+    "descrizione": "Quando nella fascia bassa sono presenti 4 o più alunni, suggerisce prove graduate e controllo sistematico del lavoro.",
+    "attiva": true,
+    "priorita": 2,
+    "matchMode": "all",
+    "condizioni": [
+      {
+        "field": "analisiPartenza.livelli.bassoAlunni",
+        "operator": "gte",
+        "value": 4
+      }
+    ],
+    "azioni": [
+      {
+        "id": "act-bassa-1",
+        "targetSection": "interventi.consolidamento",
+        "actionType": "check_option",
+        "label": "Attiva controllo sistematico del lavoro svolto",
+        "valueText": "controllo sistematico del lavoro svolto",
+        "libraryCategory": "strategia_consolidamento"
+      },
+      {
+        "id": "act-bassa-2",
+        "targetSection": "interventi.recupero",
+        "actionType": "check_option",
+        "label": "Attiva attribuzione di compiti di difficoltà crescente",
+        "valueText": "attribuzione di compiti di difficoltà crescente in vista dell'acquisizione dei contenuti adeguati",
+        "libraryCategory": "strategia_recupero"
+      },
+      {
+        "id": "act-bassa-3",
+        "targetSection": "verificheValutazione.verificheScritte",
+        "actionType": "check_option",
+        "label": "Includi Prove strutturate e Testi di completamento",
+        "valueText": "Prove strutturate",
+        "libraryCategory": "verifica_scritta"
+      }
+    ]
+  }
+]
