@@ -452,7 +452,7 @@ export function DashboardPage({
                         {plan.datiGenerali.docente.trim()
                           ? formatDocenteConTitolo(
                               plan.datiGenerali.docente,
-                              plan.datiGenerali.docenteGenere
+                              plan.datiGenerali.docenteGenere ?? settings.defaultDocenteGenere ?? 'F'
                             )
                           : 'Non indicato'}
                         {plan.templateNome ? ` · ${plan.templateNome}` : ''}

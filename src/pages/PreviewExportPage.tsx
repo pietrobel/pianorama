@@ -2,6 +2,7 @@ import { ArrowLeft, FileDown, FileText, Printer, Sliders } from 'lucide-react';
 import { useState } from 'react';
 import { DocumentSheetPreview } from '../components/DocumentSheetPreview';
 import type {
+  DocenteGenere,
   DocumentLayoutStyle,
   DocxMappingSchema,
   Programmazione,
@@ -15,6 +16,7 @@ interface PreviewExportPageProps {
   settings: SchoolSettings;
   mapping: DocxMappingSchema;
   onChangeLayout?: (layout: DocumentLayoutStyle) => Promise<void> | void;
+  onChangeDocenteGenere?: (genere: DocenteGenere) => Promise<void> | void;
   onBackToEditor: () => void;
   onOpenMappingSettings: () => void;
 }
@@ -24,6 +26,7 @@ export function PreviewExportPage({
   settings,
   mapping,
   onChangeLayout,
+  onChangeDocenteGenere,
   onBackToEditor,
   onOpenMappingSettings,
 }: PreviewExportPageProps) {
@@ -33,6 +36,8 @@ export function PreviewExportPage({
 
   const activeLayout: DocumentLayoutStyle =
     plan.datiGenerali.layoutDocumento ?? settings.defaultLayoutDocumento ?? 'originale';
+  const activeGenere: DocenteGenere =
+    plan.datiGenerali.docenteGenere ?? settings.defaultDocenteGenere ?? 'F';
 
   const handleExportDocx = async () => {
     setBusy('docx');
@@ -94,6 +99,37 @@ export function PreviewExportPage({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {onChangeDocenteGenere && (
+            <div
+              role="group"
+              aria-label="Titolo docente"
+              className="inline-flex rounded-lg border border-slate-300 bg-slate-50 p-0.5 dark:border-slate-700 dark:bg-slate-950"
+            >
+              <button
+                type="button"
+                onClick={() => void onChangeDocenteGenere('F')}
+                className={`whitespace-nowrap rounded-md px-2.5 py-1.5 text-xs font-semibold transition ${
+                  activeGenere === 'F'
+                    ? 'bg-[#1F3864] text-white'
+                    : 'text-slate-600 hover:text-slate-900 dark:text-slate-300'
+                }`}
+              >
+                Prof.ssa · La docente
+              </button>
+              <button
+                type="button"
+                onClick={() => void onChangeDocenteGenere('M')}
+                className={`whitespace-nowrap rounded-md px-2.5 py-1.5 text-xs font-semibold transition ${
+                  activeGenere === 'M'
+                    ? 'bg-[#1F3864] text-white'
+                    : 'text-slate-600 hover:text-slate-900 dark:text-slate-300'
+                }`}
+              >
+                Prof. · Il docente
+              </button>
+            </div>
+          )}
+
           {onChangeLayout && (
             <div
               role="group"

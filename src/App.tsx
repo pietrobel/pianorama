@@ -15,6 +15,7 @@ import type {
   AnonymousStudentBandEntry,
   BackupPlainData,
   CurricoloCatalogEntry,
+  DocenteGenere,
   DocxMappingSchema,
   LibraryItem,
   PlanStatus,
@@ -259,6 +260,20 @@ export default function App() {
   const handleSaveSettings = async (next: SchoolSettings) => {
     await repository.saveSettings(next);
     setSettings(next);
+  };
+
+  const handleApplyDocenteGenereToAllPlans = async (genere: DocenteGenere): Promise<number> => {
+    const updatedPlans = programmazioni.map((plan) => ({
+      ...plan,
+      updatedAt: new Date().toISOString(),
+      datiGenerali: {
+        ...plan.datiGenerali,
+        docenteGenere: genere,
+      },
+    }));
+    await Promise.all(updatedPlans.map((p) => repository.saveProgrammazione(p)));
+    setProgrammazioni(updatedPlans);
+    return updatedPlans.length;
   };
 
   const handleSaveMapping = async (next: DocxMappingSchema) => {
@@ -547,6 +562,16 @@ export default function App() {
                   };
                   await handleSavePlan(updated);
                 }}
+                onChangeDocenteGenere={async (docenteGenere) => {
+                  const updated: Programmazione = {
+                    ...activePlan,
+                    datiGenerali: {
+                      ...activePlan.datiGenerali,
+                      docenteGenere,
+                    },
+                  };
+                  await handleSavePlan(updated);
+                }}
                 onBackToEditor={() => setRoute({ page: 'editor', planId: activePlan.id })}
                 onOpenMappingSettings={() => setRoute({ page: 'settings' })}
               />
@@ -599,8 +624,10 @@ export default function App() {
                 mapping={mapping}
                 canInstallPWA={canInstall}
                 isPWAInstalled={isInstalled}
+                existingPlansCount={programmazioni.length}
                 onInstallPWA={triggerInstall}
                 onSaveSettings={handleSaveSettings}
+                onApplyDocenteGenereToAllPlans={handleApplyDocenteGenereToAllPlans}
                 onSaveMapping={handleSaveMapping}
                 onResetMapping={handleResetMapping}
                 onOpenPrivacyModal={() => setShowWelcomeModal(true)}

@@ -19,7 +19,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ClassCharacteristicsPanel } from '../components/ClassCharacteristicsPanel';
 import { ClassQuestionnairePanel } from '../components/ClassQuestionnairePanel';
 import { CurricoloCatalogSelector } from '../components/CurricoloCatalogSelector';
@@ -41,7 +41,12 @@ import {
   TIPOLOGIE_CLASSE_OPTIONS,
   VERIFICHE_ORALI_OPTIONS,
   VERIFICHE_SCRITTE_OPTIONS,
+  formatDocenteConTitolo,
+  formatFirmaDocente,
+  getDefaultCurricoloForDisciplina,
   getDefaultMetodiStrumentiForDisciplina,
+  getDefaultRilevazioneForDisciplina,
+  getDefaultVerificheValutazioneForDisciplina,
 } from '../domain/defaults';
 import type {
   AnonymousStudentBandEntry,
@@ -157,41 +162,84 @@ export function PlanEditorPage({
 
   const isFirstRender = useRef(true);
   const latestPlanId = useRef(initialPlan.id);
+  const latestDraftRef = useRef(draft);
+  latestDraftRef.current = draft;
+  const onSavePlanRef = useRef(onSavePlan);
+  onSavePlanRef.current = onSavePlan;
+  const isDirtyRef = useRef(false);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (initialPlan.id !== latestPlanId.current) {
       latestPlanId.current = initialPlan.id;
       setDraft(initialPlan);
       isFirstRender.current = true;
+      isDirtyRef.current = false;
     }
   }, [initialPlan]);
+
+  const flushPendingSave = useCallback(async () => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    if (!isDirtyRef.current) return;
+    isDirtyRef.current = false;
+    try {
+      await onSavePlanRef.current(latestDraftRef.current);
+      setSaveState('saved');
+      setSaveTimeLabel(
+        new Date().toLocaleTimeString('it-IT', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        })
+      );
+    } catch (err) {
+      setSaveState('error');
+      setSaveErrorMsg(err instanceof Error ? err.message : 'Errore nel salvataggio locale.');
+    }
+  }, []);
 
   useEffect(() => {
     if (isFirstRender.current) {
       isFirstRender.current = false;
       return;
     }
+    isDirtyRef.current = true;
     setSaveState('saving');
     setSaveErrorMsg(null);
-    const timer = setTimeout(async () => {
-      try {
-        await onSavePlan(draft);
-        setSaveState('saved');
-        setSaveTimeLabel(
-          new Date().toLocaleTimeString('it-IT', {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-          })
-        );
-      } catch (err) {
-        setSaveState('error');
-        setSaveErrorMsg(err instanceof Error ? err.message : 'Errore nel salvataggio locale.');
-      }
+    debounceTimerRef.current = setTimeout(async () => {
+      debounceTimerRef.current = null;
+      await flushPendingSave();
     }, 450);
 
-    return () => clearTimeout(timer);
-  }, [draft, onSavePlan]);
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+    };
+  }, [draft, flushPendingSave]);
+
+  useEffect(() => {
+    return () => {
+      if (isDirtyRef.current) {
+        isDirtyRef.current = false;
+        void onSavePlanRef.current(latestDraftRef.current);
+      }
+    };
+  }, []);
+
+  const handleBackClick = async () => {
+    await flushPendingSave();
+    onBack();
+  };
+
+  const handleOpenExportClick = async () => {
+    await flushPendingSave();
+    onOpenExport();
+  };
 
   const proposals = useMemo(
     () => evaluateSuggestionRules(draft, rules, dismissedProposals),
@@ -442,7 +490,7 @@ export function PlanEditorPage({
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={onBack}
+            onClick={() => void handleBackClick()}
             className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
@@ -524,7 +572,7 @@ export function PlanEditorPage({
 
           <button
             type="button"
-            onClick={onOpenExport}
+            onClick={() => void handleOpenExportClick()}
             className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg bg-[#1F3864] px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-[#172b4d]"
           >
             <CheckCircle2 className="h-3.5 w-3.5" />
@@ -831,18 +879,49 @@ export function PlanEditorPage({
                     onChange={(e) => {
                       const nextDisc = e.target.value;
                       setDraft((prev) => {
-                        const prevDefaults = getDefaultMetodiStrumentiForDisciplina(
-                          prev.datiGenerali.disciplina
-                        );
+                        const prevDisc = prev.datiGenerali.disciplina;
+                        const prevMetodiDef = getDefaultMetodiStrumentiForDisciplina(prevDisc);
+                        const prevVerifDef = getDefaultVerificheValutazioneForDisciplina(prevDisc);
+                        const prevRilevDef = getDefaultRilevazioneForDisciplina(prevDisc);
+                        const prevCurricDef = getDefaultCurricoloForDisciplina(prevDisc);
                         const sameSet = (a: string[], b: string[]) =>
                           a.length === b.length && a.every((v) => b.includes(v));
+
                         const shouldSyncMetodi =
-                          sameSet(prev.metodiStrumenti.metodi, prevDefaults.metodi) &&
+                          sameSet(prev.metodiStrumenti.metodi, prevMetodiDef.metodi) &&
                           sameSet(
                             prev.metodiStrumenti.mezziEStrumenti,
-                            prevDefaults.mezziEStrumenti
+                            prevMetodiDef.mezziEStrumenti
                           );
-                        const nextDefaults = getDefaultMetodiStrumentiForDisciplina(nextDisc);
+                        const shouldSyncVerifiche =
+                          sameSet(
+                            prev.verificheValutazione.verificheScritte,
+                            prevVerifDef.verificheScritte
+                          ) &&
+                          sameSet(
+                            prev.verificheValutazione.verificheOrali,
+                            prevVerifDef.verificheOrali
+                          );
+                        const shouldSyncMezziInd = sameSet(
+                          prev.situazione.mezziIndividuazione,
+                          prevRilevDef.mezziIndividuazione
+                        );
+                        const shouldSyncFonti = sameSet(
+                          prev.analisiPartenza.fontiRilevazione,
+                          prevRilevDef.fontiRilevazione
+                        );
+                        const shouldSyncCompDig =
+                          prev.curricolo.competenzeDigitali.length === 0 ||
+                          sameSet(
+                            prev.curricolo.competenzeDigitali,
+                            prevCurricDef.competenzeDigitali
+                          );
+
+                        const nextMetodiDef = getDefaultMetodiStrumentiForDisciplina(nextDisc);
+                        const nextVerifDef = getDefaultVerificheValutazioneForDisciplina(nextDisc);
+                        const nextRilevDef = getDefaultRilevazioneForDisciplina(nextDisc);
+                        const nextCurricDef = getDefaultCurricoloForDisciplina(nextDisc);
+
                         return {
                           ...prev,
                           datiGenerali: {
@@ -850,12 +929,86 @@ export function PlanEditorPage({
                             disciplina: nextDisc,
                             titoloDisciplina: nextDisc,
                           },
+                          ...(shouldSyncMezziInd
+                            ? {
+                                situazione: {
+                                  ...prev.situazione,
+                                  mezziIndividuazione: nextRilevDef.mezziIndividuazione,
+                                },
+                              }
+                            : {}),
+                          ...(shouldSyncFonti
+                            ? {
+                                analisiPartenza: {
+                                  ...prev.analisiPartenza,
+                                  fontiRilevazione: nextRilevDef.fontiRilevazione,
+                                },
+                              }
+                            : {}),
+                          curricolo: {
+                            ...prev.curricolo,
+                            ...(shouldSyncCompDig
+                              ? { competenzeDigitali: nextCurricDef.competenzeDigitali }
+                              : {}),
+                            ...(prev.curricolo.attivitaProgrammate ===
+                              prevCurricDef.attivitaProgrammate ||
+                            !prev.curricolo.attivitaProgrammate.trim()
+                              ? { attivitaProgrammate: nextCurricDef.attivitaProgrammate }
+                              : {}),
+                          },
                           ...(shouldSyncMetodi
                             ? {
                                 metodiStrumenti: {
                                   ...prev.metodiStrumenti,
-                                  metodi: nextDefaults.metodi,
-                                  mezziEStrumenti: nextDefaults.mezziEStrumenti,
+                                  metodi: nextMetodiDef.metodi,
+                                  mezziEStrumenti: nextMetodiDef.mezziEStrumenti,
+                                  ...(prev.metodiStrumenti.premessaMetodologica ===
+                                    prevMetodiDef.premessaMetodologica ||
+                                  !prev.metodiStrumenti.premessaMetodologica.trim()
+                                    ? { premessaMetodologica: nextMetodiDef.premessaMetodologica }
+                                    : {}),
+                                  ...(prev.metodiStrumenti.didatticaDigitaleIntegrata ===
+                                    prevMetodiDef.didatticaDigitaleIntegrata ||
+                                  !prev.metodiStrumenti.didatticaDigitaleIntegrata.trim()
+                                    ? {
+                                        didatticaDigitaleIntegrata:
+                                          nextMetodiDef.didatticaDigitaleIntegrata,
+                                      }
+                                    : {}),
+                                  ...(prev.metodiStrumenti.altreMetodologie ===
+                                    prevMetodiDef.altreMetodologie ||
+                                  !prev.metodiStrumenti.altreMetodologie
+                                    ? { altreMetodologie: nextMetodiDef.altreMetodologie }
+                                    : {}),
+                                  ...(prev.metodiStrumenti.altriSussidi ===
+                                    prevMetodiDef.altriSussidi ||
+                                  !prev.metodiStrumenti.altriSussidi
+                                    ? { altriSussidi: nextMetodiDef.altriSussidi }
+                                    : {}),
+                                  ...(prev.metodiStrumenti.ausiliDidattici ===
+                                    prevMetodiDef.ausiliDidattici ||
+                                  !prev.metodiStrumenti.ausiliDidattici
+                                    ? { ausiliDidattici: nextMetodiDef.ausiliDidattici }
+                                    : {}),
+                                },
+                              }
+                            : {}),
+                          ...(shouldSyncVerifiche
+                            ? {
+                                verificheValutazione: {
+                                  ...prev.verificheValutazione,
+                                  verificheScritte: nextVerifDef.verificheScritte,
+                                  verificheOrali: nextVerifDef.verificheOrali,
+                                  ...(prev.verificheValutazione.altriTipiProve ===
+                                    prevVerifDef.altriTipiProve ||
+                                  !prev.verificheValutazione.altriTipiProve
+                                    ? { altriTipiProve: nextVerifDef.altriTipiProve }
+                                    : {}),
+                                  ...(prev.verificheValutazione.criteriValutazione ===
+                                    prevVerifDef.criteriValutazione ||
+                                  !prev.verificheValutazione.criteriValutazione
+                                    ? { criteriValutazione: nextVerifDef.criteriValutazione }
+                                    : {}),
                                 },
                               }
                             : {}),
@@ -1026,6 +1179,22 @@ export function PlanEditorPage({
                     placeholder="Nome Cognome (il titolo Prof. / Prof.ssa viene applicato automaticamente)"
                     className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
                   />
+                  <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+                    Nel documento:{' '}
+                    <strong className="text-slate-700 dark:text-slate-200">
+                      {formatDocenteConTitolo(
+                        draft.datiGenerali.docente,
+                        draft.datiGenerali.docenteGenere ?? settings.defaultDocenteGenere ?? 'F'
+                      )}
+                    </strong>{' '}
+                    · Firma in calce:{' '}
+                    <strong className="text-slate-700 dark:text-slate-200">
+                      {formatFirmaDocente(
+                        draft.verificheValutazione.firmaDocente || draft.datiGenerali.docente,
+                        draft.datiGenerali.docenteGenere ?? settings.defaultDocenteGenere ?? 'F'
+                      )}
+                    </strong>
+                  </span>
                 </label>
 
                 <div className="space-y-2 border-t border-slate-200 pt-3 sm:col-span-2 dark:border-slate-800">
@@ -1230,6 +1399,17 @@ export function PlanEditorPage({
                   dimensions={draft.situazione.caratteristicheDimensioni}
                   alunniTotali={draft.composizione.alunni}
                   soglieQuote={settings.soglieQuoteCaratteristiche}
+                  contextSeed={`${draft.id}|${draft.datiGenerali.classe}|${draft.datiGenerali.sezione}|${draft.datiGenerali.disciplina}`}
+                  variantePresentazione={draft.situazione.variantePresentazione}
+                  onChangeVariantePresentazione={(nextVal) =>
+                    setDraft((prev) => ({
+                      ...prev,
+                      situazione: {
+                        ...prev.situazione,
+                        variantePresentazione: nextVal,
+                      },
+                    }))
+                  }
                   onChange={(nextDimensions) =>
                     setDraft((prev) => ({
                       ...prev,
@@ -2249,6 +2429,90 @@ export function PlanEditorPage({
                 )}
               </div>
 
+              <div className="space-y-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    Competenze digitali (DigComp 2.2) e trasversali per {draft.datiGenerali.disciplina}
+                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const defs = getDefaultCurricoloForDisciplina(
+                          draft.datiGenerali.disciplina
+                        );
+                        setDraft((prev) => ({
+                          ...prev,
+                          curricolo: {
+                            ...prev.curricolo,
+                            competenzeDigitali: defs.competenzeDigitali,
+                            attivitaProgrammate: defs.attivitaProgrammate,
+                          },
+                        }));
+                      }}
+                      className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                      Predefiniti per {draft.datiGenerali.disciplina}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDraft((prev) => ({
+                          ...prev,
+                          curricolo: {
+                            ...prev.curricolo,
+                            competenzeDigitali: [...prev.curricolo.competenzeDigitali, ''],
+                          },
+                        }))
+                      }
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-[#1F3864] hover:underline dark:text-blue-400"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Aggiungi competenza digitale
+                    </button>
+                  </div>
+                </div>
+                {draft.curricolo.competenzeDigitali.map((compDig, idx) => (
+                  <div key={idx} className="flex gap-2">
+                    <input
+                      type="text"
+                      value={compDig}
+                      onChange={(e) =>
+                        setDraft((prev) => {
+                          const next = [...prev.curricolo.competenzeDigitali];
+                          next[idx] = e.target.value;
+                          return {
+                            ...prev,
+                            curricolo: { ...prev.curricolo, competenzeDigitali: next },
+                          };
+                        })
+                      }
+                      placeholder="Competenza digitale DigComp 2.2 collegata alla disciplina..."
+                      className="flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"
+                    />
+                    <button
+                      type="button"
+                      aria-label="Rimuovi competenza digitale"
+                      onClick={() =>
+                        setDraft((prev) => ({
+                          ...prev,
+                          curricolo: {
+                            ...prev.curricolo,
+                            competenzeDigitali: prev.curricolo.competenzeDigitali.filter(
+                              (_, i) => i !== idx
+                            ),
+                          },
+                        }))
+                      }
+                      className="rounded-lg p-2 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
               <label className="block border-t border-slate-200 pt-4 dark:border-slate-800">
                 <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
                   Attività e nuclei operativi programmati
@@ -2286,8 +2550,13 @@ export function PlanEditorPage({
                       ...prev,
                       metodiStrumenti: {
                         ...prev.metodiStrumenti,
+                        premessaMetodologica: defaults.premessaMetodologica,
                         metodi: defaults.metodi,
                         mezziEStrumenti: defaults.mezziEStrumenti,
+                        altreMetodologie: defaults.altreMetodologie,
+                        altriSussidi: defaults.altriSussidi,
+                        ausiliDidattici: defaults.ausiliDidattici,
+                        didatticaDigitaleIntegrata: defaults.didatticaDigitaleIntegrata,
                       },
                     }));
                   }}
@@ -2451,9 +2720,36 @@ export function PlanEditorPage({
           {/* SEZIONE 7: VERIFICHE E VALUTAZIONE */}
           {activeSection === 'verifiche' && (
             <section className="space-y-5 rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-              <h2 className="text-base font-bold text-[#1F3864] dark:text-blue-300">
-                7. Verifiche in itinere, valutazione e firma
-              </h2>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-base font-bold text-[#1F3864] dark:text-blue-300">
+                  7. Verifiche in itinere, valutazione e firma
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const defaults = getDefaultVerificheValutazioneForDisciplina(
+                      draft.datiGenerali.disciplina
+                    );
+                    setDraft((prev) => ({
+                      ...prev,
+                      verificheValutazione: {
+                        ...prev.verificheValutazione,
+                        verificheScritte: defaults.verificheScritte,
+                        verificheOrali: defaults.verificheOrali,
+                        altriTipiProve: defaults.altriTipiProve,
+                        criteriValutazione: defaults.criteriValutazione,
+                      },
+                    }));
+                  }}
+                  className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Applica predefiniti per {draft.datiGenerali.disciplina}
+                </button>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-400">
+                Verifiche scritte, orali, prove pratiche/autentiche e criteri di valutazione sono precompilati in base alla disciplina ({draft.datiGenerali.disciplina}); puoi personalizzare qualsiasi voce.
+              </p>
 
               <div className="grid gap-5 sm:grid-cols-2">
                 <fieldset className="space-y-2 rounded-lg border border-slate-200 p-4 dark:border-slate-800">
@@ -2548,25 +2844,59 @@ export function PlanEditorPage({
                 />
               </label>
 
-              <label className="block">
-                <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
-                  Firma in calce (Il/La Docente)
-                </span>
-                <input
-                  type="text"
-                  value={draft.verificheValutazione.firmaDocente}
-                  onChange={(e) =>
-                    setDraft((prev) => ({
-                      ...prev,
-                      verificheValutazione: {
-                        ...prev.verificheValutazione,
-                        firmaDocente: e.target.value,
-                      },
-                    }))
-                  }
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-                />
-              </label>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block">
+                  <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                    Titolo e declinazione docente
+                  </span>
+                  <select
+                    value={draft.datiGenerali.docenteGenere ?? settings.defaultDocenteGenere ?? 'F'}
+                    onChange={(e) =>
+                      setDraft((prev) => ({
+                        ...prev,
+                        datiGenerali: {
+                          ...prev.datiGenerali,
+                          docenteGenere: e.target.value as DocenteGenere,
+                        },
+                      }))
+                    }
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                  >
+                    <option value="F">Professoressa (Prof.ssa · La docente)</option>
+                    <option value="M">Professore (Prof. · Il docente)</option>
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                    Firma in calce (Nome e Cognome)
+                  </span>
+                  <input
+                    type="text"
+                    value={draft.verificheValutazione.firmaDocente}
+                    onChange={(e) =>
+                      setDraft((prev) => ({
+                        ...prev,
+                        verificheValutazione: {
+                          ...prev.verificheValutazione,
+                          firmaDocente: e.target.value,
+                        },
+                      }))
+                    }
+                    placeholder="Nome Cognome..."
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                  />
+                  <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+                    Anteprima firma:{' '}
+                    <strong className="text-slate-700 dark:text-slate-200">
+                      {formatFirmaDocente(
+                        draft.verificheValutazione.firmaDocente || draft.datiGenerali.docente,
+                        draft.datiGenerali.docenteGenere ?? settings.defaultDocenteGenere ?? 'F'
+                      )}
+                    </strong>
+                  </span>
+                </label>
+              </div>
             </section>
           )}
         </div>
@@ -2584,6 +2914,9 @@ export function PlanEditorPage({
         catalog={curricoloCatalog}
         planClasse={draft.datiGenerali.classe}
         planDisciplina={draft.datiGenerali.disciplina}
+        planConoscenze={draft.curricolo.righeAbilitaConoscenze
+          .map((r) => r.conoscenze)
+          .filter((c) => Boolean(c && c.trim()))}
         onImport={handleImportCatalogEntries}
         onClose={() => setShowCatalogSelector(false)}
       />

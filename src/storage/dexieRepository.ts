@@ -29,8 +29,8 @@ function normalizeLoadedPlan(plan: Programmazione): Programmazione {
     ...plan,
     datiGenerali: {
       ...plan.datiGenerali,
-      docenteGenere: plan.datiGenerali?.docenteGenere ?? 'F',
-      layoutDocumento: plan.datiGenerali?.layoutDocumento ?? 'originale',
+      docenteGenere: plan.datiGenerali?.docenteGenere,
+      layoutDocumento: plan.datiGenerali?.layoutDocumento,
     },
     situazione: {
       ...plan.situazione,

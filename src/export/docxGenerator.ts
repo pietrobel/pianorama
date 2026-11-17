@@ -254,7 +254,8 @@ export function createProgrammazioneDocument(
   const contactsText = settings.schoolContactsLine || mapping.institutionHeader.contactsLine;
   const activeCharacteristics = getActiveDimensionsForDocument(
     plan.situazione.caratteristicheDimensioni,
-    settings.soglieQuoteCaratteristiche
+    settings.soglieQuoteCaratteristiche,
+    `${plan.id}|${plan.datiGenerali.classe}|${plan.datiGenerali.sezione}|${plan.datiGenerali.disciplina}`
   );
   const compositionIntro = buildClassCompositionIntro(plan);
 

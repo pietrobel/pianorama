@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { DISCIPLINE_SECONDARIA } from '../domain/defaults';
 import type { ClasseSecondaria, CurricoloCatalogEntry } from '../domain/types';
 import {
+  computePreselectedCatalogIds,
   filterCatalogEntries,
   groupCatalogEntries,
   type CurricoloTypeGroup,
@@ -13,6 +14,7 @@ interface CurricoloCatalogSelectorProps {
   catalog: CurricoloCatalogEntry[];
   planClasse: ClasseSecondaria;
   planDisciplina: string;
+  planConoscenze?: string[];
   onImport: (selectedEntries: CurricoloCatalogEntry[]) => void;
   onClose: () => void;
 }
@@ -52,6 +54,7 @@ export function CurricoloCatalogSelector({
   catalog,
   planClasse,
   planDisciplina,
+  planConoscenze = [],
   onImport,
   onClose,
 }: CurricoloCatalogSelectorProps) {
@@ -61,6 +64,7 @@ export function CurricoloCatalogSelector({
   );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [otherClassesExpanded, setOtherClassesExpanded] = useState<boolean>(false);
+  const [contentSourceMode, setContentSourceMode] = useState<'piano' | 'catalogo'>('piano');
 
   const disciplineOptions = useMemo(() => {
     const base = [...DISCIPLINE_SECONDARIA];
@@ -100,20 +104,44 @@ export function CurricoloCatalogSelector({
 
   const targetGrouped = useMemo(() => groupCatalogEntries(targetEntries), [targetEntries]);
 
+  const hasPlanContentsForCurrentSelection =
+    selectedClasse === planClasse &&
+    selectedDisciplina.toLowerCase() === planDisciplina.toLowerCase() &&
+    planConoscenze.some((c) => c.trim().length > 0);
+
+  const preselectionResult = useMemo(
+    () =>
+      computePreselectedCatalogIds(
+        targetEntries,
+        selectedClasse,
+        hasPlanContentsForCurrentSelection && contentSourceMode === 'piano'
+          ? planConoscenze
+          : []
+      ),
+    [
+      targetEntries,
+      selectedClasse,
+      hasPlanContentsForCurrentSelection,
+      contentSourceMode,
+      planConoscenze,
+    ]
+  );
+
   // All'apertura sincronizza classe/disciplina della programmazione corrente e chiude "Da altre classi"
   useEffect(() => {
     if (!open) return;
     setSelectedClasse(planClasse);
     setSelectedDisciplina(planDisciplina || 'Italiano');
     setOtherClassesExpanded(false);
+    setContentSourceMode('piano');
   }, [open, planClasse, planDisciplina]);
 
-  // Alla scelta di disciplina e classe di destinazione: tutte le voci della classe di destinazione
-  // compaiono pre-selezionate, mentre tutte le voci di "Da altre classi" sono deselezionate di default.
+  // Alla scelta di disciplina e classe di destinazione: per Seconda/Terza preseleziona tutte le voci della classe;
+  // per la Prima preseleziona conoscenze/abilità e solo competenze/obiettivi coerenti con i contenuti della classe.
   useEffect(() => {
     if (!open) return;
-    setSelectedIds(new Set(targetEntries.map((e) => e.id)));
-  }, [open, targetEntries]);
+    setSelectedIds(new Set(preselectionResult.selectedIds));
+  }, [open, preselectionResult]);
 
   useEffect(() => {
     if (!open) return;
@@ -343,7 +371,10 @@ export function CurricoloCatalogSelector({
                 Catalogo Curricolo Verticale — Scuola Secondaria di I Grado
               </h2>
               <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">
-                Catalogo precaricato da <code>curricolo_secondaria.json</code>. Le voci della classe di destinazione sono già selezionate; quelle delle altre classi sono disponibili in «Da altre classi».
+                Catalogo precaricato da <code>curricolo_secondaria.json</code>.{' '}
+                {selectedClasse === 'Prima'
+                  ? 'Per la Classe Prima competenze e obiettivi (formulati al termine della Terza) sono preselezionati in funzione dei contenuti della classe.'
+                  : 'Le voci della classe di destinazione sono già selezionate; quelle delle altre classi sono disponibili in «Da altre classi».'}
               </p>
             </div>
           </div>
@@ -449,7 +480,16 @@ export function CurricoloCatalogSelector({
                 {targetEntries.length} selezionati)
               </h3>
               {targetEntries.length > 0 && (
-                <div className="flex items-center gap-3 text-xs">
+                <div className="flex flex-wrap items-center gap-3 text-xs">
+                  {selectedClasse === 'Prima' && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedIds(new Set(preselectionResult.selectedIds))}
+                      className="font-semibold text-emerald-700 hover:underline dark:text-emerald-400"
+                    >
+                      Preseleziona per contenuti Prima ({preselectionResult.selectedIds.size})
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => selectAllIds(targetEntries.map((e) => e.id))}
@@ -467,6 +507,47 @@ export function CurricoloCatalogSelector({
                 </div>
               )}
             </div>
+
+            {selectedClasse === 'Prima' && targetEntries.length > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-blue-200 bg-blue-50/70 px-3 py-2 text-xs text-slate-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-slate-200">
+                <div className="flex items-start gap-2">
+                  <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#1F3864] dark:text-blue-300" />
+                  <span>
+                    Competenze e obiettivi specifici del curricolo sono espressi <strong>al termine della terza</strong>: per la <strong>Prima</strong> sono preselezionati automaticamente quelli coerenti con{' '}
+                    {preselectionResult.usedPlanContents
+                      ? 'i contenuti già presenti nel piano della classe'
+                      : 'i contenuti (conoscenze) previsti per la Prima'}
+                    {' '}({preselectionResult.alignedCompetenceIds.size} competenze e {preselectionResult.alignedObjectiveIds.size} obiettivi).
+                  </span>
+                </div>
+                {hasPlanContentsForCurrentSelection && (
+                  <div className="inline-flex rounded-md border border-slate-300 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-900">
+                    <button
+                      type="button"
+                      onClick={() => setContentSourceMode('piano')}
+                      className={`rounded px-2 py-0.5 text-[11px] font-semibold ${
+                        contentSourceMode === 'piano'
+                          ? 'bg-[#1F3864] text-white'
+                          : 'text-slate-600 dark:text-slate-300'
+                      }`}
+                    >
+                      Contenuti del piano
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setContentSourceMode('catalogo')}
+                      className={`rounded px-2 py-0.5 text-[11px] font-semibold ${
+                        contentSourceMode === 'catalogo'
+                          ? 'bg-[#1F3864] text-white'
+                          : 'text-slate-600 dark:text-slate-300'
+                      }`}
+                    >
+                      Contenuti catalogo Prima
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {targetGrouped.length === 0 ? (
               <div className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">

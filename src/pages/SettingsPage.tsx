@@ -33,8 +33,10 @@ interface SettingsPageProps {
   mapping: DocxMappingSchema;
   canInstallPWA: boolean;
   isPWAInstalled: boolean;
+  existingPlansCount?: number;
   onInstallPWA: () => Promise<boolean>;
   onSaveSettings: (next: SchoolSettings) => Promise<void>;
+  onApplyDocenteGenereToAllPlans?: (genere: DocenteGenere) => Promise<number>;
   onSaveMapping: (next: DocxMappingSchema) => Promise<void>;
   onResetMapping: () => Promise<void>;
   onOpenPrivacyModal: () => void;
@@ -45,8 +47,10 @@ export function SettingsPage({
   mapping,
   canInstallPWA,
   isPWAInstalled,
+  existingPlansCount = 0,
   onInstallPWA,
   onSaveSettings,
+  onApplyDocenteGenereToAllPlans,
   onSaveMapping,
   onResetMapping,
   onOpenPrivacyModal,
@@ -257,21 +261,41 @@ export function SettingsPage({
             />
           </label>
 
-          <label className="block">
-            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Genere / Titolo docente predefinito
-            </span>
-            <select
-              value={form.defaultDocenteGenere ?? 'F'}
-              onChange={(e) =>
-                setForm({ ...form, defaultDocenteGenere: e.target.value as DocenteGenere })
-              }
-              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-            >
-              <option value="F">Professoressa (Prof.ssa · La docente)</option>
-              <option value="M">Professore (Prof. · Il docente)</option>
-            </select>
-          </label>
+          <div className="space-y-1.5">
+            <label className="block">
+              <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Genere / Titolo docente predefinito
+              </span>
+              <select
+                value={form.defaultDocenteGenere ?? 'F'}
+                onChange={(e) => {
+                  const nextGenere = e.target.value as DocenteGenere;
+                  const next = { ...form, defaultDocenteGenere: nextGenere };
+                  setForm(next);
+                  void onSaveSettings(next);
+                }}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+              >
+                <option value="F">Professoressa (Prof.ssa · La docente)</option>
+                <option value="M">Professore (Prof. · Il docente)</option>
+              </select>
+            </label>
+            {onApplyDocenteGenereToAllPlans && existingPlansCount > 0 && (
+              <button
+                type="button"
+                onClick={async () => {
+                  const genere = form.defaultDocenteGenere ?? 'F';
+                  const updatedCount = await onApplyDocenteGenereToAllPlans(genere);
+                  setStatusMsg(
+                    `Titolo "${genere === 'M' ? 'Prof. · Il docente' : 'Prof.ssa · La docente'}" applicato a ${updatedCount} programmazioni esistenti.`
+                  );
+                }}
+                className="text-xs font-semibold text-[#1F3864] hover:underline dark:text-blue-400"
+              >
+                Applica questo titolo anche alle {existingPlansCount} programmazioni esistenti
+              </button>
+            )}
+          </div>
 
           <label className="block">
             <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">

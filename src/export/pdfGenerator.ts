@@ -355,7 +355,8 @@ export function generateProgrammazionePdfBytes(
   const compositionIntro = buildClassCompositionIntro(plan);
   const activeCharacteristics = getActiveDimensionsForDocument(
     plan.situazione.caratteristicheDimensioni,
-    settings.soglieQuoteCaratteristiche
+    settings.soglieQuoteCaratteristiche,
+    `${plan.id}|${plan.datiGenerali.classe}|${plan.datiGenerali.sezione}|${plan.datiGenerali.disciplina}`
   );
   drawParagraph('Presentazione e caratteristiche della classe:', {
     bold: true,

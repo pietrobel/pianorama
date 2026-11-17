@@ -12,6 +12,7 @@ import {
   STRATEGIE_CONSOLIDAMENTO_OPTIONS,
   STRATEGIE_POTENZIAMENTO_OPTIONS,
   STRATEGIE_RECUPERO_OPTIONS,
+  stripDocenteTitoli,
   TIPOLOGIE_CLASSE_OPTIONS,
   VERIFICHE_ORALI_OPTIONS,
   VERIFICHE_SCRITTE_OPTIONS,
@@ -611,9 +612,12 @@ export async function importProgrammazioneFromBuffer(
   let docenteGenere: DocenteGenere = basePlan.datiGenerali.docenteGenere ?? settings.defaultDocenteGenere ?? 'F';
   if (docenteMatch?.[1]) {
     const rawDoc = docenteMatch[1].replace(/[_\n|].*$/, '').trim();
-    if (/prof\.?\s*ssa|la\s+docente/i.test(docenteMatch[0])) docenteGenere = 'F';
-    else if (/\bprof\.?\b|il\s+docente/i.test(docenteMatch[0])) docenteGenere = 'M';
-    const stripped = rawDoc.replace(/^(?:Prof\.?\s*ssa|Prof\.?)\s+/i, '').trim();
+    const matchText = docenteMatch[0];
+    if (!/il\s*\/\s*la\s+docente/i.test(matchText)) {
+      if (/\bprof\.?\s*ssa\b|\bla\s+docente\b/i.test(matchText)) docenteGenere = 'F';
+      else if (/\bprof\.?(?=\s|$)|\bil\s+docente\b/i.test(matchText)) docenteGenere = 'M';
+    }
+    const stripped = stripDocenteTitoli(rawDoc);
     if (stripped && stripped.length > 2) docenteName = stripped;
   }
 

@@ -4,6 +4,7 @@ import {
   Lock,
   Minus,
   Plus,
+  RefreshCw,
   RotateCcw,
   Trash2,
 } from 'lucide-react';
@@ -24,18 +25,23 @@ import {
   createCustomDimension,
   ensureClassDimensions,
   generateDimensionSentence,
+  getDimensionVariantIndex,
   isDimensionAllNessuno,
   isNonDefinitoSegment,
   moveDimensionHandle,
   removeCharacteristicFromDimension,
   setSegmentExactCount,
   stepDimensionHandle,
+  STYLISTIC_VARIANTS_COUNT,
 } from '../engine/classCharacteristicsEngine';
 
 interface ClassCharacteristicsPanelProps {
   dimensions: ClassCharacteristicDimension[] | undefined;
   alunniTotali: number;
   soglieQuote?: SoglieQuoteCaratteristiche;
+  contextSeed?: string;
+  variantePresentazione?: number;
+  onChangeVariantePresentazione?: (next: number) => void;
   onChange: (nextDimensions: ClassCharacteristicDimension[]) => void;
 }
 
@@ -73,6 +79,9 @@ export function ClassCharacteristicsPanel({
   dimensions,
   alunniTotali,
   soglieQuote = DEFAULT_SOGLIE_QUOTE_CARATTERISTICHE,
+  contextSeed = '',
+  variantePresentazione,
+  onChangeVariantePresentazione,
   onChange,
 }: ClassCharacteristicsPanelProps) {
   const normalizedDimensions = ensureClassDimensions(dimensions);
@@ -149,22 +158,51 @@ export function ClassCharacteristicsPanel({
     window.addEventListener('pointercancel', onUp);
   };
 
+  const handleCycleAllVariants = () => {
+    if (onChangeVariantePresentazione) {
+      const nextPres = ((variantePresentazione ?? 0) + 1) % STYLISTIC_VARIANTS_COUNT;
+      onChangeVariantePresentazione(nextPres);
+    }
+    onChange(
+      normalizedDimensions.map((d) => {
+        if (d.isTestoManuale || isDimensionAllNessuno(d)) return d;
+        const current = getDimensionVariantIndex(d, contextSeed);
+        return {
+          ...d,
+          varianteStile: (current + 1) % STYLISTIC_VARIANTS_COUNT,
+        };
+      })
+    );
+  };
+
   return (
     <div className="space-y-4">
-      <div>
-        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-          Caratteristiche della classe (distribuzione percentuale per sottogruppi)
-        </h3>
-        <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">
-          Ogni dimensione è una riga unica al 100% che parte a sinistra dallo spazio «non definito» e prosegue a destra con gli indicatori specifici selezionati. Quando modifichi il numero di alunni o le quote, varia prima lo spazio «non definito» e, una volta esaurito, le quote a destra.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="max-w-2xl">
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+            Caratteristiche della classe (distribuzione percentuale per sottogruppi)
+          </h3>
+          <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">
+            Ogni dimensione è una riga unica al 100% che parte a sinistra dallo spazio «non definito» e prosegue a destra con gli indicatori specifici selezionati. Per ogni tipologia sono disponibili 10 formulazioni stilistiche diverse per evitare testi ripetitivi tra classi.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleCycleAllVariants}
+          title="Rigenera le frasi scegliendo nuove varianti stilistiche tra le 10 disponibili per ciascuna tipologia"
+          className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border border-[#1F3864] bg-white px-3 py-1.5 text-xs font-semibold text-[#1F3864] hover:bg-blue-50 dark:border-blue-400 dark:bg-slate-900 dark:text-blue-300 dark:hover:bg-slate-800"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          Varia tutte le formulazioni
+        </button>
       </div>
 
       <div className="divide-y divide-slate-200 rounded-xl border border-slate-200 bg-slate-50/50 dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-950/30">
         {normalizedDimensions.map((dim) => {
           const catalogOptions = getCharacteristicsCatalogForDimension(dim);
           const allNonDefinito = isDimensionAllNessuno(dim);
-          const autoSentence = generateDimensionSentence(dim, soglieQuote);
+          const currentVariant = getDimensionVariantIndex(dim, contextSeed);
+          const autoSentence = generateDimensionSentence(dim, soglieQuote, contextSeed);
           const displayedSentence = dim.isTestoManuale
             ? dim.testoManuale ?? ''
             : autoSentence;
@@ -473,22 +511,40 @@ export function ClassCharacteristicsPanel({
                       </span>
                     )}
                   </label>
-                  {dim.isTestoManuale && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        updateDimension(dim.id, (prev) => ({
-                          ...prev,
-                          isTestoManuale: false,
-                          testoManuale: undefined,
-                        }))
-                      }
-                      className="inline-flex items-center gap-1 whitespace-nowrap shrink-0 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-                    >
-                      <RotateCcw className="h-3 w-3" />
-                      Ripristina testo automatico
-                    </button>
-                  )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {!allNonDefinito && !dim.isTestoManuale && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateDimension(dim.id, (prev) => ({
+                            ...prev,
+                            varianteStile: (currentVariant + 1) % STYLISTIC_VARIANTS_COUNT,
+                          }))
+                        }
+                        title="Scegli un'altra formulazione tra le 10 disponibili per questa tipologia"
+                        className="inline-flex items-center gap-1 whitespace-nowrap shrink-0 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                        Cambia frase ({currentVariant + 1}/{STYLISTIC_VARIANTS_COUNT})
+                      </button>
+                    )}
+                    {dim.isTestoManuale && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateDimension(dim.id, (prev) => ({
+                            ...prev,
+                            isTestoManuale: false,
+                            testoManuale: undefined,
+                          }))
+                        }
+                        className="inline-flex items-center gap-1 whitespace-nowrap shrink-0 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                        Ripristina testo automatico
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <textarea

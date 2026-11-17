@@ -36,6 +36,7 @@ export function ClassQuestionnairePanel({
   const [activeArea, setActiveArea] = useState<QuestionnaireIndicatorSpec['area'] | 'Tutte'>(
     'Tutte'
   );
+  const [variantCursor, setVariantCursor] = useState<number>(0);
 
   const questionnaire = plan.analisiPartenza.questionario ?? createEmptyQuestionnaire();
 
@@ -77,8 +78,9 @@ export function ClassQuestionnairePanel({
   };
 
   const handleGenerate = (mode: 'sintetica' | 'completa') => {
-    const text = generateClassDescription(plan, mode);
+    const text = generateClassDescription(plan, mode, variantCursor);
     if (!text) return;
+    setVariantCursor((v) => (v + 1) % 10);
     onApplyGeneratedDescription(text, mode);
   };
 
@@ -249,10 +251,14 @@ export function ClassQuestionnairePanel({
             </button>
 
             <div className="flex flex-wrap items-center gap-2">
+              <span className="font-mono-num text-[11px] text-slate-500 dark:text-slate-400">
+                Stile {(variantCursor % 10) + 1}/10
+              </span>
               <button
                 type="button"
                 disabled={compiledCount === 0}
                 onClick={() => handleGenerate('sintetica')}
+                title="Genera descrizione sintetica ruotando tra le 10 varianti stilistiche"
                 className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#1F3864] bg-white px-3.5 py-2 text-xs font-semibold text-[#1F3864] hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-400 dark:bg-slate-900 dark:text-blue-300"
               >
                 <FileText className="h-3.5 w-3.5" />
@@ -262,6 +268,7 @@ export function ClassQuestionnairePanel({
                 type="button"
                 disabled={compiledCount === 0}
                 onClick={() => handleGenerate('completa')}
+                title="Genera descrizione completa ruotando tra le 10 varianti stilistiche"
                 className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-[#1F3864] px-4 py-2 text-xs font-semibold text-white hover:bg-[#172b4d] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Sparkles className="h-3.5 w-3.5" />

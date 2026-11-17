@@ -581,7 +581,292 @@ export function createEmptyQuestionnaire(): ClassQuestionnaire {
   };
 }
 
-export function buildClassCompositionIntro(plan: Programmazione): string {
+function hashPlanSeed(input: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+const COMPOSITION_INTRO_VARIANTS: ((
+  classeLabel: string,
+  alunni: number,
+  maschi: number,
+  femmine: number,
+  suffix: string
+) => string)[] = [
+  (c, a, m, f, s) =>
+    `La classe ${c} è composta complessivamente da ${a} alunni (${m} maschi e ${f} femmine)${s}.`,
+  (c, a, m, f, s) =>
+    `Il gruppo classe della ${c} conta ${a} alunni (${m} maschi e ${f} femmine)${s}.`,
+  (c, a, m, f, s) =>
+    `La sezione ${c} risulta formata da ${a} alunni (${m} maschi e ${f} femmine)${s}.`,
+  (c, a, m, f, s) =>
+    `Nella classe ${c} sono iscritti ${a} alunni (${m} maschi e ${f} femmine)${s}.`,
+  (c, a, m, f, s) =>
+    `La ${c} si compone di ${a} alunni (${m} maschi e ${f} femmine)${s}.`,
+  (c, a, m, f, s) =>
+    `L’assetto della classe ${c} comprende ${a} alunni (${m} maschi e ${f} femmine)${s}.`,
+  (c, a, m, f, s) =>
+    `Il gruppo della ${c} è costituito da ${a} alunni (${m} maschi e ${f} femmine)${s}.`,
+  (c, a, m, f, s) =>
+    `La classe ${c} accoglie ${a} alunni (${m} maschi e ${f} femmine)${s}.`,
+  (c, a, m, f, s) =>
+    `Fanno parte della classe ${c} ${a} alunni (${m} maschi e ${f} femmine)${s}.`,
+  (c, a, m, f, s) =>
+    `Il percorso didattico della ${c} coinvolge ${a} alunni (${m} maschi e ${f} femmine)${s}.`,
+];
+
+const COMPOSITION_SUFFIX_CONNECTORS = [
+  ', tra cui ',
+  ', con la presenza di ',
+  ', includendo ',
+  ', con ',
+];
+
+const SYNTHETIC_CLAUSE_CONNECTORS = [
+  '; inoltre, ',
+  ', mentre ',
+  '; al contempo, ',
+  '. Sul piano operativo, ',
+  '; per quanto attiene al percorso, ',
+  '; parallelamente, ',
+  '. Nel complesso, ',
+];
+
+const DISCIPLINE_LEADS = [
+  (d: string) => (d ? `In relazione a ${d}, ` : 'Sul piano disciplinare, '),
+  (d: string) => (d ? `Per quanto riguarda ${d}, ` : 'Nell’ambito della disciplina, '),
+  (d: string) => (d ? `Nell’insegnamento di ${d}, ` : 'Sul piano delle attività d’aula, '),
+  (d: string) => (d ? `Sotto il profilo specifico di ${d}, ` : 'Sotto il profilo didattico, '),
+  (d: string) => (d ? `Osservando l’andamento in ${d}, ` : 'Osservando il quadro iniziale, '),
+  (d: string) => (d ? `Dalle rilevazioni svolte per ${d}, emerge che ` : 'Dalle rilevazioni iniziali emerge che '),
+  (d: string) => (d ? `Nello studio di ${d}, ` : 'Nel lavoro scolastico quotidiano, '),
+  (d: string) => (d ? `Con riferimento al percorso di ${d}, ` : 'Con riferimento al percorso formativo, '),
+  (d: string) => (d ? `Sul versante di ${d}, ` : 'Sul versante metodologico e cognitivo, '),
+  (d: string) => (d ? `Analizzando la situazione di partenza in ${d}, ` : 'Analizzando il profilo della classe, '),
+];
+
+const AREA_TRANSITION_PREFIXES: Record<QuestionnaireIndicatorSpec['area'], string[]> = {
+  Contesto: [
+    '',
+    'In primo luogo, ',
+    'Dal punto di vista del contesto iniziale, ',
+    'Guardando all’assetto generale della classe, ',
+    'Nel quadro di partenza rilevato dal Consiglio, ',
+    'Considerando la fisionomia complessiva del gruppo, ',
+    'Sul piano dell’inquadramento iniziale, ',
+    'In apertura dell’anno scolastico, ',
+    'Dall’analisi del contesto classe emerge che ',
+    'Sotto il profilo della composizione e dei prerequisiti, ',
+  ],
+  'Area cognitiva': [
+    '',
+    'Sul piano cognitivo, ',
+    'Per quanto attiene ai processi di apprendimento, ',
+    'Sotto il profilo delle competenze cognitive, ',
+    'Analizzando le modalità di elaborazione dei contenuti, ',
+    'Nel dettaglio degli indicatori cognitivi, ',
+    'Passando alla sfera cognitiva ed espressiva, ',
+    'Sul versante dell’apprendimento disciplinare, ',
+    'Osservando le capacità logiche, mnestiche ed espressive, ',
+    'Riguardo alla risposta cognitiva del gruppo, ',
+  ],
+  'Metodo e autonomia': [
+    '',
+    'Sul fronte del metodo di studio e dell’autonomia, ',
+    'Per quanto riguarda l’organizzazione del lavoro, ',
+    'Osservando l’atteggiamento e la continuità nell’impegno, ',
+    'Relativamente all’autonomia operativa e alla partecipazione, ',
+    'Nel lavoro d’aula e domestico, ',
+    'Sul piano delle abitudini scolastiche e metodologiche, ',
+    'Considerando motivazione, attenzione e metodo di lavoro, ',
+    'Sotto il profilo dell’autonomia e della partecipazione, ',
+    'In merito alle strategie organizzative personali, ',
+  ],
+  'Comportamento e clima': [
+    '',
+    'Sul piano relazionale e comportamentale, ',
+    'Per ciò che concerne il clima d’aula, ',
+    'Guardando alle dinamiche interpersonali, ',
+    'Sotto il profilo della convivenza scolastica, ',
+    'Nel contesto delle relazioni tra pari e con i docenti, ',
+    'Analizzando comportamento e spirito collaborativo, ',
+    'Quanto all’osservanza delle regole e al clima del gruppo, ',
+    'Sul versante socio-relazionale, ',
+    'In riferimento all’ambiente educativo di classe, ',
+  ],
+  Interventi: [
+    '',
+    'In prospettiva programmatica, ',
+    'Alla luce del quadro descritto, ',
+    'In chiave operativo-didattica, ',
+    'Per orientare efficacemente l’azione formativa, ',
+    'Sul piano delle strategie d’intervento, ',
+    'Dall’equilibrio tra risorse e bisogni rilevati, ',
+    'Nel disegnare il percorso annuale, ',
+    'In coerenza con il profilo emerso, ',
+    'Sul terreno della personalizzazione didattica, ',
+  ],
+};
+
+const HETEROGENEA_COMPLETE_VARIANTS = [
+  (note: string) =>
+    note
+      ? `Si segnala tuttavia una situazione eterogenea nel gruppo: ${note}.`
+      : 'Si evidenzia inoltre una distribuzione eterogenea all’interno del gruppo classe.',
+  (note: string) =>
+    note
+      ? `Non mancano tuttavia marcate differenze tra sottogruppi: ${note}.`
+      : 'All’interno della classe coesistono peraltro ritmi e livelli differenti.',
+  (note: string) =>
+    note
+      ? `Il quadro interno risulta comunque differenziato, in quanto ${note}.`
+      : 'Va tuttavia rilevata una certa disomogeneità tra gli alunni.',
+  (note: string) =>
+    note
+      ? `Accanto al dato prevalente si osservano profili diversificati: ${note}.`
+      : 'Sono comunque presenti profili diversificati che richiedono attenzione mirata.',
+  (note: string) =>
+    note
+      ? `Permane tuttavia una sensibile eterogeneità interna (${note}).`
+      : 'Si rileva inoltre un andamento non uniforme tra le diverse fasce della classe.',
+];
+
+const HETEROGENEA_SYNTHETIC_TAGS = [
+  'con situazioni eterogenee',
+  'pur con differenze interne tra sottogruppi',
+  'con andamenti diversificati nella classe',
+  'in un quadro comunque non uniforme',
+  'con una sensibile eterogeneità interna',
+];
+
+const SENTENCE_OPENING_VARIATIONS: [RegExp, string[]][] = [
+  [
+    /^La comprensione\b/,
+    [
+      'La comprensione',
+      'La decodifica e comprensione',
+      'La capacità di comprensione',
+      'L’interpretazione e comprensione',
+      'Sul piano della comprensione, la padronanza',
+    ],
+  ],
+  [
+    /^La memorizzazione\b/,
+    [
+      'La memorizzazione',
+      'La capacità di memorizzazione',
+      'Il consolidamento e la memorizzazione',
+      'La tenuta nella memorizzazione',
+      'La memorizzazione stabile',
+    ],
+  ],
+  [
+    /^La capacità di apprendimento\b/,
+    [
+      'La capacità di apprendimento',
+      'L’attitudine all’apprendimento',
+      'La prontezza di apprendimento',
+      'La capacità di apprendimento progressivo',
+    ],
+  ],
+  [
+    /^Gli alunni\b/,
+    [
+      'Gli alunni',
+      'I componenti del gruppo classe',
+      'Gli studenti della classe',
+      'In maggioranza gli alunni',
+      'Complessivamente gli alunni',
+    ],
+  ],
+  [
+    /^La classe\b/,
+    [
+      'La classe',
+      'Il gruppo classe',
+      'L’insieme della classe',
+      'La sezione',
+      'Il collettivo della classe',
+    ],
+  ],
+  [
+    /^Il gruppo classe\b/,
+    [
+      'Il gruppo classe',
+      'La classe nel suo complesso',
+      'L’insieme degli alunni',
+      'La sezione',
+    ],
+  ],
+  [
+    /^L’impegno\b/,
+    [
+      'L’impegno',
+      'La dedizione allo studio',
+      'L’applicazione quotidiana',
+      'La continuità dell’impegno',
+    ],
+  ],
+  [
+    /^La partecipazione\b/,
+    [
+      'La partecipazione',
+      'Il coinvolgimento nel dialogo educativo',
+      'La presenza attiva e la partecipazione',
+      'L’apporto partecipativo',
+    ],
+  ],
+];
+
+function stylizeCompleteSentence(base: string, variantSeed: number, itemIndex: number): string {
+  const trimmed = base.trim();
+  if (!trimmed) return '';
+  const rot = (variantSeed + itemIndex) % 10;
+  for (const [pattern, replacements] of SENTENCE_OPENING_VARIATIONS) {
+    if (pattern.test(trimmed)) {
+      const replacement = replacements[rot % replacements.length];
+      return trimmed.replace(pattern, replacement);
+    }
+  }
+  return trimmed;
+}
+
+function stylizeSyntheticClause(base: string, variantSeed: number, itemIndex: number): string {
+  const trimmed = base.trim();
+  if (!trimmed) return '';
+  const rot = (variantSeed + itemIndex) % 5;
+  if (rot === 1 && trimmed.startsWith('la ')) return `si osserva che ${trimmed}`;
+  if (rot === 2 && trimmed.startsWith('il ')) return `si rileva che ${trimmed}`;
+  if (rot === 3 && trimmed.startsWith('i ')) return `emerge che ${trimmed}`;
+  if (rot === 4 && !trimmed.startsWith('si ')) return `il gruppo ${trimmed.replace(/^mostra\b/, 'evidenzia')}`;
+  return trimmed;
+}
+
+function applyAreaLead(
+  sentence: string,
+  area: QuestionnaireIndicatorSpec['area'],
+  variantSeed: number,
+  areaIdx: number
+): string {
+  const leads = AREA_TRANSITION_PREFIXES[area];
+  const lead = leads[(variantSeed + areaIdx * 2) % leads.length];
+  if (!lead) return sentence;
+  const endsWithChe = /\bche\s*$/.test(lead);
+  const lowerFirst = sentence.charAt(0).toLowerCase() + sentence.slice(1);
+  if (endsWithChe) {
+    return `${lead}${lowerFirst}`;
+  }
+  return `${lead}${lowerFirst}`;
+}
+
+export function buildClassCompositionIntro(
+  plan: Programmazione,
+  variantOverride?: number
+): string {
   const { alunni, maschi, femmine, ripetenti, bes } = plan.composizione;
   const classeLabel = [plan.datiGenerali.classe, plan.datiGenerali.sezione]
     .filter(Boolean)
@@ -596,8 +881,21 @@ export function buildClassCompositionIntro(plan: Programmazione): string {
       `${bes} alunn${bes === 1 ? 'o' : 'i'} con Bisogni Educativi Speciali (BES)`
     );
   }
-  const suffix = extraParts.length > 0 ? `, con ${extraParts.join(' e ')}` : '';
-  return `La classe ${classeLabel || ''} è composta complessivamente da ${alunni} alunni (${maschi} maschi e ${femmine} femmine)${suffix}.`.replace(
+
+  const rawVariant =
+    typeof variantOverride === 'number'
+      ? variantOverride
+      : typeof plan.situazione.variantePresentazione === 'number'
+      ? plan.situazione.variantePresentazione
+      : hashPlanSeed(
+          `${plan.id}|${plan.datiGenerali.classe}|${plan.datiGenerali.sezione}|${plan.datiGenerali.disciplina}`
+        );
+  const idx = ((Math.floor(rawVariant) % COMPOSITION_INTRO_VARIANTS.length) + COMPOSITION_INTRO_VARIANTS.length) %
+    COMPOSITION_INTRO_VARIANTS.length;
+
+  const suffixConn = COMPOSITION_SUFFIX_CONNECTORS[idx % COMPOSITION_SUFFIX_CONNECTORS.length];
+  const suffix = extraParts.length > 0 ? `${suffixConn}${extraParts.join(' e ')}` : '';
+  return COMPOSITION_INTRO_VARIANTS[idx](classeLabel, alunni, maschi, femmine, suffix).replace(
     /\s+/g,
     ' '
   );
@@ -605,27 +903,37 @@ export function buildClassCompositionIntro(plan: Programmazione): string {
 
 export function generateClassDescription(
   plan: Programmazione,
-  mode: 'sintetica' | 'completa'
+  mode: 'sintetica' | 'completa',
+  variantOverride?: number
 ): string {
   const q = plan.analisiPartenza.questionario;
-  const compositionIntro = buildClassCompositionIntro(plan);
+  const compositionIntro = buildClassCompositionIntro(plan, variantOverride);
   if (!q) return compositionIntro;
 
-  const headerPrefix = `${compositionIntro} Classe ${plan.datiGenerali.classe} ${plan.datiGenerali.sezione} · ${plan.datiGenerali.disciplina}`;
+  const rawSeed =
+    typeof variantOverride === 'number'
+      ? variantOverride
+      : typeof plan.situazione.variantePresentazione === 'number'
+      ? plan.situazione.variantePresentazione
+      : hashPlanSeed(
+          `${plan.id}|${plan.datiGenerali.classe}|${plan.datiGenerali.sezione}|${plan.datiGenerali.disciplina}`
+        );
+  const variantSeed = ((Math.floor(rawSeed) % 10) + 10) % 10;
 
   if (mode === 'sintetica') {
     const clauses: string[] = [];
-    for (const spec of QUESTIONNAIRE_INDICATORS) {
+    for (const [idx, spec] of QUESTIONNAIRE_INDICATORS.entries()) {
       const ans = q.risposte[spec.key];
       if (!ans) continue;
       const opt = spec.options.find((o) => o.label === ans.selectedOption);
       const customNote = ans.notaEterogenea.trim();
       if (!opt && !customNote) continue;
 
-      let piece = opt ? opt.syntheticPhrase : '';
+      let piece = opt ? stylizeSyntheticClause(opt.syntheticPhrase, variantSeed, idx) : '';
       if (ans.eterogenea) {
+        const hetTag = HETEROGENEA_SYNTHETIC_TAGS[(variantSeed + idx) % HETEROGENEA_SYNTHETIC_TAGS.length];
         piece = piece
-          ? `${piece} (con situazioni eterogenee${customNote ? `: ${customNote}` : ''})`
+          ? `${piece} (${hetTag}${customNote ? `: ${customNote}` : ''})`
           : `situazione eterogenea riguardo a ${spec.title.replace(/^\d+\.\s*/, '').toLowerCase()}${customNote ? `: ${customNote}` : ''}`;
       } else if (customNote) {
         piece = piece ? `${piece} (${customNote})` : customNote;
@@ -633,10 +941,17 @@ export function generateClassDescription(
       if (piece) clauses.push(piece);
     }
     if (clauses.length === 0) return compositionIntro;
-    const joined = clauses
-      .map((c, idx) => (idx === 0 ? c.charAt(0).toUpperCase() + c.slice(1) : c))
-      .join('; ');
-    return `${headerPrefix}: ${joined}.`;
+
+    let body = clauses[0].charAt(0).toLowerCase() + clauses[0].slice(1);
+    for (let i = 1; i < clauses.length; i++) {
+      const sep = SYNTHETIC_CLAUSE_CONNECTORS[(variantSeed + i - 1) % SYNTHETIC_CLAUSE_CONNECTORS.length];
+      body += `${sep}${clauses[i]}`;
+    }
+
+    const disciplineLead = DISCIPLINE_LEADS[variantSeed % DISCIPLINE_LEADS.length](
+      plan.datiGenerali.disciplina
+    );
+    return `${compositionIntro} ${disciplineLead}${body}.`;
   }
 
   // Modalità completa: raggruppata per area, escludendo rigorosamente le risposte non compilate
@@ -649,22 +964,25 @@ export function generateClassDescription(
   ];
 
   const areaParagraphs: string[] = [];
-  for (const area of areasOrder) {
+  for (const [areaIdx, area] of areasOrder.entries()) {
     const specs = QUESTIONNAIRE_INDICATORS.filter((s) => s.area === area);
     const sentences: string[] = [];
 
-    for (const spec of specs) {
+    for (const [itemIdx, spec] of specs.entries()) {
       const ans = q.risposte[spec.key];
       if (!ans) continue;
       const opt = spec.options.find((o) => o.label === ans.selectedOption);
       const customNote = ans.notaEterogenea.trim();
       if (!opt && !customNote) continue;
 
-      let sentence = opt ? opt.completePhrase : '';
+      let sentence = opt ? stylizeCompleteSentence(opt.completePhrase, variantSeed, itemIdx) : '';
+      if (sentences.length === 0 && sentence) {
+        sentence = applyAreaLead(sentence, area, variantSeed, areaIdx);
+      }
       if (ans.eterogenea) {
-        const eterText = customNote
-          ? `Si segnala tuttavia una situazione eterogenea nel gruppo: ${customNote}.`
-          : 'Si evidenzia inoltre una distribuzione eterogenea all’interno del gruppo classe.';
+        const hetBuilder =
+          HETEROGENEA_COMPLETE_VARIANTS[(variantSeed + itemIdx) % HETEROGENEA_COMPLETE_VARIANTS.length];
+        const eterText = hetBuilder(customNote);
         sentence = sentence ? `${sentence} ${eterText}` : eterText;
       } else if (customNote) {
         sentence = sentence ? `${sentence} Precisazione: ${customNote}.` : `${customNote}.`;

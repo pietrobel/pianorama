@@ -57,6 +57,7 @@ export interface ClassCharacteristicDimension {
   segmenti: ClassCharacteristicSegment[];
   testoManuale?: string;
   isTestoManuale?: boolean;
+  varianteStile?: number;
 }
 
 export interface SoglieQuoteCaratteristiche {
@@ -73,6 +74,7 @@ export interface SituazioneClasse {
   livello: ClassLivello;
   mezziIndividuazione: MezzoIndividuazione[];
   caratteristicheDimensioni?: ClassCharacteristicDimension[];
+  variantePresentazione?: number;
 }
 
 export interface LivelliPartenza {

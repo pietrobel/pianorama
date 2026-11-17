@@ -17,7 +17,10 @@ import {
   formatDocenteConTitolo,
   formatFirmaDocente,
   getCharacteristicsCatalogForDimension,
+  getDefaultCurricoloForDisciplina,
   getDefaultMetodiStrumentiForDisciplina,
+  getDefaultRilevazioneForDisciplina,
+  getDefaultVerificheValutazioneForDisciplina,
 } from '../domain/defaults';
 import {
   sanitizePlanForOfficialExport,
@@ -31,12 +34,14 @@ import {
   parseBackupEnvelope,
 } from '../crypto/backupCrypto';
 import {
+  STYLISTIC_VARIANTS_COUNT,
   addCharacteristicToDimension,
   adjustCharacteristicQuota,
   createCustomDimension,
   generateDimensionSentence,
   getActiveDimensionsForDocument,
   getEffectiveDimensionText,
+  getPhraseVariantsCount,
   isDimensionAllNessuno,
   moveDimensionHandle,
   quotaPercentualeToExpression,
@@ -47,6 +52,7 @@ import {
 import {
   buildProgramRowsFromCatalogVoices,
   computeCatalogDiff,
+  computePreselectedCatalogIds,
   filterCatalogEntries,
   groupCatalogEntries,
   importCatalogEntriesToVoices,
@@ -72,9 +78,10 @@ import {
   getSectionOptionsForPreset,
 } from '../engine/planCloning';
 import {
+  QUESTIONNAIRE_INDICATORS,
+  buildClassCompositionIntro,
   createEmptyQuestionnaire,
   generateClassDescription,
-  QUESTIONNAIRE_INDICATORS,
 } from '../engine/questionnaireEngine';
 import { applySuggestionAction, evaluateSuggestionRules } from '../engine/suggestionEngine';
 import { generateProgrammazioneDocxBytes } from '../export/docxGenerator';
@@ -165,6 +172,15 @@ describe('PIANORAMA — Privacy, Regole, Questionario, Clonazione, Registro XLSX
     expect(synthetic).toContain('alcuni alunni necessitano di guida visiva');
     expect(complete).toContain('memorizzazione');
     expect(complete.toLowerCase()).not.toContain('compiti domestici');
+
+    const synthVariants = new Set<string>();
+    const compVariants = new Set<string>();
+    for (let v = 0; v < 10; v++) {
+      synthVariants.add(generateClassDescription(plan, 'sintetica', v));
+      compVariants.add(generateClassDescription(plan, 'completa', v));
+    }
+    expect(synthVariants.size).toBe(10);
+    expect(compVariants.size).toBe(10);
   });
 
   it('clonazione per classe parallela mantiene contenuti comuni e resetta descrizione specifica senza alterare originale', () => {
@@ -567,14 +583,50 @@ describe('PIANORAMA — Privacy, Regole, Questionario, Clonazione, Registro XLSX
     let dimMetodoTest = adjustCharacteristicQuota(metodo, metodo.segmenti[2].id, -100);
     dimMetodoTest = adjustCharacteristicQuota(dimMetodoTest, dimMetodoTest.segmenti[1].id, 70);
     dimMetodoTest = adjustCharacteristicQuota(dimMetodoTest, dimMetodoTest.segmenti[3].id, 30);
-    expect(generateDimensionSentence(dimMetodoTest, DEFAULT_SOGLIE_QUOTE_CARATTERISTICHE)).toBe(
-      'La maggior parte della classe ha acquisito un metodo di studio autonomo; una parte della classe è in via di maturazione.'
+    const metodoSentence0 = generateDimensionSentence(
+      { ...dimMetodoTest, varianteStile: 0 },
+      DEFAULT_SOGLIE_QUOTE_CARATTERISTICHE
     );
+    expect(metodoSentence0).toContain('acquisito un metodo di studio autonomo ed efficace');
+    expect(metodoSentence0).toContain(', mentre ');
+
+    // Verifica presenza di 10 varianti stilistiche distinte per ogni tipologia/indicatore
+    expect(STYLISTIC_VARIANTS_COUNT).toBe(10);
+    for (const indicator of [
+      'motivata',
+      'tranquilla',
+      'vivace',
+      'collaborativa',
+      'acquisito',
+      'pienamente autonoma',
+      'attiva e costruttiva',
+    ]) {
+      expect(getPhraseVariantsCount(indicator)).toBe(10);
+    }
+
+    const attAllVariants = new Set<string>();
+    const attWithMotivata = addCharacteristicToDimension(att, 'motivata');
+    const attMotivata = adjustCharacteristicQuota(
+      attWithMotivata,
+      attWithMotivata.segmenti[1].id,
+      100
+    );
+    for (let v = 0; v < STYLISTIC_VARIANTS_COUNT; v++) {
+      attAllVariants.add(
+        generateDimensionSentence(
+          { ...attMotivata, varianteStile: v },
+          DEFAULT_SOGLIE_QUOTE_CARATTERISTICHE
+        )
+      );
+    }
+    expect(attAllVariants.size).toBe(10);
 
     // Numero esatto di alunni sostituisce l'espressione verbale
     const segAcqId = dimMetodoTest.segmenti[1].id;
     const withExactCount = setSegmentExactCount(dimMetodoTest, segAcqId, 14, 20);
-    expect(generateDimensionSentence(withExactCount)).toContain('14 alunni hanno acquisito');
+    expect(generateDimensionSentence({ ...withExactCount, varianteStile: 0 })).toContain(
+      '14 alunni hanno acquisito'
+    );
 
     // 4. Testo manuale non viene sovrascritto da modifiche alle quote finché non ripristinato
     const manualDim: ClassCharacteristicDimension = {
@@ -649,6 +701,11 @@ describe('PIANORAMA — Privacy, Regole, Questionario, Clonazione, Registro XLSX
     plan.composizione = { alunni: 22, maschi: 12, femmine: 10, ripetenti: 1, bes: 3 };
     const introText = generateClassDescription(plan, 'sintetica');
     expect(introText).toContain('22 alunni (12 maschi e 10 femmine)');
+    const distinctIntros = new Set<string>();
+    for (let v = 0; v < 10; v++) {
+      distinctIntros.add(buildClassCompositionIntro(plan, v));
+    }
+    expect(distinctIntros.size).toBe(10);
 
     // 3. Popolamento tabella a 3 colonne dalle voci del catalogo
     const itaPrima = filterCatalogEntries(CURRICOLO_VERTICALE_SEED, 'Prima', 'Italiano').slice(0, 6);
@@ -722,5 +779,125 @@ Utilizzare con sicurezza le tecniche di calcolo \\tab Eseguire espressioni con f
     expect(importedDoc.plan.datiGenerali.sezione).toBe('C');
     expect(importedDoc.plan.datiGenerali.docenteGenere).toBe('M');
     expect(importedDoc.plan.composizione.alunni).toBe(18);
+  });
+
+  it('precompila per tutte le 15 discipline verifica, valutazione, metodi, strumenti, curricolo digitale e rilevazione con copertura ampia e coerente', () => {
+    expect(DISCIPLINE_SECONDARIA).toHaveLength(15);
+
+    const premessaSet = new Set<string>();
+    const attivitaSet = new Set<string>();
+
+    for (const disciplina of DISCIPLINE_SECONDARIA) {
+      const plan = createEmptyProgrammazione(DEFAULT_SCHOOL_SETTINGS, { disciplina });
+      const verif = getDefaultVerificheValutazioneForDisciplina(disciplina);
+      const met = getDefaultMetodiStrumentiForDisciplina(disciplina);
+      const ril = getDefaultRilevazioneForDisciplina(disciplina);
+      const cur = getDefaultCurricoloForDisciplina(disciplina);
+
+      expect(plan.situazione.tipologie.length).toBeGreaterThanOrEqual(2);
+      expect(plan.verificheValutazione.verificheScritte.length).toBeGreaterThanOrEqual(4);
+      expect(plan.verificheValutazione.verificheOrali.length).toBeGreaterThanOrEqual(4);
+      expect(plan.verificheValutazione.altriTipiProve.trim().length).toBeGreaterThan(25);
+      expect(plan.verificheValutazione.criteriValutazione.trim().length).toBeGreaterThan(100);
+      expect(plan.verificheValutazione.verificheScritte).toEqual(verif.verificheScritte);
+
+      expect(met.metodi.length).toBeGreaterThanOrEqual(5);
+      expect(met.mezziEStrumenti.length).toBeGreaterThanOrEqual(7);
+      expect(plan.metodiStrumenti.altreMetodologie.trim().length).toBeGreaterThan(10);
+      expect(plan.metodiStrumenti.altriSussidi.trim().length).toBeGreaterThan(10);
+      expect(plan.metodiStrumenti.ausiliDidattici.trim().length).toBeGreaterThan(10);
+      expect(plan.metodiStrumenti.premessaMetodologica).toBe(met.premessaMetodologica);
+      expect(plan.metodiStrumenti.didatticaDigitaleIntegrata).toBe(
+        met.didatticaDigitaleIntegrata
+      );
+
+      expect(cur.competenzeDigitali.length).toBeGreaterThanOrEqual(2);
+      expect(plan.curricolo.competenzeDigitali).toEqual(cur.competenzeDigitali);
+      expect(plan.curricolo.attivitaProgrammate.trim().length).toBeGreaterThan(30);
+
+      expect(ril.mezziIndividuazione.length).toBeGreaterThanOrEqual(2);
+      expect(ril.fontiRilevazione.length).toBeGreaterThanOrEqual(4);
+
+      premessaSet.add(plan.metodiStrumenti.premessaMetodologica);
+      attivitaSet.add(plan.curricolo.attivitaProgrammate);
+    }
+
+    expect(premessaSet.size).toBe(15);
+    expect(attivitaSet.size).toBe(15);
+  });
+
+  it('normalizza sempre titolo e firma al maschile (Prof. / Il docente) anche in presenza di prefissi Prof.ssa / La docente e genera DOCX/PDF coerenti', async () => {
+    expect(formatDocenteConTitolo('Prof.ssa Mario Rossi', 'M')).toBe('Prof. Mario Rossi');
+    expect(formatFirmaDocente('La docente Prof.ssa Mario Rossi', 'M')).toBe(
+      'Il docente Prof. Mario Rossi'
+    );
+    expect(formatDocenteConTitolo('Il docente Prof. Luca Profeta', 'M')).toBe(
+      'Prof. Luca Profeta'
+    );
+    expect(formatFirmaDocente('Prof. Anna Bianchi', 'F')).toBe('La docente Prof.ssa Anna Bianchi');
+
+    const plan = createEmptyProgrammazione(DEFAULT_SCHOOL_SETTINGS, {
+      disciplina: 'Storia',
+      classe: 'Prima',
+      sezione: 'A',
+      docente: 'Prof.ssa Mario Rossi',
+      docenteGenere: 'M',
+    });
+    plan.verificheValutazione.firmaDocente = 'La docente Prof.ssa Mario Rossi';
+
+    const docxBytes = await generateProgrammazioneDocxBytes(plan, DEFAULT_SCHOOL_SETTINGS, mapping);
+    const importedBack = await importProgrammazioneFromBuffer(
+      docxBytes.buffer as ArrayBuffer,
+      'verifica_genere.docx',
+      DEFAULT_SCHOOL_SETTINGS
+    );
+    expect(importedBack.plan.datiGenerali.docenteGenere).toBe('M');
+
+    const pdfBytes = generateProgrammazionePdfBytes(plan, DEFAULT_SCHOOL_SETTINGS, mapping);
+    const pdfText = new TextDecoder('latin1').decode(pdfBytes);
+    expect(pdfText).toContain('Prof. Mario Rossi');
+    expect(pdfText).toContain('Il docente Prof. Mario Rossi');
+    expect(pdfText).not.toContain('Prof.ssa');
+    expect(pdfText).not.toContain('La docente');
+  });
+
+  it('per la Prima preseleziona competenze e obiettivi specifici in funzione dei contenuti della classe', () => {
+    const matPrima = filterCatalogEntries(CURRICOLO_VERTICALE_SEED, 'Prima', 'Matematica');
+    const matRes = computePreselectedCatalogIds(matPrima, 'Prima');
+    // Tutte le conoscenze e abilità della Prima sono preselezionate
+    const matPrimaCon = matPrima.filter((e) => e.tipo === 'conoscenza' || e.tipo === 'abilita');
+    expect(matPrimaCon.every((e) => matRes.selectedIds.has(e.id))).toBe(true);
+    // Competenze/obiettivi tipici di Seconda/Terza (radici, percentuali, irrazionali, rapporti) restano esclusi
+    expect(matRes.selectedIds.has('cvn-matematica-prima-o13')).toBe(false);
+    expect(matRes.selectedIds.has('cvn-matematica-prima-o15')).toBe(false);
+    expect(matRes.selectedIds.has('cvn-matematica-prima-o17')).toBe(false);
+    expect(matRes.selectedIds.has('cvn-matematica-prima-o18')).toBe(false);
+    // Obiettivi coerenti con i contenuti della Prima (numeri naturali, potenze/fattori primi) restano preselezionati
+    expect(matRes.selectedIds.has('cvn-matematica-prima-o10')).toBe(true);
+    expect(matRes.selectedIds.has('cvn-matematica-prima-o16')).toBe(true);
+    expect(matRes.alignedCompetenceIds.size).toBeGreaterThan(0);
+
+    const sciPrima = filterCatalogEntries(CURRICOLO_VERTICALE_SEED, 'Prima', 'Scienze');
+    const sciRes = computePreselectedCatalogIds(sciPrima, 'Prima');
+    // Astronomia (Terza) e reazioni acido-base / fossili restano esclusi per i contenuti Prima
+    expect(sciRes.selectedIds.has('cvn-scienze-prima-o12')).toBe(false);
+    expect(sciRes.selectedIds.has('cvn-scienze-prima-o14')).toBe(false);
+    expect(sciRes.selectedIds.has('cvn-scienze-prima-o15')).toBe(false);
+    // Passaggi di stato e ciclo del carbonio (presenti nei contenuti Prima) sono preselezionati
+    expect(sciRes.selectedIds.has('cvn-scienze-prima-o11')).toBe(true);
+    expect(sciRes.selectedIds.has('cvn-scienze-prima-o17')).toBe(true);
+
+    // Preselezione reattiva anche su contenuti personalizzati già presenti nel piano di Prima
+    const customRes = computePreselectedCatalogIds(sciPrima, 'Prima', [
+      'La cellula, la fotosintesi nelle piante e il ciclo del carbonio.',
+    ]);
+    expect(customRes.usedPlanContents).toBe(true);
+    expect(customRes.selectedIds.has('cvn-scienze-prima-o11')).toBe(true);
+    expect(customRes.selectedIds.has('cvn-scienze-prima-o17')).toBe(false);
+
+    // Per la Terza tutte le voci della classe restano preselezionate
+    const matTerza = filterCatalogEntries(CURRICOLO_VERTICALE_SEED, 'Terza', 'Matematica');
+    const terzaRes = computePreselectedCatalogIds(matTerza, 'Terza');
+    expect(terzaRes.selectedIds.size).toBe(matTerza.length);
   });
 });

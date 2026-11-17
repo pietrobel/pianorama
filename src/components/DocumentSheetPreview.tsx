@@ -54,7 +54,8 @@ export function DocumentSheetPreview({
 
   const activeCharacteristics = getActiveDimensionsForDocument(
     plan.situazione.caratteristicheDimensioni,
-    settings.soglieQuoteCaratteristiche
+    settings.soglieQuoteCaratteristiche,
+    `${plan.id}|${plan.datiGenerali.classe}|${plan.datiGenerali.sezione}|${plan.datiGenerali.disciplina}`
   );
   const compositionIntro = buildClassCompositionIntro(plan);
 
