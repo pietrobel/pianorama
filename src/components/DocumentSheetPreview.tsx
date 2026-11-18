@@ -125,7 +125,7 @@ export function DocumentSheetPreview({
             <img
               src={getSchoolBannerDataUrl()}
               alt="Intestazione istituzionale"
-              className="mx-auto max-h-28 w-auto object-contain"
+              className="mx-auto mb-2 max-h-32 w-full max-w-[600px] object-contain"
             />
           ) : (
             <>
@@ -155,7 +155,7 @@ export function DocumentSheetPreview({
 
       {/* Titolo & Dati Generali */}
       {isOriginal ? (
-        <div className="mt-5 space-y-2.5">
+        <div className="mt-8 space-y-2.5">
           <p className="text-center text-[15px]">
             PROGRAMMAZIONE DISCIPLINARE di{' '}
             <span className="font-bold underline">

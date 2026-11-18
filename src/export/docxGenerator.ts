@@ -398,22 +398,30 @@ export function createProgrammazioneDocument(
   );
   const compositionIntro = buildClassCompositionIntro(plan);
 
-  const bannerRatioHeight = Math.round((645 * SCHOOL_BANNER_HEIGHT) / SCHOOL_BANNER_WIDTH);
+  const bannerTargetWidth = 580;
+  const bannerRatioHeight = Math.round(
+    (bannerTargetWidth * SCHOOL_BANNER_HEIGHT) / SCHOOL_BANNER_WIDTH
+  );
   const institutionHeaderBlocks: Paragraph[] = isOriginal
     ? [
         new Paragraph({
           alignment: AlignmentType.CENTER,
-          spacing: { before: 0, after: 180 },
-          border: {
-            bottom: { style: BorderStyle.DOUBLE, size: 12, color: '000000' },
-          },
+          spacing: { before: 40, after: 100 },
           children: [
             new ImageRun({
               data: getSchoolBannerUint8Array(),
-              transformation: { width: 645, height: bannerRatioHeight },
+              transformation: { width: bannerTargetWidth, height: bannerRatioHeight },
               type: 'png',
             }),
           ],
+        }),
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 0, after: 360 },
+          border: {
+            bottom: { style: BorderStyle.DOUBLE, size: 12, color: '000000', space: 4 },
+          },
+          children: [],
         }),
       ]
     : [

@@ -401,14 +401,16 @@ export function generateProgrammazionePdfBytes(
   // INTESTAZIONE ISTITUZIONALE
   // =========================================================================
   if (isOriginal) {
-    const bannerH = (contentWidth * SCHOOL_BANNER_HEIGHT) / SCHOOL_BANNER_WIDTH;
-    doc.addImage(getSchoolBannerDataUrl(), 'PNG', marginX, y, contentWidth, bannerH);
-    y += bannerH + 1.5;
+    const bannerW = Math.min(contentWidth - 8, 162);
+    const bannerH = (bannerW * SCHOOL_BANNER_HEIGHT) / SCHOOL_BANNER_WIDTH;
+    const bannerX = marginX + (contentWidth - bannerW) / 2;
+    doc.addImage(getSchoolBannerDataUrl(), 'PNG', bannerX, y, bannerW, bannerH);
+    y += bannerH + 3.5;
     doc.setDrawColor(0, 0, 0);
     doc.setLineWidth(0.45);
     doc.line(marginX, y, marginX + contentWidth, y);
-    doc.line(marginX, y + 0.8, marginX + contentWidth, y + 0.8);
-    y += 7;
+    doc.line(marginX, y + 1.0, marginX + contentWidth, y + 1.0);
+    y += 11;
   } else {
     drawParagraph(settings.ministryHeader.toUpperCase(), {
       bold: true,
