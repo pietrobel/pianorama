@@ -12,7 +12,7 @@ export interface QuestionnaireOption {
 
 export interface QuestionnaireIndicatorSpec {
   key: QuestionnaireIndicatorKey;
-  area: 'Contesto' | 'Area cognitiva' | 'Metodo e autonomia' | 'Comportamento e clima' | 'Interventi';
+  area: 'Area cognitiva' | 'Metodo e autonomia' | 'Comportamento e clima';
   title: string;
   prompt: string;
   options: QuestionnaireOption[];
@@ -20,67 +20,9 @@ export interface QuestionnaireIndicatorSpec {
 
 export const QUESTIONNAIRE_INDICATORS: QuestionnaireIndicatorSpec[] = [
   {
-    key: 'composizioneContinuita',
-    area: 'Contesto',
-    title: '1. Composizione e continuità del gruppo',
-    prompt: 'Composizione, stabilità o continuità didattica rispetto all’anno precedente:',
-    options: [
-      {
-        label: 'Gruppo nuovo in formazione (classe prima / nuovi inserimenti)',
-        syntheticPhrase: 'il gruppo classe è di nuova formazione con alcuni nuovi inserimenti',
-        completePhrase:
-          'Il gruppo classe si presenta di nuova formazione, con alunni provenienti da percorsi o sezioni differenti in fase di reciproca conoscenza.',
-      },
-      {
-        label: 'Gruppo sostanzialmente stabile e continuo',
-        syntheticPhrase: 'il gruppo classe mostra una composizione stabile e continua',
-        completePhrase:
-          'La composizione del gruppo classe risulta sostanzialmente stabile e continua rispetto al percorso scolastico precedente.',
-      },
-      {
-        label: 'Gruppo con variazioni o inserimenti in corso di percorso',
-        syntheticPhrase: 'il gruppo ha registrato alcune variazioni nella composizione',
-        completePhrase:
-          'Il gruppo classe ha registrato alcune variazioni e nuovi inserimenti rispetto alla composizione originaria, richiedendo attenzione all’integrazione.',
-      },
-    ],
-  },
-  {
-    key: 'livelliDistribuzione',
-    area: 'Contesto',
-    title: '2. Livelli di partenza e distribuzione delle fasce di apprendimento',
-    prompt: 'Distribuzione delle fasce di preparazione iniziale rilevate nella disciplina:',
-    options: [
-      {
-        label: 'Prevalenza di livelli medio-alti e alti',
-        syntheticPhrase: 'i livelli di partenza si attestano prevalentemente su fasce medio-alte',
-        completePhrase:
-          'Dalle rilevazioni iniziali emerge una preparazione di base complessivamente solida, con una prevalenza di alunni collocati nelle fasce media e alta.',
-      },
-      {
-        label: 'Distribuzione equilibrata intorno al livello medio',
-        syntheticPhrase: 'i livelli di partenza si distribuiscono intorno alla fascia media',
-        completePhrase:
-          'I livelli di partenza si distribuiscono in modo equilibrato intorno alla fascia intermedia, con un nucleo ristretto di alunni più fragili e un gruppo con buone potenzialità.',
-      },
-      {
-        label: 'Distribuzione fortemente eterogenea tra fasce basse e alte',
-        syntheticPhrase: 'i livelli iniziali risultano eterogenei tra le diverse fasce',
-        completePhrase:
-          'La distribuzione delle fasce di apprendimento risulta marcatamente eterogenea, richiedendo una modulazione differenziata delle proposte didattiche.',
-      },
-      {
-        label: 'Prevalenza di livelli medio-bassi o fragili',
-        syntheticPhrase: 'i livelli di partenza evidenziano diffuse fragilità di base',
-        completePhrase:
-          'Le rilevazioni iniziali evidenziano diffuse fragilità nei prerequisiti disciplinari, con un numero significativo di alunni collocati nelle fasce medio-bassa e bassa.',
-      },
-    ],
-  },
-  {
     key: 'comprensione',
     area: 'Area cognitiva',
-    title: '3. Comprensione delle consegne e dei concetti',
+    title: '1. Comprensione delle consegne e dei concetti',
     prompt: 'Indicatore distinto — capacità di decodificare consegne scritte/orali e concetti:',
     options: [
       {
@@ -106,7 +48,7 @@ export const QUESTIONNAIRE_INDICATORS: QuestionnaireIndicatorSpec[] = [
   {
     key: 'memorizzazione',
     area: 'Area cognitiva',
-    title: '4. Memorizzazione di informazioni, regole e procedure',
+    title: '2. Memorizzazione di informazioni, regole e procedure',
     prompt: 'Indicatore distinto — tenuta mnemonica di termini, regole e sequenze operative:',
     options: [
       {
@@ -132,7 +74,7 @@ export const QUESTIONNAIRE_INDICATORS: QuestionnaireIndicatorSpec[] = [
   {
     key: 'capacitaApprendimento',
     area: 'Area cognitiva',
-    title: '5. Capacità di apprendimento e acquisizione di nuove conoscenze',
+    title: '3. Capacità di apprendimento e acquisizione di nuove conoscenze',
     prompt: 'Indicatore distinto — ritmo e flessibilità nell’acquisire nuovi contenuti:',
     options: [
       {
@@ -158,7 +100,7 @@ export const QUESTIONNAIRE_INDICATORS: QuestionnaireIndicatorSpec[] = [
   {
     key: 'applicazioneConoscenze',
     area: 'Area cognitiva',
-    title: '6. Applicazione delle conoscenze in situazioni note e nuove',
+    title: '4. Applicazione delle conoscenze in situazioni note e nuove',
     prompt: 'Capacità di trasferire regole e concetti negli esercizi e in contesti inediti:',
     options: [
       {
@@ -184,7 +126,7 @@ export const QUESTIONNAIRE_INDICATORS: QuestionnaireIndicatorSpec[] = [
   {
     key: 'collegamentoAnalisiSintesi',
     area: 'Area cognitiva',
-    title: '7. Capacità di collegamento, analisi e sintesi',
+    title: '5. Capacità di collegamento, analisi e sintesi',
     prompt: 'Rielaborazione personale, nessi logici e individuazione dei nuclei essenziali:',
     options: [
       {
@@ -210,7 +152,7 @@ export const QUESTIONNAIRE_INDICATORS: QuestionnaireIndicatorSpec[] = [
   {
     key: 'esposizioneProduzione',
     area: 'Area cognitiva',
-    title: '8. Esposizione orale e produzione scritta',
+    title: '6. Esposizione orale e produzione scritta',
     prompt: 'Padronanza espressiva, lessico disciplinare e organizzazione del discorso:',
     options: [
       {
@@ -236,7 +178,7 @@ export const QUESTIONNAIRE_INDICATORS: QuestionnaireIndicatorSpec[] = [
   {
     key: 'risoluzioneProblemi',
     area: 'Area cognitiva',
-    title: '9. Risoluzione dei problemi',
+    title: '7. Risoluzione dei problemi',
     prompt: 'Approccio a situazioni problematiche, formulazione di ipotesi e verifica:',
     options: [
       {
@@ -262,7 +204,7 @@ export const QUESTIONNAIRE_INDICATORS: QuestionnaireIndicatorSpec[] = [
   {
     key: 'attenzioneConcentrazione',
     area: 'Metodo e autonomia',
-    title: '10. Attenzione e concentrazione',
+    title: '8. Attenzione e concentrazione',
     prompt: 'Tenuta attentiva durante spiegazioni e attività individuali:',
     options: [
       {
@@ -288,7 +230,7 @@ export const QUESTIONNAIRE_INDICATORS: QuestionnaireIndicatorSpec[] = [
   {
     key: 'interesseMotivazione',
     area: 'Metodo e autonomia',
-    title: '11. Interesse e motivazione',
+    title: '9. Interesse e motivazione',
     prompt: 'Coinvolgimento e curiosità verso la disciplina:',
     options: [
       {
@@ -314,7 +256,7 @@ export const QUESTIONNAIRE_INDICATORS: QuestionnaireIndicatorSpec[] = [
   {
     key: 'partecipazioneInterventi',
     area: 'Metodo e autonomia',
-    title: '12. Partecipazione e interventi',
+    title: '10. Partecipazione e interventi',
     prompt: 'Modalità di intervento nel dialogo educativo:',
     options: [
       {
@@ -340,7 +282,7 @@ export const QUESTIONNAIRE_INDICATORS: QuestionnaireIndicatorSpec[] = [
   {
     key: 'impegnoCostanza',
     area: 'Metodo e autonomia',
-    title: '13. Impegno e costanza',
+    title: '11. Impegno e costanza',
     prompt: 'Continuità nello sforzo scolastico durante il lavoro quotidiano:',
     options: [
       {
@@ -366,7 +308,7 @@ export const QUESTIONNAIRE_INDICATORS: QuestionnaireIndicatorSpec[] = [
   {
     key: 'compitiDomestici',
     area: 'Metodo e autonomia',
-    title: '14. Svolgimento dei compiti domestici',
+    title: '12. Svolgimento dei compiti domestici',
     prompt: 'Puntualità e accuratezza nelle consegne assegnate per casa:',
     options: [
       {
@@ -392,7 +334,7 @@ export const QUESTIONNAIRE_INDICATORS: QuestionnaireIndicatorSpec[] = [
   {
     key: 'autonomiaOperativa',
     area: 'Metodo e autonomia',
-    title: '15. Autonomia operativa',
+    title: '13. Autonomia operativa',
     prompt: 'Capacità di avviare e portare a termine una consegna senza aiuto continuo:',
     options: [
       {
@@ -418,7 +360,7 @@ export const QUESTIONNAIRE_INDICATORS: QuestionnaireIndicatorSpec[] = [
   {
     key: 'organizzazioneLavoro',
     area: 'Metodo e autonomia',
-    title: '16. Organizzazione del lavoro e del materiale',
+    title: '14. Organizzazione del lavoro e del materiale',
     prompt: 'Cura di quaderni, libri, strumenti, diario e rispetto dei tempi:',
     options: [
       {
@@ -444,7 +386,7 @@ export const QUESTIONNAIRE_INDICATORS: QuestionnaireIndicatorSpec[] = [
   {
     key: 'metodoStudio',
     area: 'Metodo e autonomia',
-    title: '17. Metodo di studio',
+    title: '15. Metodo di studio',
     prompt: 'Strategie di studio autonomo, schemi, parole chiave e rielaborazione:',
     options: [
       {
@@ -470,7 +412,7 @@ export const QUESTIONNAIRE_INDICATORS: QuestionnaireIndicatorSpec[] = [
   {
     key: 'relazioniCollaborazione',
     area: 'Comportamento e clima',
-    title: '18. Relazioni interpersonali e collaborazione',
+    title: '16. Relazioni interpersonali e collaborazione',
     prompt: 'Dinamiche relazionali tra pari e disponibilità al lavoro cooperativo:',
     options: [
       {
@@ -496,7 +438,7 @@ export const QUESTIONNAIRE_INDICATORS: QuestionnaireIndicatorSpec[] = [
   {
     key: 'rispettoRegoleClima',
     area: 'Comportamento e clima',
-    title: '19. Rispetto delle regole e clima della classe',
+    title: '17. Rispetto delle regole e clima della classe',
     prompt: 'Osservanza delle norme di convivenza e serenità dell’ambiente di apprendimento:',
     options: [
       {
@@ -516,58 +458,6 @@ export const QUESTIONNAIRE_INDICATORS: QuestionnaireIndicatorSpec[] = [
         syntheticPhrase: 'il rispetto delle regole richiede un presidio educativo costante',
         completePhrase:
           'Si registrano frequenti episodi di inosservanza delle regole di comportamento che rallentano lo svolgimento delle lezioni e richiedono un presidio educativo fermo e coerente.',
-      },
-    ],
-  },
-  {
-    key: 'strategiePersonalizzazione',
-    area: 'Interventi',
-    title: '20. Strategie di recupero, consolidamento, potenziamento e personalizzazione',
-    prompt: 'Orientamento operativo generale per la differenziazione didattica:',
-    options: [
-      {
-        label: 'Potenziamento delle eccellenze e consolidamento diffuso',
-        syntheticPhrase: 'si privilegiano azioni di potenziamento e consolidamento',
-        completePhrase:
-          'L’azione didattica si orienterà verso il potenziamento delle capacità critiche e di ricerca per la fascia alta, affiancato dal consolidamento metodologico per la fascia intermedia.',
-      },
-      {
-        label: 'Equilibrio tra recupero dei prerequisiti, consolidamento e potenziamento',
-        syntheticPhrase: 'si prevede un’azione equilibrata di recupero, consolidamento e potenziamento',
-        completePhrase:
-          'La progettazione prevederà percorsi flessibili per gruppi di livello, alternando recupero dei prerequisiti essenziali, consolidamento guidato e compiti di approfondimento.',
-      },
-      {
-        label: 'Priorità a recupero, semplificazione e didattica inclusiva personalizzata',
-        syntheticPhrase: 'si dà priorità al recupero guidato e alla personalizzazione inclusiva',
-        completePhrase:
-          'Verrà data priorità ad attività di recupero in itinere, didattica laboratoriale, uso di mediatori visivi e personalizzazione degli obiettivi in coerenza con PDP/PEI.',
-      },
-    ],
-  },
-  {
-    key: 'puntiForzaCriticita',
-    area: 'Interventi',
-    title: '21. Punti di forza e criticità',
-    prompt: 'Sintesi bilanciata delle risorse prevalenti e degli aspetti da presidiare:',
-    options: [
-      {
-        label: 'Punti di forza: curiosità e collaborazione · Criticità: discontinuità nello studio',
-        syntheticPhrase: 'tra i punti di forza emergono curiosità e collaborazione, a fronte di una lieve discontinuità nello studio',
-        completePhrase:
-          'Tra i principali punti di forza si segnalano la disponibilità al dialogo e la curiosità operativa; le criticità prioritarie riguardano la continuità dello studio domestico e la precisione formale.',
-      },
-      {
-        label: 'Punti di forza: buon clima relazionale · Criticità: fragilità nei prerequisiti e nel metodo',
-        syntheticPhrase: 'il clima relazionale positivo rappresenta una risorsa su cui innestare il recupero metodologico',
-        completePhrase:
-          'Il principale punto di forza risiede nella disponibilità relazionale del gruppo; le criticità su cui intervenire riguardano il possesso dei prerequisiti disciplinari e l’acquisizione di un metodo di lavoro autonomo.',
-      },
-      {
-        label: 'Punti di forza: nucleo motivato e autonomo · Criticità: eterogeneità dei ritmi e tenuta attentiva',
-        syntheticPhrase: 'un nucleo motivato traina la classe, mentre occorre gestire l’eterogeneità dei ritmi',
-        completePhrase:
-          'La presenza di un nucleo di alunni autonomi e partecipi costituisce una risorsa positiva; le criticità principali attengono alla gestione dell’eterogeneità dei ritmi di apprendimento e alla tenuta attentiva.',
       },
     ],
   },
@@ -650,18 +540,6 @@ const DISCIPLINE_LEADS = [
 ];
 
 const AREA_TRANSITION_PREFIXES: Record<QuestionnaireIndicatorSpec['area'], string[]> = {
-  Contesto: [
-    '',
-    'In primo luogo, ',
-    'Dal punto di vista del contesto iniziale, ',
-    'Guardando all’assetto generale della classe, ',
-    'Nel quadro di partenza rilevato dal Consiglio, ',
-    'Considerando la fisionomia complessiva del gruppo, ',
-    'Sul piano dell’inquadramento iniziale, ',
-    'In apertura dell’anno scolastico, ',
-    'Dall’analisi del contesto classe emerge che ',
-    'Sotto il profilo della composizione e dei prerequisiti, ',
-  ],
   'Area cognitiva': [
     '',
     'Sul piano cognitivo, ',
@@ -697,18 +575,6 @@ const AREA_TRANSITION_PREFIXES: Record<QuestionnaireIndicatorSpec['area'], strin
     'Quanto all’osservanza delle regole e al clima del gruppo, ',
     'Sul versante socio-relazionale, ',
     'In riferimento all’ambiente educativo di classe, ',
-  ],
-  Interventi: [
-    '',
-    'In prospettiva programmatica, ',
-    'Alla luce del quadro descritto, ',
-    'In chiave operativo-didattica, ',
-    'Per orientare efficacemente l’azione formativa, ',
-    'Sul piano delle strategie d’intervento, ',
-    'Dall’equilibrio tra risorse e bisogni rilevati, ',
-    'Nel disegnare il percorso annuale, ',
-    'In coerenza con il profilo emerso, ',
-    'Sul terreno della personalizzazione didattica, ',
   ],
 };
 
@@ -956,11 +822,9 @@ export function generateClassDescription(
 
   // Modalità completa: raggruppata per area, escludendo rigorosamente le risposte non compilate
   const areasOrder: QuestionnaireIndicatorSpec['area'][] = [
-    'Contesto',
     'Area cognitiva',
     'Metodo e autonomia',
     'Comportamento e clima',
-    'Interventi',
   ];
 
   const areaParagraphs: string[] = [];

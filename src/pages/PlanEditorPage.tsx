@@ -57,6 +57,7 @@ import type {
   DocumentLayoutStyle,
   DocxMappingSchema,
   ImportedCurricoloVoice,
+  IndicazioniVersion,
   LibraryItem,
   PlanStatus,
   Programmazione,
@@ -68,7 +69,9 @@ import { reconcileDimensionsWithTotalStudents } from '../engine/classCharacteris
 import {
   CURRICOLO_TYPE_LABELS,
   CURRICOLO_TYPE_ORDER,
+  INDICAZIONI_LABELS,
   buildProgramRowsFromCatalogVoices,
+  getDefaultIndicazioniForClasseAndYear,
   importCatalogEntriesToVoices,
   isVoiceRestorable,
   reorderImportedVoices,
@@ -1053,15 +1056,23 @@ export function PlanEditorPage({
                   <input
                     type="text"
                     value={draft.datiGenerali.annoScolastico}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const nextAnno = e.target.value;
                       setDraft((prev) => ({
                         ...prev,
                         datiGenerali: {
                           ...prev.datiGenerali,
-                          annoScolastico: e.target.value,
+                          annoScolastico: nextAnno,
                         },
-                      }))
-                    }
+                        curricolo: {
+                          ...prev.curricolo,
+                          indicazioniVersione: getDefaultIndicazioniForClasseAndYear(
+                            prev.datiGenerali.classe,
+                            nextAnno
+                          ),
+                        },
+                      }));
+                    }}
                     className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
                   />
                 </label>
@@ -1073,15 +1084,23 @@ export function PlanEditorPage({
                     </span>
                     <select
                       value={draft.datiGenerali.classe}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const nextClasse = e.target.value as 'Prima' | 'Seconda' | 'Terza';
                         setDraft((prev) => ({
                           ...prev,
                           datiGenerali: {
                             ...prev.datiGenerali,
-                            classe: e.target.value as 'Prima' | 'Seconda' | 'Terza',
+                            classe: nextClasse,
                           },
-                        }))
-                      }
+                          curricolo: {
+                            ...prev.curricolo,
+                            indicazioniVersione: getDefaultIndicazioniForClasseAndYear(
+                              nextClasse,
+                              prev.datiGenerali.annoScolastico
+                            ),
+                          },
+                        }));
+                      }}
                       className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
                     >
                       <option value="Prima">Prima</option>
@@ -1964,6 +1983,74 @@ export function PlanEditorPage({
                   </button>
                 </div>
               </div>
+
+              {(() => {
+                const recommendedIndicazioni = getDefaultIndicazioniForClasseAndYear(
+                  draft.datiGenerali.classe,
+                  draft.datiGenerali.annoScolastico
+                );
+                const currentIndicazioni =
+                  draft.curricolo.indicazioniVersione ?? recommendedIndicazioni;
+                return (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/70 px-3.5 py-2.5 dark:border-slate-800 dark:bg-slate-950/40">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                        Riferimento curricolare: Classe {draft.datiGenerali.classe} · A.S.{' '}
+                        {draft.datiGenerali.annoScolastico}
+                      </p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Predefinito automatico:{' '}
+                        <strong className="font-semibold">
+                          {INDICAZIONI_LABELS[recommendedIndicazioni]}
+                        </strong>{' '}
+                        (dal 2027/28 Nuove anche per Seconda; dal 2028/29 Nuove per tutte le classi)
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {currentIndicazioni !== recommendedIndicazioni && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDraft((prev) => ({
+                              ...prev,
+                              curricolo: {
+                                ...prev.curricolo,
+                                indicazioniVersione: recommendedIndicazioni,
+                              },
+                            }))
+                          }
+                          className="text-xs font-semibold text-[#1F3864] hover:underline dark:text-blue-400"
+                        >
+                          Ripristina predefinito
+                        </button>
+                      )}
+                      <select
+                        aria-label="Riferimento curricolare Indicazioni Nazionali"
+                        value={currentIndicazioni}
+                        onChange={(e) =>
+                          setDraft((prev) => ({
+                            ...prev,
+                            curricolo: {
+                              ...prev.curricolo,
+                              indicazioniVersione: e.target.value as IndicazioniVersion,
+                            },
+                          }))
+                        }
+                        className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      >
+                        <option value="nuove">
+                          {INDICAZIONI_LABELS.nuove}
+                          {recommendedIndicazioni === 'nuove' ? ' (predefinite)' : ''}
+                        </option>
+                        <option value="vecchie">
+                          {INDICAZIONI_LABELS.vecchie}
+                          {recommendedIndicazioni === 'vecchie' ? ' (predefinite)' : ''}
+                        </option>
+                      </select>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {catalogImportError && (
                 <div
@@ -2913,10 +3000,27 @@ export function PlanEditorPage({
         open={showCatalogSelector}
         catalog={curricoloCatalog}
         planClasse={draft.datiGenerali.classe}
+        planAnnoScolastico={draft.datiGenerali.annoScolastico}
+        planIndicazioni={
+          draft.curricolo.indicazioniVersione ??
+          getDefaultIndicazioniForClasseAndYear(
+            draft.datiGenerali.classe,
+            draft.datiGenerali.annoScolastico
+          )
+        }
         planDisciplina={draft.datiGenerali.disciplina}
         planConoscenze={draft.curricolo.righeAbilitaConoscenze
           .map((r) => r.conoscenze)
           .filter((c) => Boolean(c && c.trim()))}
+        onChangePlanIndicazioni={(nextIndicazioni) =>
+          setDraft((prev) => ({
+            ...prev,
+            curricolo: {
+              ...prev.curricolo,
+              indicazioniVersione: nextIndicazioni,
+            },
+          }))
+        }
         onImport={handleImportCatalogEntries}
         onClose={() => setShowCatalogSelector(false)}
       />

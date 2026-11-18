@@ -20,11 +20,9 @@ interface ClassQuestionnairePanelProps {
 }
 
 const AREAS_ORDER: QuestionnaireIndicatorSpec['area'][] = [
-  'Contesto',
   'Area cognitiva',
   'Metodo e autonomia',
   'Comportamento e clima',
-  'Interventi',
 ];
 
 export function ClassQuestionnairePanel({
@@ -96,7 +94,7 @@ export function ClassQuestionnairePanel({
           <div className="flex items-center gap-2">
             <ListChecks className="h-4 w-4 text-[#1F3864] dark:text-blue-400" />
             <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-              Questionario guidato descrizione classe (21 indicatori)
+              Questionario guidato descrizione classe ({QUESTIONNAIRE_INDICATORS.length} indicatori)
             </h3>
           </div>
           <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">

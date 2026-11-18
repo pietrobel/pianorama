@@ -5,12 +5,14 @@ import type {
   DocenteGenere,
   DocumentLayoutStyle,
   FonteRilevazione,
+  IndicazioniVersion,
   MetodoStudioStato,
   MezzoIndividuazione,
   Programmazione,
   SchoolSettings,
   SoglieQuoteCaratteristiche,
 } from './types';
+import { getDefaultIndicazioniForClasseAndYear } from '../engine/curricoloCatalogEngine';
 
 export const TIPOLOGIE_CLASSE_OPTIONS: ClassTipologia[] = [
   'tranquilla',
@@ -1279,6 +1281,23 @@ export function getCharacteristicsCatalogForDimension(
     return DIMENSION_CHARACTERISTICS_OPTIONS[dim.id];
   }
   const lowerName = dim.nome.trim().toLowerCase();
+  if (lowerName.includes('metodo') || lowerName.includes('studio')) {
+    return METODO_STUDIO_STATI_OPTIONS;
+  }
+  if (
+    lowerName.includes('regol') ||
+    lowerName.includes('rispett') ||
+    lowerName.includes('comportament') ||
+    lowerName.includes('condott')
+  ) {
+    return ['rispettosa delle regole', 'tranquilla', 'vivace', 'problematica'];
+  }
+  if (lowerName.includes('impegn')) {
+    return ['motivata', 'discontinua nell’impegno', 'poco motivata'];
+  }
+  if (lowerName.includes('attenzion')) {
+    return ['attenta e interessata', 'tranquilla', 'dispersiva o poco partecipativa'];
+  }
   if (lowerName.includes('atteggiamento') || lowerName.includes('motivazione')) {
     return DIMENSION_CHARACTERISTICS_OPTIONS['dim-atteggiamento'];
   }
@@ -1291,14 +1310,7 @@ export function getCharacteristicsCatalogForDimension(
   if (lowerName.includes('partecipaz')) {
     return DIMENSION_CHARACTERISTICS_OPTIONS['dim-partecipazione'];
   }
-  return Array.from(
-    new Set([
-      ...DIMENSION_CHARACTERISTICS_OPTIONS['dim-atteggiamento'],
-      ...DIMENSION_CHARACTERISTICS_OPTIONS['dim-collaborazione'],
-      ...DIMENSION_CHARACTERISTICS_OPTIONS['dim-autonomia'],
-      ...DIMENSION_CHARACTERISTICS_OPTIONS['dim-partecipazione'],
-    ])
-  );
+  return [];
 }
 
 export function stripDocenteTitoli(raw: string | undefined): string {
@@ -1456,6 +1468,7 @@ export function createEmptyProgrammazione(
     docente: string;
     docenteGenere: DocenteGenere;
     layoutDocumento: DocumentLayoutStyle;
+    indicazioniVersione: IndicazioniVersion;
     plesso: string;
     isTemplate: boolean;
     templateNome: string;
@@ -1463,6 +1476,11 @@ export function createEmptyProgrammazione(
 ): Programmazione {
   const now = new Date().toISOString();
   const disciplina = overrides?.disciplina || settings.defaultDisciplina || 'Italiano';
+  const classe = overrides?.classe ?? 'Prima';
+  const annoScolastico = overrides?.annoScolastico ?? settings.defaultAnnoScolastico ?? '2026/27';
+  const indicazioniVersione =
+    overrides?.indicazioniVersione ??
+    getDefaultIndicazioniForClasseAndYear(classe, annoScolastico);
   const docenteGenere = overrides?.docenteGenere ?? settings.defaultDocenteGenere ?? 'F';
   const layoutDocumento = overrides?.layoutDocumento ?? settings.defaultLayoutDocumento ?? 'originale';
   const rilevazioneDefaults = getDefaultRilevazioneForDisciplina(disciplina);
@@ -1488,8 +1506,8 @@ export function createEmptyProgrammazione(
       titoloDisciplina: disciplina,
       scuola: settings.defaultScuola || 'Scuola Secondaria di Primo Grado',
       plesso: overrides?.plesso ?? settings.defaultPlesso ?? 'Villafrati',
-      annoScolastico: overrides?.annoScolastico ?? settings.defaultAnnoScolastico ?? '2026/27',
-      classe: overrides?.classe ?? 'Prima',
+      annoScolastico,
+      classe,
       sezione: overrides?.sezione ?? 'A',
       disciplina,
       docente: overrides?.docente ?? settings.defaultDocente ?? '',
@@ -1535,6 +1553,7 @@ export function createEmptyProgrammazione(
       besInterventiProgrammati: DEFAULT_BES_INTERVENTI_TEXT,
     },
     curricolo: {
+      indicazioniVersione,
       notaIntroduttiva: DEFAULT_NOTA_CURRICOLO,
       competenzeAttese: [],
       competenzeDigitali: curricoloDefaults.competenzeDigitali,

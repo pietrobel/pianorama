@@ -15,10 +15,15 @@ import type {
   ClasseSecondaria,
   DocenteGenere,
   DocumentLayoutStyle,
+  IndicazioniVersion,
   Programmazione,
   SchoolSettings,
   SectionCopyOptions,
 } from '../domain/types';
+import {
+  INDICAZIONI_LABELS,
+  getDefaultIndicazioniForClasseAndYear,
+} from '../engine/curricoloCatalogEngine';
 import {
   importProgrammazioneFromFile,
   type DocumentImportResult,
@@ -115,9 +120,27 @@ export function NewPlanPage({
   const [layoutDocumento, setLayoutDocumento] = useState<DocumentLayoutStyle>(
     defaultSource?.datiGenerali.layoutDocumento ?? settings.defaultLayoutDocumento ?? 'originale'
   );
+  const [indicazioniVersione, setIndicazioniVersione] = useState<IndicazioniVersion>(() =>
+    getDefaultIndicazioniForClasseAndYear(
+      defaultSource?.datiGenerali.classe || 'Prima',
+      settings.defaultAnnoScolastico || '2026/27'
+    )
+  );
   const [saveAsTemplate, setSaveAsTemplate] = useState<boolean>(false);
   const [templateNome, setTemplateNome] = useState<string>('');
   const [saving, setSaving] = useState(false);
+
+  const recommendedIndicazioni = getDefaultIndicazioniForClasseAndYear(classe, annoScolastico);
+
+  const handleAnnoScolasticoChange = (nextAnno: string) => {
+    setAnnoScolastico(nextAnno);
+    setIndicazioniVersione(getDefaultIndicazioniForClasseAndYear(classe, nextAnno));
+  };
+
+  const handleClasseChange = (nextClasse: ClasseSecondaria) => {
+    setClasse(nextClasse);
+    setIndicazioniVersione(getDefaultIndicazioniForClasseAndYear(nextClasse, annoScolastico));
+  };
 
   const [importingDoc, setImportingDoc] = useState(false);
   const [importDocError, setImportDocError] = useState<string | null>(null);
@@ -142,6 +165,13 @@ export function NewPlanPage({
       setPlesso(result.plan.datiGenerali.plesso);
       setDocente(result.plan.datiGenerali.docente);
       setDocenteGenere(result.plan.datiGenerali.docenteGenere ?? settings.defaultDocenteGenere ?? 'F');
+      setIndicazioniVersione(
+        result.plan.curricolo.indicazioniVersione ??
+          getDefaultIndicazioniForClasseAndYear(
+            result.plan.datiGenerali.classe,
+            result.plan.datiGenerali.annoScolastico
+          )
+      );
     } catch (err) {
       setImportedResult(null);
       setImportDocError(
@@ -190,6 +220,10 @@ export function NewPlanPage({
             ...importedResult.plan.verificheValutazione,
             firmaDocente: cleanDocente,
           },
+          curricolo: {
+            ...importedResult.plan.curricolo,
+            indicazioniVersione,
+          },
         };
       } else if (baseType === 'reuse' && source) {
         plan = cloneProgrammazioneWithOptions({
@@ -206,6 +240,7 @@ export function NewPlanPage({
             docente,
             docenteGenere,
             layoutDocumento,
+            indicazioniVersione,
             isTemplate: saveAsTemplate,
             templateNome: saveAsTemplate ? templateNome.trim() || `${disciplina} ${classe}` : undefined,
           },
@@ -220,6 +255,7 @@ export function NewPlanPage({
           docente,
           docenteGenere,
           layoutDocumento,
+          indicazioniVersione,
           isTemplate: saveAsTemplate,
           templateNome: saveAsTemplate ? templateNome.trim() || `${disciplina} ${classe}` : undefined,
         });
@@ -401,7 +437,7 @@ export function NewPlanPage({
                   setSourceId(e.target.value);
                   if (chosen) {
                     setDisciplina(chosen.datiGenerali.disciplina);
-                    setClasse(chosen.datiGenerali.classe);
+                    handleClasseChange(chosen.datiGenerali.classe);
                     setPlesso(chosen.datiGenerali.plesso);
                     setDocenteGenere(
                       chosen.datiGenerali.docenteGenere ?? settings.defaultDocenteGenere ?? 'F'
@@ -542,7 +578,7 @@ export function NewPlanPage({
               type="text"
               required
               value={annoScolastico}
-              onChange={(e) => setAnnoScolastico(e.target.value)}
+              onChange={(e) => handleAnnoScolasticoChange(e.target.value)}
               placeholder="es. 2026/27"
               className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
             />
@@ -554,7 +590,7 @@ export function NewPlanPage({
             </span>
             <select
               value={classe}
-              onChange={(e) => setClasse(e.target.value as ClasseSecondaria)}
+              onChange={(e) => handleClasseChange(e.target.value as ClasseSecondaria)}
               className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
             >
               <option value="Prima">Prima</option>
@@ -625,6 +661,42 @@ export function NewPlanPage({
               <option value="moderno">Stile moderno PIANORAMA (blu istituzionale)</option>
             </select>
           </label>
+
+          <div className="sm:col-span-2">
+            <label className="block">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                  Riferimento curricolare (Indicazioni Nazionali)
+                </span>
+                {indicazioniVersione !== recommendedIndicazioni && (
+                  <button
+                    type="button"
+                    onClick={() => setIndicazioniVersione(recommendedIndicazioni)}
+                    className="text-xs font-semibold text-[#1F3864] hover:underline dark:text-blue-400"
+                  >
+                    Ripristina predefinito ({INDICAZIONI_LABELS[recommendedIndicazioni]})
+                  </button>
+                )}
+              </div>
+              <select
+                value={indicazioniVersione}
+                onChange={(e) => setIndicazioniVersione(e.target.value as IndicazioniVersion)}
+                className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              >
+                <option value="nuove">
+                  {INDICAZIONI_LABELS.nuove}
+                  {recommendedIndicazioni === 'nuove' ? ' (predefinito)' : ''}
+                </option>
+                <option value="vecchie">
+                  {INDICAZIONI_LABELS.vecchie}
+                  {recommendedIndicazioni === 'vecchie' ? ' (predefinito)' : ''}
+                </option>
+              </select>
+            </label>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Regola automatica: fino al 2026/27 Nuove per la Prima e Vecchie per Seconda/Terza; nel 2027/28 Nuove per Prima e Seconda; dal 2028/29 Nuove per tutte le classi.
+            </p>
+          </div>
         </div>
 
         <div className="space-y-3 rounded-lg border border-slate-200 p-3.5 dark:border-slate-800">

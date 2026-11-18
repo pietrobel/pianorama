@@ -54,9 +54,12 @@ import {
   computeCatalogDiff,
   computePreselectedCatalogIds,
   filterCatalogEntries,
+  getCatalogEntryIndicazioniVersion,
+  getDefaultIndicazioniForClasseAndYear,
   groupCatalogEntries,
   importCatalogEntriesToVoices,
   isVoiceRestorable,
+  parseStartYearFromAnnoScolastico,
   reorderImportedVoices,
   restoreVoiceFromCatalog,
   validateCatalogJsonPayload,
@@ -138,12 +141,19 @@ describe('PIANORAMA — Privacy, Regole, Questionario, Clonazione, Registro XLSX
     expect(updated.interventi.recupero).toContain(recProposal.action.valueText);
   });
 
-  it('questionario classe contiene 21 indicatori con Comprensione, Memorizzazione e Capacità di apprendimento distinti ed esclude risposte vuote', () => {
+  it('questionario classe contiene 17 indicatori coerenti con le caratteristiche della classe, esclude indicatori estranei e risposte vuote', () => {
     const keys = QUESTIONNAIRE_INDICATORS.map((i) => i.key);
-    expect(keys.length).toBeGreaterThanOrEqual(21);
+    expect(keys).toHaveLength(17);
     expect(keys).toContain('comprensione');
     expect(keys).toContain('memorizzazione');
     expect(keys).toContain('capacitaApprendimento');
+    // Indicatori non attinenti alle caratteristiche della classe (contesto, livelli iniziali, interventi) rimossi
+    expect(keys).not.toContain('composizioneContinuita');
+    expect(keys).not.toContain('livelliDistribuzione');
+    expect(keys).not.toContain('strategiePersonalizzazione');
+    expect(keys).not.toContain('puntiForzaCriticita');
+    expect(QUESTIONNAIRE_INDICATORS.every((i) => (i.area as string) !== 'Interventi')).toBe(true);
+    expect(QUESTIONNAIRE_INDICATORS.every((i) => (i.area as string) !== 'Contesto')).toBe(true);
 
     const plan = createEmptyProgrammazione(DEFAULT_SCHOOL_SETTINGS, {
       disciplina: 'Matematica',
@@ -163,6 +173,12 @@ describe('PIANORAMA — Privacy, Regole, Questionario, Clonazione, Registro XLSX
       eterogenea: false,
       notaEterogenea: '',
     };
+    // Eventuali chiavi legacy in vecchi piani vengono ignorate nella generazione
+    q.risposte.strategiePersonalizzazione = {
+      selectedOption: 'Potenziamento delle eccellenze e consolidamento diffuso',
+      eterogenea: false,
+      notaEterogenea: '',
+    };
     plan.analisiPartenza.questionario = q;
 
     const synthetic = generateClassDescription(plan, 'sintetica');
@@ -172,6 +188,7 @@ describe('PIANORAMA — Privacy, Regole, Questionario, Clonazione, Registro XLSX
     expect(synthetic).toContain('alcuni alunni necessitano di guida visiva');
     expect(complete).toContain('memorizzazione');
     expect(complete.toLowerCase()).not.toContain('compiti domestici');
+    expect(complete.toLowerCase()).not.toContain('eccellenze');
 
     const synthVariants = new Set<string>();
     const compVariants = new Set<string>();
@@ -568,6 +585,11 @@ describe('PIANORAMA — Privacy, Regole, Questionario, Clonazione, Registro XLSX
     expect(getCharacteristicsCatalogForDimension(collDim)).not.toContain('vivace');
     const autDim = defaults.find((d) => d.id === 'dim-autonomia')!;
     expect(getCharacteristicsCatalogForDimension(autDim)).toContain('pienamente autonoma');
+    const rulesCustom = createCustomDimension('Rispetto delle regole');
+    expect(getCharacteristicsCatalogForDimension(rulesCustom)).toContain('rispettosa delle regole');
+    expect(getCharacteristicsCatalogForDimension(rulesCustom)).not.toContain('pienamente autonoma');
+    const expressiveCustom = createCustomDimension('Capacità espressive');
+    expect(getCharacteristicsCatalogForDimension(expressiveCustom)).toEqual([]);
 
     // 3. Conversione percentuale -> espressione verbale e numero esatto di alunni
     expect(quotaPercentualeToExpression(0)).toBeNull();
@@ -899,5 +921,74 @@ Utilizzare con sicurezza le tecniche di calcolo \\tab Eseguire espressioni con f
     const matTerza = filterCatalogEntries(CURRICOLO_VERTICALE_SEED, 'Terza', 'Matematica');
     const terzaRes = computePreselectedCatalogIds(matTerza, 'Terza');
     expect(terzaRes.selectedIds.size).toBe(matTerza.length);
+  });
+
+  it('seleziona Nuove o Vecchie Indicazioni predefinite in base a classe e anno scolastico e filtra il catalogo', () => {
+    expect(parseStartYearFromAnnoScolastico('2026/27')).toBe(2026);
+    expect(parseStartYearFromAnnoScolastico('2027/28')).toBe(2027);
+    expect(parseStartYearFromAnnoScolastico('2028/2029')).toBe(2028);
+
+    // Fino al 2026/27: Nuove per Prima, Vecchie per Seconda e Terza
+    expect(getDefaultIndicazioniForClasseAndYear('Prima', '2026/27')).toBe('nuove');
+    expect(getDefaultIndicazioniForClasseAndYear('Seconda', '2026/27')).toBe('vecchie');
+    expect(getDefaultIndicazioniForClasseAndYear('Terza', '2026/27')).toBe('vecchie');
+
+    // Anno 2027/28: Nuove per Prima e Seconda, Vecchie per Terza
+    expect(getDefaultIndicazioniForClasseAndYear('Prima', '2027/28')).toBe('nuove');
+    expect(getDefaultIndicazioniForClasseAndYear('Seconda', '2027/28')).toBe('nuove');
+    expect(getDefaultIndicazioniForClasseAndYear('Terza', '2027/28')).toBe('vecchie');
+
+    // Anno >= 2028/29: Nuove per tutte le classi
+    expect(getDefaultIndicazioniForClasseAndYear('Prima', '2028/29')).toBe('nuove');
+    expect(getDefaultIndicazioniForClasseAndYear('Seconda', '2028/29')).toBe('nuove');
+    expect(getDefaultIndicazioniForClasseAndYear('Terza', '2028/29')).toBe('nuove');
+    expect(getDefaultIndicazioniForClasseAndYear('Terza', '2029/30')).toBe('nuove');
+
+    // Filtro esplicito su Nuove vs Vecchie Indicazioni
+    const itaSecNuove = filterCatalogEntries(
+      CURRICOLO_VERTICALE_SEED,
+      'Seconda',
+      'Italiano',
+      'nuove'
+    );
+    const itaSecVecchie = filterCatalogEntries(
+      CURRICOLO_VERTICALE_SEED,
+      'Seconda',
+      'Italiano',
+      'vecchie'
+    );
+    expect(itaSecNuove.length).toBeGreaterThan(0);
+    expect(itaSecVecchie.length).toBeGreaterThan(0);
+    expect(itaSecNuove.every((e) => getCatalogEntryIndicazioniVersion(e) === 'nuove')).toBe(true);
+    expect(itaSecVecchie.every((e) => getCatalogEntryIndicazioniVersion(e) === 'vecchie')).toBe(true);
+
+    // Creazione e clonazione impostano il riferimento predefinito coerente
+    const sec2026 = createEmptyProgrammazione(DEFAULT_SCHOOL_SETTINGS, {
+      classe: 'Seconda',
+      annoScolastico: '2026/27',
+    });
+    expect(sec2026.curricolo.indicazioniVersione).toBe('vecchie');
+
+    const sec2027 = createEmptyProgrammazione(DEFAULT_SCHOOL_SETTINGS, {
+      classe: 'Seconda',
+      annoScolastico: '2027/28',
+    });
+    expect(sec2027.curricolo.indicazioniVersione).toBe('nuove');
+
+    const clonedTerza2028 = cloneProgrammazioneWithOptions({
+      source: sec2026,
+      settings: DEFAULT_SCHOOL_SETTINGS,
+      preset: 'anno_precedente',
+      sections: getSectionOptionsForPreset('anno_precedente'),
+      overrides: {
+        disciplina: sec2026.datiGenerali.disciplina,
+        classe: 'Terza',
+        sezione: sec2026.datiGenerali.sezione,
+        annoScolastico: '2028/29',
+        plesso: sec2026.datiGenerali.plesso,
+        docente: sec2026.datiGenerali.docente,
+      },
+    });
+    expect(clonedTerza2028.curricolo.indicazioniVersione).toBe('nuove');
   });
 });

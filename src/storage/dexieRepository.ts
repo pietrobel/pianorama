@@ -17,6 +17,7 @@ import type {
   SuggestionRule,
 } from '../domain/types';
 import { ensureClassDimensions } from '../engine/classCharacteristicsEngine';
+import { getDefaultIndicazioniForClasseAndYear } from '../engine/curricoloCatalogEngine';
 import type { PianoramaRepository } from './repository';
 
 interface KeyValueRecord {
@@ -35,6 +36,15 @@ function normalizeLoadedPlan(plan: Programmazione): Programmazione {
     situazione: {
       ...plan.situazione,
       caratteristicheDimensioni: ensureClassDimensions(plan.situazione?.caratteristicheDimensioni),
+    },
+    curricolo: {
+      ...plan.curricolo,
+      indicazioniVersione:
+        plan.curricolo?.indicazioniVersione ??
+        getDefaultIndicazioniForClasseAndYear(
+          plan.datiGenerali?.classe ?? 'Prima',
+          plan.datiGenerali?.annoScolastico
+        ),
     },
   };
 }

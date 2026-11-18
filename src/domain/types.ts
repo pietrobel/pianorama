@@ -117,8 +117,6 @@ export interface AnonymousStudentBandEntry {
 }
 
 export type QuestionnaireIndicatorKey =
-  | 'composizioneContinuita'
-  | 'livelliDistribuzione'
   | 'comprensione'
   | 'memorizzazione'
   | 'capacitaApprendimento'
@@ -136,6 +134,9 @@ export type QuestionnaireIndicatorKey =
   | 'metodoStudio'
   | 'relazioniCollaborazione'
   | 'rispettoRegoleClima'
+  // Chiavi legacy mantenute solo per retrocompatibilità con eventuali piani/backup precedenti
+  | 'composizioneContinuita'
+  | 'livelliDistribuzione'
   | 'strategiePersonalizzazione'
   | 'puntiForzaCriticita';
 
@@ -179,6 +180,8 @@ export interface AbilitaConoscenzaRow {
   conoscenze: string;
 }
 
+export type IndicazioniVersion = 'nuove' | 'vecchie';
+
 export type CurricoloVoiceType =
   | 'competenza'
   | 'obiettivo_specifico'
@@ -208,6 +211,7 @@ export interface ImportedCurricoloVoice {
 }
 
 export interface CurricoloSezione {
+  indicazioniVersione?: IndicazioniVersion;
   notaIntroduttiva: string;
   competenzeAttese: string[];
   competenzeDigitali: string[];

@@ -1,10 +1,12 @@
 import { BookMarked, CheckSquare, ChevronDown, ChevronRight, Info, Square, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { DISCIPLINE_SECONDARIA } from '../domain/defaults';
-import type { ClasseSecondaria, CurricoloCatalogEntry } from '../domain/types';
+import type { ClasseSecondaria, CurricoloCatalogEntry, IndicazioniVersion } from '../domain/types';
 import {
+  INDICAZIONI_LABELS,
   computePreselectedCatalogIds,
   filterCatalogEntries,
+  getDefaultIndicazioniForClasseAndYear,
   groupCatalogEntries,
   type CurricoloTypeGroup,
 } from '../engine/curricoloCatalogEngine';
@@ -13,8 +15,11 @@ interface CurricoloCatalogSelectorProps {
   open: boolean;
   catalog: CurricoloCatalogEntry[];
   planClasse: ClasseSecondaria;
+  planAnnoScolastico?: string;
+  planIndicazioni?: IndicazioniVersion;
   planDisciplina: string;
   planConoscenze?: string[];
+  onChangePlanIndicazioni?: (next: IndicazioniVersion) => void;
   onImport: (selectedEntries: CurricoloCatalogEntry[]) => void;
   onClose: () => void;
 }
@@ -53,8 +58,11 @@ export function CurricoloCatalogSelector({
   open,
   catalog,
   planClasse,
+  planAnnoScolastico,
+  planIndicazioni,
   planDisciplina,
   planConoscenze = [],
+  onChangePlanIndicazioni,
   onImport,
   onClose,
 }: CurricoloCatalogSelectorProps) {
@@ -62,9 +70,18 @@ export function CurricoloCatalogSelector({
   const [selectedDisciplina, setSelectedDisciplina] = useState<string>(
     planDisciplina || 'Italiano'
   );
+  const [selectedIndicazioni, setSelectedIndicazioni] = useState<IndicazioniVersion>(
+    () => planIndicazioni ?? getDefaultIndicazioniForClasseAndYear(planClasse, planAnnoScolastico)
+  );
+  const [manualIndicazioniOverride, setManualIndicazioniOverride] = useState<boolean>(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [otherClassesExpanded, setOtherClassesExpanded] = useState<boolean>(false);
   const [contentSourceMode, setContentSourceMode] = useState<'piano' | 'catalogo'>('piano');
+
+  const recommendedIndicazioni = useMemo(
+    () => getDefaultIndicazioniForClasseAndYear(selectedClasse, planAnnoScolastico),
+    [selectedClasse, planAnnoScolastico]
+  );
 
   const disciplineOptions = useMemo(() => {
     const base = [...DISCIPLINE_SECONDARIA];
@@ -78,15 +95,29 @@ export function CurricoloCatalogSelector({
   }, [catalog, planDisciplina]);
 
   const targetEntries = useMemo(
-    () => filterCatalogEntries(catalog, selectedClasse, selectedDisciplina),
-    [catalog, selectedClasse, selectedDisciplina]
+    () => filterCatalogEntries(catalog, selectedClasse, selectedDisciplina, selectedIndicazioni),
+    [catalog, selectedClasse, selectedDisciplina, selectedIndicazioni]
+  );
+
+  const alternateIndicazioni: IndicazioniVersion =
+    selectedIndicazioni === 'nuove' ? 'vecchie' : 'nuove';
+
+  const alternateTargetCount = useMemo(
+    () =>
+      filterCatalogEntries(catalog, selectedClasse, selectedDisciplina, alternateIndicazioni).length,
+    [catalog, selectedClasse, selectedDisciplina, alternateIndicazioni]
   );
 
   const otherClassesData = useMemo(() => {
     const otherClasses = CLASSI_SECONDARIA.filter((c) => c !== selectedClasse);
     return otherClasses
       .map((cls) => {
-        const entries = filterCatalogEntries(catalog, cls, selectedDisciplina);
+        const entries = filterCatalogEntries(
+          catalog,
+          cls,
+          selectedDisciplina,
+          selectedIndicazioni
+        );
         return {
           classe: cls,
           entries,
@@ -95,7 +126,7 @@ export function CurricoloCatalogSelector({
         };
       })
       .filter((bucket) => bucket.entries.length > 0);
-  }, [catalog, selectedClasse, selectedDisciplina]);
+  }, [catalog, selectedClasse, selectedDisciplina, selectedIndicazioni]);
 
   const allDisciplineEntries = useMemo(
     () => [...targetEntries, ...otherClassesData.flatMap((b) => b.entries)],
@@ -103,6 +134,11 @@ export function CurricoloCatalogSelector({
   );
 
   const targetGrouped = useMemo(() => groupCatalogEntries(targetEntries), [targetEntries]);
+
+  const hasCompetenzeOrObiettivi = useMemo(
+    () => targetEntries.some((e) => e.tipo === 'competenza' || e.tipo === 'obiettivo_specifico'),
+    [targetEntries]
+  );
 
   const hasPlanContentsForCurrentSelection =
     selectedClasse === planClasse &&
@@ -127,21 +163,51 @@ export function CurricoloCatalogSelector({
     ]
   );
 
-  // All'apertura sincronizza classe/disciplina della programmazione corrente e chiude "Da altre classi"
+  // All'apertura sincronizza classe/disciplina/indicazioni della programmazione corrente e chiude "Da altre classi"
   useEffect(() => {
     if (!open) return;
     setSelectedClasse(planClasse);
     setSelectedDisciplina(planDisciplina || 'Italiano');
+    setSelectedIndicazioni(
+      planIndicazioni ?? getDefaultIndicazioniForClasseAndYear(planClasse, planAnnoScolastico)
+    );
+    setManualIndicazioniOverride(false);
     setOtherClassesExpanded(false);
     setContentSourceMode('piano');
-  }, [open, planClasse, planDisciplina]);
+  }, [open, planClasse, planDisciplina, planIndicazioni, planAnnoScolastico]);
 
-  // Alla scelta di disciplina e classe di destinazione: per Seconda/Terza preseleziona tutte le voci della classe;
-  // per la Prima preseleziona conoscenze/abilità e solo competenze/obiettivi coerenti con i contenuti della classe.
+  // Alla scelta di disciplina, classe e versione Indicazioni: preseleziona coerentemente le voci della classe
   useEffect(() => {
     if (!open) return;
     setSelectedIds(new Set(preselectionResult.selectedIds));
   }, [open, preselectionResult]);
+
+  const handleSelectClasse = (nextClasse: ClasseSecondaria) => {
+    setSelectedClasse(nextClasse);
+    if (!manualIndicazioniOverride) {
+      setSelectedIndicazioni(
+        nextClasse === planClasse && planIndicazioni
+          ? planIndicazioni
+          : getDefaultIndicazioniForClasseAndYear(nextClasse, planAnnoScolastico)
+      );
+    }
+  };
+
+  const handleSelectIndicazioni = (nextVersion: IndicazioniVersion) => {
+    setSelectedIndicazioni(nextVersion);
+    setManualIndicazioniOverride(true);
+    if (selectedClasse === planClasse && onChangePlanIndicazioni) {
+      onChangePlanIndicazioni(nextVersion);
+    }
+  };
+
+  const handleResetDefaultIndicazioni = () => {
+    setManualIndicazioniOverride(false);
+    setSelectedIndicazioni(recommendedIndicazioni);
+    if (selectedClasse === planClasse && onChangePlanIndicazioni) {
+      onChangePlanIndicazioni(recommendedIndicazioni);
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -372,9 +438,9 @@ export function CurricoloCatalogSelector({
               </h2>
               <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">
                 Catalogo precaricato da <code>curricolo_secondaria.json</code>.{' '}
-                {selectedClasse === 'Prima'
+                {selectedClasse === 'Prima' && hasCompetenzeOrObiettivi
                   ? 'Per la Classe Prima competenze e obiettivi (formulati al termine della Terza) sono preselezionati in funzione dei contenuti della classe.'
-                  : 'Le voci della classe di destinazione sono già selezionate; quelle delle altre classi sono disponibili in «Da altre classi».'}
+                  : 'Le voci della classe e della versione di Indicazioni selezionate sono già spuntate; quelle delle altre classi sono disponibili in «Da altre classi».'}
               </p>
             </div>
           </div>
@@ -388,9 +454,9 @@ export function CurricoloCatalogSelector({
           </button>
         </div>
 
-        {/* Selettori Disciplina / Classe di destinazione e Barra Selezione globale */}
+        {/* Selettori Disciplina / Classe / Indicazioni Nazionali e Barra Selezione globale */}
         <div className="space-y-3 border-b border-slate-200 bg-slate-50 px-5 py-3.5 dark:border-slate-800 dark:bg-slate-950/60">
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-3">
             <label className="block">
               <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                 Disciplina
@@ -414,7 +480,7 @@ export function CurricoloCatalogSelector({
               </span>
               <select
                 value={selectedClasse}
-                onChange={(e) => setSelectedClasse(e.target.value as ClasseSecondaria)}
+                onChange={(e) => handleSelectClasse(e.target.value as ClasseSecondaria)}
                 className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               >
                 {CLASSI_SECONDARIA.map((c) => (
@@ -425,6 +491,38 @@ export function CurricoloCatalogSelector({
                 ))}
               </select>
             </label>
+
+            <div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Indicazioni Nazionali
+                </span>
+                {selectedIndicazioni !== recommendedIndicazioni && (
+                  <button
+                    type="button"
+                    onClick={handleResetDefaultIndicazioni}
+                    className="text-[11px] font-semibold text-[#1F3864] hover:underline dark:text-blue-300"
+                  >
+                    Ripristina predefinito
+                  </button>
+                )}
+              </div>
+              <select
+                aria-label="Indicazioni Nazionali"
+                value={selectedIndicazioni}
+                onChange={(e) => handleSelectIndicazioni(e.target.value as IndicazioniVersion)}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              >
+                <option value="nuove">
+                  {INDICAZIONI_LABELS.nuove}
+                  {recommendedIndicazioni === 'nuove' ? ' (predefinite)' : ''}
+                </option>
+                <option value="vecchie">
+                  {INDICAZIONI_LABELS.vecchie}
+                  {recommendedIndicazioni === 'vecchie' ? ' (predefinite)' : ''}
+                </option>
+              </select>
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
@@ -481,7 +579,7 @@ export function CurricoloCatalogSelector({
               </h3>
               {targetEntries.length > 0 && (
                 <div className="flex flex-wrap items-center gap-3 text-xs">
-                  {selectedClasse === 'Prima' && (
+                  {selectedClasse === 'Prima' && hasCompetenzeOrObiettivi && (
                     <button
                       type="button"
                       onClick={() => setSelectedIds(new Set(preselectionResult.selectedIds))}
@@ -508,7 +606,7 @@ export function CurricoloCatalogSelector({
               )}
             </div>
 
-            {selectedClasse === 'Prima' && targetEntries.length > 0 && (
+            {selectedClasse === 'Prima' && targetEntries.length > 0 && hasCompetenzeOrObiettivi && (
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-blue-200 bg-blue-50/70 px-3 py-2 text-xs text-slate-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-slate-200">
                 <div className="flex items-start gap-2">
                   <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#1F3864] dark:text-blue-300" />
@@ -550,9 +648,21 @@ export function CurricoloCatalogSelector({
             )}
 
             {targetGrouped.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                Nessuna voce presente nel catalogo per <strong>{selectedDisciplina}</strong> —{' '}
-                <strong>Classe {selectedClasse}</strong>.
+              <div className="space-y-3 rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-600 dark:border-slate-700 dark:text-slate-400">
+                <p>
+                  Nessuna voce presente nel catalogo per <strong>{selectedDisciplina}</strong> —{' '}
+                  <strong>Classe {selectedClasse}</strong> in{' '}
+                  <strong>{INDICAZIONI_LABELS[selectedIndicazioni]}</strong>.
+                </p>
+                {alternateTargetCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => handleSelectIndicazioni(alternateIndicazioni)}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#1F3864] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#172b4d]"
+                  >
+                    Passa a {INDICAZIONI_LABELS[alternateIndicazioni]} ({alternateTargetCount} voci)
+                  </button>
+                )}
               </div>
             ) : (
               <div className="space-y-4">

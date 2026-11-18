@@ -1,10 +1,12 @@
 import { createEmptyProgrammazione } from '../domain/defaults';
 import type {
   ClasseSecondaria,
+  IndicazioniVersion,
   Programmazione,
   SchoolSettings,
   SectionCopyOptions,
 } from '../domain/types';
+import { getDefaultIndicazioniForClasseAndYear } from './curricoloCatalogEngine';
 
 export type ClonePreset = 'completa' | 'classe_parallela' | 'anno_precedente' | 'personalizzata';
 
@@ -67,6 +69,7 @@ export interface ClonePlanParams {
     docente: string;
     docenteGenere?: 'F' | 'M';
     layoutDocumento?: 'originale' | 'moderno';
+    indicazioniVersione?: IndicazioniVersion;
     isTemplate?: boolean;
     templateNome?: string;
   };
@@ -92,6 +95,7 @@ export function cloneProgrammazioneWithOptions(params: ClonePlanParams): Program
       source.datiGenerali.layoutDocumento ??
       settings.defaultLayoutDocumento ??
       'originale',
+    indicazioniVersione: overrides.indicazioniVersione,
     isTemplate: overrides.isTemplate ?? false,
     templateNome: overrides.templateNome,
   });
@@ -136,7 +140,17 @@ export function cloneProgrammazioneWithOptions(params: ClonePlanParams): Program
   }
 
   if (sections.curricolo) {
-    cloned.curricolo = structuredClone(source.curricolo);
+    const sameContext =
+      overrides.classe === source.datiGenerali.classe &&
+      overrides.annoScolastico === source.datiGenerali.annoScolastico;
+    cloned.curricolo = {
+      ...structuredClone(source.curricolo),
+      indicazioniVersione:
+        overrides.indicazioniVersione ??
+        (sameContext && source.curricolo.indicazioniVersione
+          ? source.curricolo.indicazioniVersione
+          : getDefaultIndicazioniForClasseAndYear(overrides.classe, overrides.annoScolastico)),
+    };
   }
 
   if (sections.metodiStrumenti) {

@@ -452,25 +452,27 @@ export function ClassCharacteristicsPanel({
 
               {/* Aggiungi caratteristica (dal catalogo specifico della dimensione o scritta a mano) */}
               <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-2.5 sm:flex-row sm:items-center dark:border-slate-800 dark:bg-slate-900">
-                <select
-                  aria-label={`Seleziona caratteristica dal catalogo per ${dim.nome}`}
-                  value={catalogChoices[dim.id] ?? ''}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setCatalogChoices((prev) => ({ ...prev, [dim.id]: val }));
-                    if (val) {
-                      setCustomCharacteristicInputs((prev) => ({ ...prev, [dim.id]: '' }));
-                    }
-                  }}
-                  className="rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-950"
-                >
-                  <option value="">Scegli indicatore specifico...</option>
-                  {catalogOptions.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
-                    </option>
-                  ))}
-                </select>
+                {catalogOptions.length > 0 && (
+                  <select
+                    aria-label={`Seleziona caratteristica dal catalogo per ${dim.nome}`}
+                    value={catalogChoices[dim.id] ?? ''}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setCatalogChoices((prev) => ({ ...prev, [dim.id]: val }));
+                      if (val) {
+                        setCustomCharacteristicInputs((prev) => ({ ...prev, [dim.id]: '' }));
+                      }
+                    }}
+                    className="rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-950"
+                  >
+                    <option value="">Scegli indicatore specifico...</option>
+                    {catalogOptions.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
+                  </select>
+                )}
                 <input
                   type="text"
                   value={customCharacteristicInputs[dim.id] ?? ''}
@@ -480,7 +482,11 @@ export function ClassCharacteristicsPanel({
                       [dim.id]: e.target.value,
                     }))
                   }
-                  placeholder="Oppure scrivi una caratteristica a mano..."
+                  placeholder={
+                    catalogOptions.length > 0
+                      ? 'Oppure scrivi una caratteristica a mano...'
+                      : 'Scrivi una caratteristica specifica per questa dimensione...'
+                  }
                   className="flex-1 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-950"
                 />
                 <button

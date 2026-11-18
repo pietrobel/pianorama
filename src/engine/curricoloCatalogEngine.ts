@@ -4,7 +4,55 @@ import type {
   CurricoloCatalogEntry,
   CurricoloVoiceType,
   ImportedCurricoloVoice,
+  IndicazioniVersion,
 } from '../domain/types';
+
+export const INDICAZIONI_LABELS: Record<IndicazioniVersion, string> = {
+  nuove: 'Nuove Indicazioni',
+  vecchie: 'Vecchie Indicazioni (A.S. 2025/2026)',
+};
+
+export function parseStartYearFromAnnoScolastico(annoScolastico: string | undefined): number | null {
+  const raw = (annoScolastico ?? '').trim();
+  if (!raw) return null;
+  const fourDigitMatch = raw.match(/\b(20\d{2})\b/);
+  if (fourDigitMatch) {
+    return Number(fourDigitMatch[1]);
+  }
+  const twoDigitMatch = raw.match(/(?:^|\D)(\d{2})\s*[\/\-]\s*\d{2,4}(?:\D|$)/);
+  if (twoDigitMatch) {
+    return 2000 + Number(twoDigitMatch[1]);
+  }
+  return null;
+}
+
+/**
+ * Regola predefinita per le Indicazioni Nazionali:
+ * - fino al 2026/27: Nuove Indicazioni per la Prima, Vecchie per Seconda e Terza;
+ * - A.S. 2027/28: Nuove Indicazioni per Prima e Seconda, Vecchie per Terza;
+ * - A.S. >= 2028/29: Nuove Indicazioni per tutte le classi (Prima, Seconda, Terza).
+ */
+export function getDefaultIndicazioniForClasseAndYear(
+  classe: ClasseSecondaria,
+  annoScolastico?: string
+): IndicazioniVersion {
+  const startYear = parseStartYearFromAnnoScolastico(annoScolastico);
+  if (startYear !== null && startYear >= 2028) {
+    return 'nuove';
+  }
+  if (startYear !== null && startYear >= 2027) {
+    return classe === 'Terza' ? 'vecchie' : 'nuove';
+  }
+  return classe === 'Prima' ? 'nuove' : 'vecchie';
+}
+
+export function getCatalogEntryIndicazioniVersion(
+  entry: Pick<CurricoloCatalogEntry, 'documentoProvenienza'>
+): IndicazioniVersion {
+  return (entry.documentoProvenienza || '').toLowerCase().includes('vecchio')
+    ? 'vecchie'
+    : 'nuove';
+}
 
 export const CURRICOLO_TYPE_LABELS: Record<CurricoloVoiceType, string> = {
   competenza: 'Competenze attese',
@@ -42,13 +90,15 @@ export interface CatalogDiffSummary {
 export function filterCatalogEntries(
   catalog: CurricoloCatalogEntry[],
   classe: ClasseSecondaria,
-  disciplina: string
+  disciplina: string,
+  indicazioniVersion?: IndicazioniVersion | 'tutte'
 ): CurricoloCatalogEntry[] {
-  return catalog.filter(
-    (entry) =>
-      entry.classe === classe &&
-      entry.disciplina.toLowerCase() === disciplina.toLowerCase()
-  );
+  return catalog.filter((entry) => {
+    if (entry.classe !== classe) return false;
+    if (entry.disciplina.toLowerCase() !== disciplina.toLowerCase()) return false;
+    if (!indicazioniVersion || indicazioniVersion === 'tutte') return true;
+    return getCatalogEntryIndicazioniVersion(entry) === indicazioniVersion;
+  });
 }
 
 export function groupCatalogEntries(
