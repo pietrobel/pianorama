@@ -1212,4 +1212,77 @@ Utilizzare con sicurezza le tecniche di calcolo \\tab Eseguire espressioni con f
     );
     expect(assignedPlan.curricolo.attivitaProgrammate).toContain('progetto memoria storica');
   });
+
+  it('ricostruisce righe curricolo multi-linea, tabelle spezzate senza intestazione ripetuta, Wingdings e merge ultima riga', async () => {
+    const complexHtml = `<!DOCTYPE html><html><body>
+      <p>PLESSO DI Villafrati | ANNO SCOLASTICO 2025-2026</p>
+      <p>CLASSE 1^ B | DISCIPLINA Matematica</p>
+      <p>DOCENTE Prof.ssa Anna Conti</p>
+      <p>SITUAZIONE DELLA CLASSE</p>
+      <p>TIPOLOGIA: vivace - x | collaborativa \uF0FE | problematica \uF0A8</p>
+      <p>LIVELLO: medio ✓</p>
+      <table>
+        <tr><td>NUCLEO TEMATICO</td><td>OBIETTIVI SPECIFICI</td><td>ARGOMENTI</td></tr>
+        <tr><td>Numeri</td><td>Eseguire le quattro operazioni con i numeri naturali e decimali.</td><td>Il sistema di numerazione decimale, proprietà delle operazioni.</td></tr>
+      </table>
+      <table>
+        <tr><td>Geometria</td><td>Riconoscere e classificare le principali figure piane.</td><td>Enti geometrici fondamentali, angoli e poligoni.</td></tr>
+      </table>
+      <p>ATTIVITA' PROGRAMMATE: Giochi matematici d'autunno.</p>
+      <p>Approfondimento sulle frazioni equivalenti e problemi geometrici.</p>
+    </body></html>`;
+
+    const res = await importProgrammazioneFromBuffer(
+      new TextEncoder().encode(complexHtml).buffer,
+      'matematica_1B.doc',
+      DEFAULT_SCHOOL_SETTINGS
+    );
+
+    expect(res.plan.datiGenerali.annoScolastico).toBe('2025/26');
+    expect(res.plan.datiGenerali.classe).toBe('Prima');
+    expect(res.plan.datiGenerali.sezione).toBe('B');
+    expect(res.plan.datiGenerali.disciplina).toBe('Matematica');
+    expect(res.plan.datiGenerali.docenteGenere).toBe('F');
+    expect(res.plan.situazione.tipologie).toEqual(['vivace', 'collaborativa']);
+    expect(res.plan.situazione.livello).toBe('medio');
+    expect(res.plan.curricolo.righeAbilitaConoscenze).toHaveLength(2);
+    expect(res.plan.curricolo.righeAbilitaConoscenze[0].competenze).toContain('Numeri');
+    expect(res.plan.curricolo.righeAbilitaConoscenze[1].competenze).toContain('Geometria');
+    expect(res.plan.curricolo.righeAbilitaConoscenze[1].conoscenze).toContain('angoli e poligoni');
+
+    // Simula riga spezzata da PDF (senza <table> HTML, solo righe pipe '|' + riga a capo di continuazione)
+    const wrappedLinesHtml = `<!DOCTYPE html><html><body>
+      <p>DISCIPLINA Geografia</p>
+      <p>CLASSE 2^ A | ANNO SCOLASTICO 2025/26</p>
+      <p>COMPETENZE | ABILITA' | CONOSCENZE</p>
+      <p>Orientarsi nello spazio | Leggere carte fisiche e politiche | L'Italia e le sue regioni</p>
+      <p>utilizzando coordinate geografiche e ridurre in scala le distanze reali.</p>
+      <p>ATTIVITA' PROGRAMMATE: Uscita sul territorio.</p>
+    </body></html>`;
+
+    const wrappedRes = await importProgrammazioneFromBuffer(
+      new TextEncoder().encode(wrappedLinesHtml).buffer,
+      'geografia_2A_pdf_like.doc',
+      DEFAULT_SCHOOL_SETTINGS
+    );
+    expect(wrappedRes.plan.curricolo.righeAbilitaConoscenze).toHaveLength(1);
+    expect(wrappedRes.plan.curricolo.righeAbilitaConoscenze[0].conoscenze).toContain(
+      'ridurre in scala le distanze reali'
+    );
+
+    // Verifica merge su ultima riga via applyUnrecognizedBlockAssignments
+    const extraBlk = res.unrecognizedBlocks.find((b) =>
+      b.text.includes('frazioni equivalenti')
+    );
+    expect(extraBlk).toBeDefined();
+    const mergedPlan = applyUnrecognizedBlockAssignments(
+      res.plan,
+      res.unrecognizedBlocks,
+      { [extraBlk!.id]: 'curricolo.mergeLastRowConoscenze' }
+    );
+    expect(mergedPlan.curricolo.righeAbilitaConoscenze[1].conoscenze).toContain(
+      'frazioni equivalenti'
+    );
+  });
 });
+

@@ -53,6 +53,8 @@ export type ImportBlockTargetField =
   | 'interventi.besInterventiProgrammati'
   | 'curricolo.competenzeAttese'
   | 'curricolo.righeAbilitaConoscenze'
+  | 'curricolo.mergeLastRowAbilita'
+  | 'curricolo.mergeLastRowConoscenze'
   | 'curricolo.attivitaProgrammate'
   | 'metodiStrumenti.premessaMetodologica'
   | 'metodiStrumenti.ausiliDidattici'
@@ -85,6 +87,8 @@ function makeId(prefix: string): string {
 function cleanText(raw: string): string {
   return raw
     .replace(/\u00A0/g, ' ')
+    .replace(/[\uF0FE\uF0FD\uF052\uF0FC\uF078\u2611]/g, '☒')
+    .replace(/[\uF0A8\uF06F\uF0A3\u25A1]/g, '☐')
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
     .replace(/[ \t]+/g, ' ')
@@ -139,8 +143,11 @@ function normalizeOoxmlControls(pXml: string): string {
 
   // 3. Wingdings / Symbol glyphs (<w:sym .../>), tabulazioni (<w:tab/>) e interruzioni di riga (<w:br/>)
   normalized = normalized
-    .replace(/<w:sym[^>]*w:char="(?:F0FE|F0FD|F052|F0FC|00FE)"[^>]*\/?>/gi, '<w:t>☒</w:t>')
-    .replace(/<w:sym[^>]*w:char="(?:F0A8|F06F|00A8)"[^>]*\/?>/gi, '<w:t>☐</w:t>')
+    .replace(
+      /<w:sym[^>]*w:char="(?:F0FE|F0FD|F052|F0FC|F078|00FE|2611|2612)"[^>]*\/?>/gi,
+      '<w:t>☒</w:t>'
+    )
+    .replace(/<w:sym[^>]*w:char="(?:F0A8|F06F|F0A3|00A8|2610|25A1)"[^>]*\/?>/gi, '<w:t>☐</w:t>')
     .replace(/<w:tab(?:\s*\/|><\/w:tab)>/gi, '<w:t> </w:t>')
     .replace(/<w:br(?:\s+[^>]*)?(?:\/>|><\/w:br>)/gi, '<w:t>\n</w:t>');
 
@@ -216,6 +223,7 @@ interface PdfTextToken {
   str: string;
   x: number;
   y: number;
+  width: number;
 }
 
 async function extractFromPdf(buffer: ArrayBuffer): Promise<ExtractedDocumentContent> {
@@ -246,10 +254,15 @@ async function extractFromPdf(buffer: ArrayBuffer): Promise<ExtractedDocumentCon
 
     for (const item of textContent.items) {
       if (!('str' in item) || !item.str) continue;
-      const transform = (item as { transform?: number[] }).transform;
+      const typedItem = item as { transform?: number[]; width?: number; str: string };
+      const transform = typedItem.transform;
       const x = Array.isArray(transform) ? Number(transform[4] ?? 0) : 0;
       const y = Array.isArray(transform) ? Number(transform[5] ?? 0) : 0;
-      tokens.push({ str: item.str, x, y });
+      const width =
+        typeof typedItem.width === 'number' && typedItem.width > 0
+          ? typedItem.width
+          : typedItem.str.length * 4.2;
+      tokens.push({ str: cleanText(typedItem.str) || typedItem.str, x, y, width });
     }
 
     tokens.sort((a, b) => {
@@ -275,14 +288,14 @@ async function extractFromPdf(buffer: ArrayBuffer): Promise<ExtractedDocumentCon
         const tok = row[i];
         if (i > 0) {
           const gap = tok.x - prevEnd;
-          if (gap > 22) {
+          if (gap > 14) {
             rowStr += ' | ';
-          } else if (gap > 2 && !rowStr.endsWith(' ') && !tok.str.startsWith(' ')) {
+          } else if (gap > 1.8 && !rowStr.endsWith(' ') && !tok.str.startsWith(' ')) {
             rowStr += ' ';
           }
         }
         rowStr += tok.str;
-        prevEnd = tok.x + tok.str.length * 4.2;
+        prevEnd = tok.x + tok.width;
       }
       const cleaned = rowStr.replace(/\s+\|\s+/g, ' | ').trim();
       if (cleaned) lines.push(cleaned);
@@ -301,18 +314,19 @@ function stripRtfFormatting(rtf: string): string {
     const code = parseInt(hex, 16);
     return String.fromCharCode(code);
   });
-  return withHex
-    .replace(/\\par[d]?/g, '\n')
-    .replace(/\\line\b/g, '\n')
-    .replace(/\\tab\b/g, '\t')
-    .replace(/\\u(-?\d+)\??/g, (_, u) => {
-      const code = Number(u);
-      return String.fromCharCode(code < 0 ? code + 65536 : code);
-    })
-    .replace(/\{\\\*\\[^}]+\}/g, '')
-    .replace(/\\[a-zA-Z]+-?\d* ?/g, '')
-    .replace(/[{}]/g, '')
-    .replace(/\r\n/g, '\n');
+  return cleanText(
+    withHex
+      .replace(/\\par[d]?/g, '\n')
+      .replace(/\\line\b/g, '\n')
+      .replace(/\\tab\b/g, '\t')
+      .replace(/\\u(-?\d+)\??/g, (_, u) => {
+        const code = Number(u);
+        return String.fromCharCode(code < 0 ? code + 65536 : code);
+      })
+      .replace(/\{\\\*\\[^}]+\}/g, '')
+      .replace(/\\[a-zA-Z]+-?\d* ?/g, '')
+      .replace(/[{}]/g, '')
+  );
 }
 
 function extractHtmlTablesAndText(html: string): ExtractedDocumentContent {
@@ -326,11 +340,13 @@ function extractHtmlTablesAndText(html: string): ExtractedDocumentContent {
     .replace(/<input\b[^>]*type=["']?checkbox["']?[^>]*>/gi, ' ☐ ');
 
   const stripCellHtml = (fragment: string): string =>
-    decodeXmlEntities(
-      fragment
-        .replace(/<(?:p|div|li|br|h[1-6])\b[^>]*>/gi, '\n')
-        .replace(/<\/(?:p|div|li|h[1-6])>/gi, '\n')
-        .replace(/<[^>]+>/g, ' ')
+    cleanText(
+      decodeXmlEntities(
+        fragment
+          .replace(/<(?:p|div|li|br|h[1-6])\b[^>]*>/gi, '\n')
+          .replace(/<\/(?:p|div|li|h[1-6])>/gi, '\n')
+          .replace(/<[^>]+>/g, ' ')
+      )
     )
       .split('\n')
       .map((l) => l.replace(/[ \t]+/g, ' ').trim())
@@ -360,11 +376,13 @@ function extractHtmlTablesAndText(html: string): ExtractedDocumentContent {
     }
   }
 
-  const fullStr = decodeXmlEntities(
-    cleanedHtml
-      .replace(/<(tr|p|div|li|h[1-6]|br)\b[^>]*>/gi, '\n')
-      .replace(/<t[dh]\b[^>]*>/gi, ' | ')
-      .replace(/<[^>]+>/g, ' ')
+  const fullStr = cleanText(
+    decodeXmlEntities(
+      cleanedHtml
+        .replace(/<(tr|p|div|li|h[1-6]|br)\b[^>]*>/gi, '\n')
+        .replace(/<t[dh]\b[^>]*>/gi, ' | ')
+        .replace(/<[^>]+>/g, ' ')
+    )
   );
   const lines = fullStr
     .split('\n')
@@ -464,12 +482,12 @@ function matchCheckedOption(scopeText: string, option: string): boolean {
   const escaped = escapeRegex(option);
   const boundaryBefore = '(?<![A-Za-zÀ-ÿ\\-])(?<!\\bpoco[ \\t]+)';
   const boundaryAfter = '(?![A-Za-zÀ-ÿ\\-])';
-  const checkedMarker = `(?:☒|☑|✔|■|●|\\[\\s*[xX]\\s*\\]|\\([xX]\\))`;
+  const checkedMarker = `(?:☒|☑|✔|✓|✕|✖|✗|✘|■|●|\\[\\s*[xX]\\s*\\]|\\([xX]\\))`;
   const uncheckedMarker = `(?:☐|\\[\\s*\\]|\\(\\s*\\))`;
 
-  // 1. Marker subito DOPO l'opzione sulla stessa riga ("opzione [X]", "opzione ☒")
+  // 1. Marker subito DOPO l'opzione sulla stessa riga ("opzione [X]", "opzione ☒", "opzione - x")
   const rxAfterChecked = new RegExp(
-    `${boundaryBefore}${escaped}${boundaryAfter}[ \\t:_-]{0,40}${checkedMarker}`,
+    `(?:^|[\\s|☒☑✔✓✕✖✗✘■●☐\\[\\]()•\\-])${boundaryBefore}${escaped}${boundaryAfter}[ \\t:_-]{0,40}(?:${checkedMarker}|(?<=[ \\t\\-:])[xX](?=[ \\t]*(?:$|\\||,|;)))`,
     'im'
   );
   if (rxAfterChecked.test(scopeText)) return true;
@@ -483,7 +501,7 @@ function matchCheckedOption(scopeText: string, option: string): boolean {
   if (rxAfterUnchecked.test(scopeText)) return false;
 
   // 2. Marker subito PRIMA dell'opzione sulla stessa riga ("☒ opzione", "[X] opzione", "x opzione")
-  const checkedMarkerBefore = `(?:☒|☑|✔|■|●|\\[\\s*[xX]\\s*\\]|\\([xX]\\)|(?<=^|[\\s|])x(?=[ \\t]+))`;
+  const checkedMarkerBefore = `(?:☒|☑|✔|✓|✕|✖|✗|✘|■|●|\\[\\s*[xX]\\s*\\]|\\([xX]\\)|(?<=^|[\\s|•\\-])[xX](?=[ \\t]+))`;
   const rxBeforeOnLine = new RegExp(
     `(${checkedMarkerBefore})[ \\t]*${escaped}${boundaryAfter}`,
     'ig'
@@ -494,10 +512,10 @@ function matchCheckedOption(scopeText: string, option: string): boolean {
     let m: RegExpExecArray | null;
     while ((m = rxBeforeOnLine.exec(line)) !== null) {
       const beforeText = line.slice(0, m.index).trim();
-      // Evita che "[X]" finale dell'opzione precedente ("collaborativa [X] problematica") venga letto come prefisso della successiva
       const isStartOrAfterSeparator =
-        beforeText.length === 0 || /(?:[|:]|☐|☒|☑|✔|■|●|\[\s*[xX]?\s*\]|\(\s*[xX]?\s*\))$/.test(beforeText);
-      const isInlinePrefixList = /(?:^|\s)(?:☒|☑|✔|■|●|☐|\[\s*[xX]?\s*\]|\(\s*[xX]?\s*\))\s+[A-Za-zÀ-ÿ]/.test(
+        beforeText.length === 0 ||
+        /(?:[|:•\-]|☐|☒|☑|✔|✓|✕|✖|✗|✘|■|●|\[\s*[xX]?\s*\]|\(\s*[xX]?\s*\))$/.test(beforeText);
+      const isInlinePrefixList = /(?:^|\s)(?:☒|☑|✔|✓|✕|✖|✗|✘|■|●|☐|\[\s*[xX]?\s*\]|\(\s*[xX]?\s*\))\s+[A-Za-zÀ-ÿ]/.test(
         beforeText
       );
       if (isStartOrAfterSeparator || isInlinePrefixList) {
@@ -506,9 +524,9 @@ function matchCheckedOption(scopeText: string, option: string): boolean {
     }
   }
 
-  // 3. Pattern "etichetta x" su stessa riga breve (es. HTML originale)
+  // 3. Pattern "etichetta x" o "etichetta   x" su riga di tabella / elenco
   const rxSingleLineX = new RegExp(
-    `(?:^|\\n)[^\\n]{0,12}${boundaryBefore}${escaped}${boundaryAfter}[ \\t]+[xX](?:[ \\t]|$)`,
+    `(?:^|\\n|\\|)[ \\t•\\-]*${boundaryBefore}${escaped}${boundaryAfter}[ \\t:_-]+[xX](?:[ \\t]*\\||[ \\t]*$)`,
     'im'
   );
   return rxSingleLineX.test(scopeText);
@@ -535,7 +553,7 @@ function extractSectionSlice(
 
 function detectDisciplina(fullText: string, fallback: string): string {
   const titleMatch = fullText.match(/PROGRAMMAZIONE\s+DISCIPLINARE\s+di\s+([^\n|]+)/i);
-  const discFieldMatch = fullText.match(/(?:^|\n)\s*DISCIPLINA\s*[:\-]?\s+([^\n|]+)/im);
+  const discFieldMatch = fullText.match(/(?:^|\n|\|)\s*DISCIPLINA\s*[:\-]?\s+([^\n|]+)/im);
   const candidates = [discFieldMatch?.[1], titleMatch?.[1]].filter(Boolean) as string[];
   for (const raw of candidates) {
     const cleaned = stripLeadingUnderscores(raw);
@@ -559,16 +577,43 @@ function detectClasseAndSezione(fullText: string): {
   sezione?: string;
 } {
   const m = fullText.match(
-    /(?:^|\n)\s*CLASSE\s*[:\-]?\s+(Prima|Seconda|Terza|I{1,3}|1\s*[°ª]?|2\s*[°ª]?|3\s*[°ª]?)(?:\s*(?:SEZ(?:IONE)?\.?\s*[:\-]?\s*)?([A-Z])\b)?/im
+    /(?:^|\n|\|)\s*CLASSE\s*[:\-]?\s+(Prima|Seconda|Terza|I{1,3}[°ª^a]?|1\s*[°ª^a]?|2\s*[°ª^a]?|3\s*[°ª^a]?)(?:\s*(?:SEZ(?:IONE)?\.?\s*[:\-]?\s*)?([A-Za-z])\b)?/im
   );
   if (!m) return {};
-  const rawClasse = m[1].toUpperCase().replace(/[°ª\s]/g, '');
+  const rawClasse = m[1].toUpperCase().replace(/[°ª^A\s]/g, '');
   let classe: ClasseSecondaria | undefined;
-  if (rawClasse === 'PRIMA' || rawClasse === 'I' || rawClasse === '1') classe = 'Prima';
-  else if (rawClasse === 'SECONDA' || rawClasse === 'II' || rawClasse === '2') classe = 'Seconda';
-  else if (rawClasse === 'TERZA' || rawClasse === 'III' || rawClasse === '3') classe = 'Terza';
+  if (rawClasse === 'PRIM' || rawClasse === 'PRIMA' || rawClasse === 'I' || rawClasse === '1') {
+    classe = 'Prima';
+  } else if (
+    rawClasse === 'SECOND' ||
+    rawClasse === 'SECONDA' ||
+    rawClasse === 'II' ||
+    rawClasse === '2'
+  ) {
+    classe = 'Seconda';
+  } else if (
+    rawClasse === 'TERZ' ||
+    rawClasse === 'TERZA' ||
+    rawClasse === 'III' ||
+    rawClasse === '3'
+  ) {
+    classe = 'Terza';
+  }
   const sezione = m[2] ? m[2].toUpperCase() : undefined;
   return { classe, sezione };
+}
+
+function isNonCurriculumTable(table: string[][]): boolean {
+  const headText = table
+    .slice(0, 2)
+    .flat()
+    .join(' ')
+    .toLowerCase();
+  return (
+    /\bmetodi\b|\bmezzi e strumenti\b|\bscritta\b|\borale\b|\bpotenziamento\b|\bconsolidamento\b|\brecupero\b|\blivello basso\b|\btipologia\b/.test(
+      headText
+    )
+  );
 }
 
 function detectCurriculumRowsFromTables(tables: string[][][]): {
@@ -577,47 +622,107 @@ function detectCurriculumRowsFromTables(tables: string[][][]): {
 } {
   const rows: AbilitaConoscenzaRow[] = [];
   const matchedTableIndexes = new Set<number>();
+  let lastMatchedColShape: {
+    len: number;
+    nucleoCol: number;
+    compCol: number;
+    abCol: number;
+    conCol: number;
+  } | null = null;
 
   tables.forEach((table, tblIdx) => {
-    if (table.length < 2) return;
-    // Trova quale riga è l'intestazione (nel modello unificato le prime 2 righe possono essere TRAGUARDI e Nota)
+    if (table.length === 0 || isNonCurriculumTable(table)) return;
+
     let headerRowIdx = -1;
+    let nucleoCol = -1;
     let compCol = -1;
     let abCol = -1;
     let conCol = -1;
 
-    for (let i = 0; i < Math.min(table.length, 4); i++) {
+    for (let i = 0; i < Math.min(table.length, 10); i++) {
       const cellsLower = table[i].map((c) => c.toLowerCase().trim());
       if (cellsLower.length < 2) continue;
-      const hasAb = cellsLower.some((h) => h.includes('abilit') || h.includes('obiettiv'));
-      const hasCon = cellsLower.some((h) => h.includes('conoscenz') || h.includes('contenut'));
-      if (hasAb && hasCon) {
+      const nIdx = cellsLower.findIndex((h) =>
+        /\bnucle[oi]\b|\bambito|\bu\.?d\.?a\.?\b|\bunit[àa]\s+did|\bmodulo/.test(h)
+      );
+      const cIdx = cellsLower.findIndex((h) => /competen|traguard|asse culturale/.test(h));
+      const aIdx = cellsLower.findIndex((h) => /abilit|obiettiv|saper fare/.test(h));
+      const kIdx = cellsLower.findIndex((h) =>
+        /conoscenz|contenut|argoment|temi\b|saperi/.test(h)
+      );
+
+      const distinctCols = new Set(
+        [nIdx, cIdx, aIdx, kIdx].filter((idx) => idx !== -1)
+      ).size;
+
+      if (distinctCols >= 2 && (aIdx !== -1 || kIdx !== -1)) {
         headerRowIdx = i;
-        compCol = cellsLower.findIndex((h) => h.includes('competen') || h.includes('traguard'));
-        abCol = cellsLower.findIndex((h) => h.includes('abilit') || h.includes('obiettiv'));
-        conCol = cellsLower.findIndex((h) => h.includes('conoscenz') || h.includes('contenut'));
+        nucleoCol = nIdx !== cIdx && nIdx !== aIdx && nIdx !== kIdx ? nIdx : -1;
+        compCol = cIdx;
+        abCol = aIdx;
+        conCol = kIdx;
         break;
       }
     }
 
-    if (headerRowIdx === -1) return;
-    matchedTableIndexes.add(tblIdx);
+    // Tabella di prosecuzione senza intestazione ripetuta subito dopo una tabella curricolo
+    let startDataIdx = headerRowIdx + 1;
+    if (headerRowIdx === -1) {
+      const prevWasCurricolo = lastMatchedColShape !== null && matchedTableIndexes.has(tblIdx - 1);
+      const colLensMatch =
+        lastMatchedColShape &&
+        table.some((r) => r.length === lastMatchedColShape!.len);
+      if (prevWasCurricolo && colLensMatch && lastMatchedColShape) {
+        matchedTableIndexes.add(tblIdx);
+        nucleoCol = lastMatchedColShape.nucleoCol;
+        compCol = lastMatchedColShape.compCol;
+        abCol = lastMatchedColShape.abCol;
+        conCol = lastMatchedColShape.conCol;
+        startDataIdx = 0;
+      } else {
+        return;
+      }
+    } else {
+      matchedTableIndexes.add(tblIdx);
+      lastMatchedColShape = {
+        len: table[headerRowIdx].length,
+        nucleoCol,
+        compCol,
+        abCol,
+        conCol,
+      };
+    }
 
-    for (let r = headerRowIdx + 1; r < table.length; r++) {
+    for (let r = startDataIdx; r < table.length; r++) {
       const cells = table[r];
-      const rawComp = compCol !== -1 ? (cells[compCol] ?? '').trim() : '';
-      const rawAb =
-        abCol !== -1
-          ? (cells[abCol] ?? '').trim()
-          : cells.length === 2
-          ? (cells[0] ?? '').trim()
-          : '';
-      const rawCon =
-        conCol !== -1
-          ? (cells[conCol] ?? '').trim()
-          : cells.length >= 2
-          ? (cells[cells.length - 1] ?? '').trim()
-          : '';
+      if (cells.length === 0) continue;
+
+      let rawNucleo = nucleoCol !== -1 ? (cells[nucleoCol] ?? '').trim() : '';
+      let rawComp = compCol !== -1 ? (cells[compCol] ?? '').trim() : '';
+      let rawAb = abCol !== -1 ? (cells[abCol] ?? '').trim() : '';
+      let rawCon = conCol !== -1 ? (cells[conCol] ?? '').trim() : '';
+
+      // Gestione celle ridotte/fuse su riga dati (es. tabella 3 col ma riga con 2 celle)
+      if (cells.length === 2 && abCol >= 1 && conCol >= 2) {
+        rawAb = (cells[0] ?? '').trim();
+        rawCon = (cells[1] ?? '').trim();
+        rawComp = '';
+      } else if (cells.length === 1 && !isPlaceholderValue(cells[0]) && rows.length > 0) {
+        const single = cells[0].trim();
+        if (
+          !/^tenuto conto della/i.test(single) &&
+          !/^traguardi per lo sviluppo/i.test(single) &&
+          !/^\(clicca sul link/i.test(single)
+        ) {
+          const prev = rows[rows.length - 1];
+          prev.conoscenze = prev.conoscenze ? `${prev.conoscenze}\n${single}` : single;
+        }
+        continue;
+      }
+
+      if (rawNucleo && !isPlaceholderValue(rawNucleo)) {
+        rawComp = rawComp && !isPlaceholderValue(rawComp) ? `[${rawNucleo}] ${rawComp}` : rawNucleo;
+      }
 
       const competenze = isPlaceholderValue(rawComp) ? '' : rawComp;
       const abilita = isPlaceholderValue(rawAb) ? '' : rawAb;
@@ -636,11 +741,38 @@ function detectCurriculumRowsFromTables(tables: string[][][]): {
   return { rows, matchedTableIndexes };
 }
 
+function shouldMergeWithPreviousRow(
+  prevRow: AbilitaConoscenzaRow,
+  parts: string[],
+  expectedCols: 2 | 3
+): boolean {
+  const firstNonEmpty = parts.find((p) => p.length > 0) ?? '';
+  if (/^[a-zàèéìòù,;:\)\]]/.test(firstNonEmpty)) return true;
+  if (parts.length === 1 && !/^(?:•|\-|\d+[.)])/.test(firstNonEmpty)) return true;
+
+  const prevLastText =
+    (prevRow.conoscenze || prevRow.abilita || prevRow.competenze || '').trim();
+  const prevEndsSentence = /[.!?;:]$/.test(prevLastText);
+  if (
+    expectedCols === 3 &&
+    parts.length === 2 &&
+    !prevEndsSentence &&
+    !/^(?:•|\-|\d+[.)])/.test(firstNonEmpty)
+  ) {
+    return true;
+  }
+  return false;
+}
+
 function detectCurriculumRowsFromLines(lines: string[], fullText: string): AbilitaConoscenzaRow[] {
   const sectionText = extractSectionSlice(
     fullText,
     /(?:TRAGUARDI PER LO SVILUPPO DELLE COMPETENZE|OBIETTIVI DI APPRENDIMENTO|PROGRAMMAZIONE DIDATTICA|CONTENUTI E ABILIT[ÀA'])/i,
-    [/CRITERI METODOLOGICI/i, /METODI\s*\|?\s*MEZZI/i, /VERIFICHE IN ITINERE/i]
+    [
+      /(?:^|\n)\s*CRITERI METODOLOGICI/i,
+      /(?:^|\n)\s*METODI\s*\|?\s*MEZZI/i,
+      /(?:^|\n)\s*VERIFICHE IN ITINERE/i,
+    ]
   );
 
   const sourceLines = (sectionText ? sectionText.split('\n') : lines)
@@ -649,43 +781,89 @@ function detectCurriculumRowsFromLines(lines: string[], fullText: string): Abili
 
   const rows: AbilitaConoscenzaRow[] = [];
   let inCurricoloHeader = false;
+  let expectedCols: 2 | 3 = 2;
 
   for (const line of sourceLines) {
     const lower = line.toLowerCase();
-    if (
-      (lower.includes('abilit') || lower.includes('obiettiv')) &&
-      (lower.includes('conoscenz') || lower.includes('contenut'))
-    ) {
+    const isHeaderCandidate =
+      (/abilit|obiettiv/.test(lower) && /conoscenz|contenut|argoment|temi/.test(lower)) ||
+      (/competen|traguard/.test(lower) && /abilit|obiettiv|conoscenz|contenut/.test(lower));
+
+    if (isHeaderCandidate && (line.includes('|') || line.length < 90)) {
       inCurricoloHeader = true;
+      expectedCols = /competen|traguard/.test(lower) && line.split('|').length >= 3 ? 3 : 2;
       continue;
     }
-    if (lower.startsWith('attività programmate:') || lower.startsWith('criteri metodologici')) {
+    if (/^attivit[àa]['’]?\s+programmate\s*:?/i.test(lower) || /^criteri metodologici/i.test(lower)) {
       inCurricoloHeader = false;
+      continue;
+    }
+    if (!inCurricoloHeader) continue;
+    if (/^tenuto conto della/i.test(lower) || /^\(clicca sul link/i.test(lower)) continue;
+
+    const parts = line
+      .split(' | ')
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0 && !isPlaceholderValue(p));
+
+    if (parts.length === 0) continue;
+
+    // Continua riga precedente se il PDF ha spezzato celle multi-linea
+    const prevRow = rows[rows.length - 1];
+    if (prevRow && shouldMergeWithPreviousRow(prevRow, parts, expectedCols)) {
+      const joinCol = (existing: string | undefined, add: string) => {
+        if (!add) return existing ?? '';
+        if (!existing) return add;
+        return /[.!?;:]$/.test(existing.trim()) ? `${existing}\n${add}` : `${existing} ${add}`;
+      };
+      if (expectedCols === 3 && parts.length >= 3) {
+        prevRow.competenze = joinCol(prevRow.competenze, parts[0]);
+        prevRow.abilita = joinCol(prevRow.abilita, parts[1]);
+        prevRow.conoscenze = joinCol(prevRow.conoscenze, parts.slice(2).join(' '));
+      } else if (parts.length === 2) {
+        prevRow.abilita = joinCol(prevRow.abilita, parts[0]);
+        prevRow.conoscenze = joinCol(prevRow.conoscenze, parts[1]);
+      } else {
+        // 1 parte orfana: se conoscenze non è conclusa, continua conoscenze;
+        // altrimenti se abilità non è conclusa, continua abilità; altrimenti conoscenze.
+        if (prevRow.conoscenze && !/[.!?;:]$/.test(prevRow.conoscenze.trim())) {
+          prevRow.conoscenze = joinCol(prevRow.conoscenze, parts[0]);
+        } else if (prevRow.abilita && !/[.!?;:]$/.test(prevRow.abilita.trim())) {
+          prevRow.abilita = joinCol(prevRow.abilita, parts[0]);
+        } else if (
+          prevRow.competenze &&
+          !/[.!?;:]$/.test(prevRow.competenze.trim()) &&
+          parts[0].length < 55
+        ) {
+          prevRow.competenze = joinCol(prevRow.competenze, parts[0]);
+        } else {
+          prevRow.conoscenze = joinCol(prevRow.conoscenze, parts[0]);
+        }
+      }
+      continue;
     }
 
-    if (inCurricoloHeader && line.includes(' | ')) {
-      const parts = line
-        .split(' | ')
-        .map((p) => p.trim())
-        .filter(Boolean);
-      if (parts.length >= 3 && !isPlaceholderValue(parts.join(' '))) {
-        rows.push({
-          id: makeId('imp-row'),
-          competenze: isPlaceholderValue(parts[0]) ? '' : parts[0],
-          abilita: isPlaceholderValue(parts[1]) ? '' : parts[1],
-          conoscenze: isPlaceholderValue(parts.slice(2).join(' ')) ? '' : parts.slice(2).join(' '),
-        });
-        continue;
-      }
-      if (parts.length === 2 && !isPlaceholderValue(parts.join(' '))) {
-        rows.push({
-          id: makeId('imp-row'),
-          competenze: '',
-          abilita: isPlaceholderValue(parts[0]) ? '' : parts[0],
-          conoscenze: isPlaceholderValue(parts[1]) ? '' : parts[1],
-        });
-        continue;
-      }
+    if (parts.length >= 3) {
+      rows.push({
+        id: makeId('imp-row'),
+        competenze: parts[0],
+        abilita: parts[1],
+        conoscenze: parts.slice(2).join(' '),
+      });
+    } else if (parts.length === 2) {
+      rows.push({
+        id: makeId('imp-row'),
+        competenze: '',
+        abilita: parts[0],
+        conoscenze: parts[1],
+      });
+    } else if (parts.length === 1 && rows.length === 0) {
+      rows.push({
+        id: makeId('imp-row'),
+        competenze: '',
+        abilita: parts[0],
+        conoscenze: '',
+      });
     }
   }
 
@@ -811,15 +989,15 @@ export async function importProgrammazioneFromBuffer(
 
   const sectionsMatched: string[] = [];
 
-  // 1. Dati Generali (supporta sia "ETICHETTA: valore" che "ETICHETTA\tvalore" senza ":")
+  // 1. Dati Generali (supporta sia "ETICHETTA: valore" che "ETICHETTA\tvalore" senza ":", anche con separatore "|")
   const disciplina = detectDisciplina(fullText, basePlan.datiGenerali.disciplina);
   const { classe, sezione } = detectClasseAndSezione(fullText);
   const asMatch = fullText.match(
-    /(?:ANNO\s+SCOLASTICO|A\.?\s*S\.?)\s*[:\-]?\s+(\d{4}\s*\/\s*\d{2,4})/i
+    /(?:ANNO\s+SCOLASTICO|A\.?\s*S\.?)\s*[:\-]?\s+(\d{4}\s*[\/\-]\s*\d{2,4})/i
   );
   const plessoMatch = fullText.match(/PLESSO\s+(?:DI\s*)?[:\-]?\s*([A-Za-zÀ-ÿ' ]{3,35})/i);
-  const scuolaMatch = fullText.match(/(?:^|\n)\s*SCUOLA\s*[:\-]?\s+([^\n]+)/im);
-  const docenteFieldMatch = fullText.match(/(?:^|\n)\s*DOCENTE\s*[:\-]?\s+([^\n]+)/im);
+  const scuolaMatch = fullText.match(/(?:^|\n|\|)\s*SCUOLA\s*[:\-]?\s+([^\n|]+)/im);
+  const docenteFieldMatch = fullText.match(/(?:^|\n|\|)\s*DOCENTE\s*[:\-]?\s+([^\n|]+)/im);
   const signatureMatch = fullText.match(
     /(?:^|\n)\s*(La\s+docente|Il\s+docente|Il\/La\s+Docente)\s*((?:Prof\.?\s*ssa|Prof\.?)?\s*[A-Za-zÀ-ÿ' ]{0,55})/im
   );
@@ -864,7 +1042,11 @@ export async function importProgrammazioneFromBuffer(
   }
   if (sezione) basePlan.datiGenerali.sezione = sezione;
   if (asMatch?.[1]) {
-    basePlan.datiGenerali.annoScolastico = asMatch[1].replace(/\s+/g, '');
+    const rawAs = asMatch[1].replace(/\s+/g, '');
+    const mAs = rawAs.match(/^(\d{4})[\/\-](\d{2,4})$/);
+    basePlan.datiGenerali.annoScolastico = mAs
+      ? `${mAs[1]}/${mAs[2].length === 4 ? mAs[2].slice(2) : mAs[2]}`
+      : rawAs;
     recordRecognized(
       'annoScolastico',
       'Anno scolastico',
@@ -1153,13 +1335,28 @@ export async function importProgrammazioneFromBuffer(
   }
 
   // 4. Analisi disciplinare, 4 box livelli di partenza, BES
-  const analisiSlice = extractSectionSlice(
-    fullText,
-    /SITUAZIONE DI PARTENZA DEGLI ALUNNI IN RELAZIONE ALLA DISCIPLINA\s*:/i,
-    [/2\.\s*Livelli di partenza/i, /Livello basso/i, /Livelli rilevati/i, /FONTI DI RILEVAZIONE/i]
-  );
+  const analisiSlice =
+    extractSectionSlice(
+      fullText,
+      /SITUAZIONE DI PARTENZA DEGLI ALUNNI IN RELAZIONE ALLA DISCIPLINA\s*:?/i,
+      [
+        /(?:^|\n)\s*2\.\s*Livelli di partenza/i,
+        /(?:^|\n)\s*Livello basso/i,
+        /(?:^|\n)\s*Livelli rilevati/i,
+        /(?:^|\n)\s*FONTI DI RILEVAZIONE/i,
+      ]
+    ) ||
+    extractSectionSlice(fullText, /(?:^|\n)\s*ANALISI DELLA SITUAZIONE DI PARTENZA[^\n]*/i, [
+      /(?:^|\n)\s*2\.\s*Livelli di partenza/i,
+      /(?:^|\n)\s*Livello basso/i,
+      /(?:^|\n)\s*Livelli rilevati/i,
+      /(?:^|\n)\s*FONTI DI RILEVAZIONE/i,
+    ]);
   if (analisiSlice) {
-    const normalizedAnalisi = analisiSlice.replace(/^1\.\s*/, '').trim();
+    const normalizedAnalisi = analisiSlice
+      .replace(/^SITU[A-Z\s']+DISCIPLINA\s*:?\s*/i, '')
+      .replace(/^1\.\s*/, '')
+      .trim();
     if (!isPlaceholderValue(normalizedAnalisi)) {
       basePlan.analisiPartenza.descrizioneDisciplinare = normalizedAnalisi;
       sectionsMatched.push('Analisi di partenza');
@@ -1234,7 +1431,66 @@ export async function importProgrammazioneFromBuffer(
     recordRecognized('besInterventi', 'Alunni con BES e interventi', 'Interventi', besSlice);
   }
 
-  // 5. Tabella / Programma Curricolo
+  // 5. Traguardi, Competenze attese/digitali & Tabella / Programma Curricolo
+  const compAttSlice = extractSectionSlice(fullText, /Traguardi e competenze attese\s*:/i, [
+    /Competenze digitali/i,
+    /Voci dal Curricolo Verticale/i,
+    /Tenuto conto della eterogeneit/i,
+    /(?:^|\n)\s*(?:COMPETENZE\b|ABILIT[ÀA']\b)/i,
+  ]);
+  if (compAttSlice) {
+    const extractedComp = compAttSlice
+      .split('\n')
+      .map((l) => l.replace(/^[•\-\*]\s*/, '').trim())
+      .filter((l) => l.length > 3 && !isPlaceholderValue(l));
+    if (extractedComp.length > 0) {
+      basePlan.curricolo.competenzeAttese = extractedComp;
+      recordRecognized(
+        'competenzeAttese',
+        'Traguardi e competenze attese',
+        'Curricolo',
+        extractedComp.join(' | ')
+      );
+    }
+  }
+
+  const compDigSlice = extractSectionSlice(
+    fullText,
+    /Competenze digitali\s*(?:\([^)]*\))?[^:\n]*:/i,
+    [
+      /Voci dal Curricolo Verticale/i,
+      /Tenuto conto della eterogeneit/i,
+      /(?:^|\n)\s*(?:COMPETENZE\b|ABILIT[ÀA']\b)/i,
+    ]
+  );
+  if (compDigSlice) {
+    const extractedDig = compDigSlice
+      .split('\n')
+      .map((l) => l.replace(/^[•\-\*]\s*/, '').trim())
+      .filter((l) => l.length > 3 && !isPlaceholderValue(l));
+    if (extractedDig.length > 0) {
+      basePlan.curricolo.competenzeDigitali = extractedDig;
+      recordRecognized(
+        'competenzeDigitali',
+        'Competenze digitali',
+        'Curricolo',
+        extractedDig.join(' | ')
+      );
+    }
+  }
+
+  const presSinteticaSlice = extractSectionSlice(
+    fullText,
+    /Presentazione sintetica della classe\s*:/i,
+    [
+      /(?:^|\n)\s*ANALISI DELLA SITUAZIONE DI PARTENZA/i,
+      /(?:^|\n)\s*SITU[A-Z\s']+DISCIPLINA/i,
+    ]
+  );
+  if (presSinteticaSlice) {
+    consumedSubstrings.push(presSinteticaSlice);
+  }
+
   const { rows: tableRows, matchedTableIndexes } = detectCurriculumRowsFromTables(tables);
   const extractedRows =
     tableRows.length > 0 ? tableRows : detectCurriculumRowsFromLines(lines, fullText);
@@ -1349,13 +1605,14 @@ export async function importProgrammazioneFromBuffer(
     ...VERIFICHE_ORALI_OPTIONS,
   ].map((s) => s.toLowerCase());
 
-  const consumedLower = consumedSubstrings.map((s) => s.toLowerCase());
+  const normCmp = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+  const consumedLower = consumedSubstrings.map(normCmp);
   const seenUnrecognized = new Set<string>();
 
   for (const rawLine of lines) {
     const line = rawLine.trim();
     if (line.length < 18 || isPlaceholderValue(line)) continue;
-    const lower = line.toLowerCase();
+    const lower = normCmp(line);
 
     if (knownBoilerplatePatterns.some((rx) => rx.test(line))) continue;
     if (allOptionStrings.some((opt) => lower.includes(opt))) continue;
@@ -1370,7 +1627,10 @@ export async function importProgrammazioneFromBuffer(
       extractedRows.some((r) =>
         [r.competenze, r.traguardo, r.abilita, r.conoscenze]
           .filter(Boolean)
-          .some((cell) => cell!.toLowerCase().includes(lower) || lower.includes(cell!.toLowerCase()))
+          .some((cell) => {
+            const nc = normCmp(cell!);
+            return nc.includes(lower) || lower.includes(nc);
+          })
       )
     ) {
       continue;
@@ -1478,6 +1738,30 @@ export function applyUnrecognizedBlockAssignments(
                 conoscenze: text,
               },
         ];
+        break;
+      }
+      case 'curricolo.mergeLastRowAbilita': {
+        const list = [...next.curricolo.righeAbilitaConoscenze];
+        if (list.length === 0) {
+          list.push({ id: makeId('manual-row'), competenze: '', abilita: text, conoscenze: '' });
+        } else {
+          const last = { ...list[list.length - 1] };
+          last.abilita = appendText(last.abilita, text);
+          list[list.length - 1] = last;
+        }
+        next.curricolo.righeAbilitaConoscenze = list;
+        break;
+      }
+      case 'curricolo.mergeLastRowConoscenze': {
+        const list = [...next.curricolo.righeAbilitaConoscenze];
+        if (list.length === 0) {
+          list.push({ id: makeId('manual-row'), competenze: '', abilita: '', conoscenze: text });
+        } else {
+          const last = { ...list[list.length - 1] };
+          last.conoscenze = appendText(last.conoscenze, text);
+          list[list.length - 1] = last;
+        }
+        next.curricolo.righeAbilitaConoscenze = list;
         break;
       }
       case 'curricolo.attivitaProgrammate':
