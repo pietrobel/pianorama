@@ -313,8 +313,6 @@ export function BackupPage({
                 <dd className="font-mono-num font-medium">
                   {new Date(previewSummary.exportedAt).toLocaleString('it-IT')}
                 </dd>
-                <dt className="text-slate-500">Istituto:</dt>
-                <dd className="truncate font-medium">{previewSummary.schoolName}</dd>
                 <dt className="text-slate-500">Programmazioni:</dt>
                 <dd className="font-mono-num font-semibold">
                   {previewSummary.programmazioniCount} ({previewSummary.bozzeCount} bozze ·{' '}

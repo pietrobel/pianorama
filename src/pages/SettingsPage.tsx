@@ -65,6 +65,7 @@ export function SettingsPage({
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [mappingError, setMappingError] = useState<string | null>(null);
   const [confirmResetMap, setConfirmResetMap] = useState(false);
+  const [showCustomInstitution, setShowCustomInstitution] = useState(false);
 
   const handleSaveGeneral = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -152,7 +153,7 @@ export function SettingsPage({
             Impostazioni e schema DOCX
           </h1>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-            Dati predefiniti dell’istituto, accessibilità visiva, installazione PWA e mappatura del modello DOCX
+            Valori predefiniti di lavoro, accessibilità visiva, installazione PWA e mappatura del modello DOCX
           </p>
         </div>
         <button
@@ -212,54 +213,70 @@ export function SettingsPage({
         className="space-y-5 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900"
       >
         <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
-          Intestazione istituzionale e valori predefiniti
+          Valori predefiniti di lavoro e docente
         </h2>
 
+        <div className="sm:col-span-2">
+          <button
+            type="button"
+            onClick={() => setShowCustomInstitution((v) => !v)}
+            className="text-xs font-semibold text-[#1F3864] hover:underline dark:text-blue-400"
+          >
+            {showCustomInstitution
+              ? 'Nascondi intestazione testuale personalizzata (solo per esportazione)'
+              : 'Personalizza intestazione testuale per l’esportazione (opzionale — il banner grafico è già incluso nel documento)'}
+          </button>
+        </div>
+
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className="block sm:col-span-2">
-            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Ministero
-            </span>
-            <input
-              type="text"
-              value={form.ministryHeader}
-              onChange={(e) => setForm({ ...form, ministryHeader: e.target.value })}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-            />
-          </label>
-          <label className="block sm:col-span-2">
-            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Denominazione Istituto
-            </span>
-            <input
-              type="text"
-              value={form.schoolName}
-              onChange={(e) => setForm({ ...form, schoolName: e.target.value })}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-            />
-          </label>
-          <label className="block sm:col-span-2">
-            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Indirizzo, distretto e codice fiscale
-            </span>
-            <input
-              type="text"
-              value={form.schoolAddressLine}
-              onChange={(e) => setForm({ ...form, schoolAddressLine: e.target.value })}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-            />
-          </label>
-          <label className="block sm:col-span-2">
-            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Contatti e sito web istituzionale
-            </span>
-            <input
-              type="text"
-              value={form.schoolContactsLine}
-              onChange={(e) => setForm({ ...form, schoolContactsLine: e.target.value })}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-            />
-          </label>
+          {showCustomInstitution && (
+            <>
+              <label className="block sm:col-span-2">
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Ministero
+                </span>
+                <input
+                  type="text"
+                  value={form.ministryHeader}
+                  onChange={(e) => setForm({ ...form, ministryHeader: e.target.value })}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                />
+              </label>
+              <label className="block sm:col-span-2">
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Denominazione Istituto (usata solo nello stile moderno o fallback)
+                </span>
+                <input
+                  type="text"
+                  value={form.schoolName}
+                  onChange={(e) => setForm({ ...form, schoolName: e.target.value })}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                />
+              </label>
+              <label className="block sm:col-span-2">
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Indirizzo, distretto e codice fiscale
+                </span>
+                <input
+                  type="text"
+                  value={form.schoolAddressLine}
+                  onChange={(e) => setForm({ ...form, schoolAddressLine: e.target.value })}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                />
+              </label>
+              <label className="block sm:col-span-2">
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Contatti e sito web istituzionale
+                </span>
+                <input
+                  type="text"
+                  value={form.schoolContactsLine}
+                  onChange={(e) => setForm({ ...form, schoolContactsLine: e.target.value })}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                />
+              </label>
+            </>
+          )}
 
           <div className="space-y-1.5">
             <label className="block">
@@ -357,7 +374,7 @@ export function SettingsPage({
               }
               className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
             >
-              <option value="originale">Modello originale (bordo nero tradizionale)</option>
+              <option value="originale">Modello originale (banner grafico e struttura 4 pagine)</option>
               <option value="moderno">Stile moderno PIANORAMA (blu istituzionale)</option>
             </select>
           </label>

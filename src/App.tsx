@@ -5,11 +5,17 @@ import {
   FileSpreadsheet,
   FolderKanban,
   HardDriveDownload,
+  Lock,
   Settings,
   Sliders,
   WifiOff,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
+import {
+  PasswordGate,
+  isAccessUnlocked,
+  setAccessUnlocked,
+} from './components/PasswordGate';
 import { DEFAULT_SCHOOL_SETTINGS } from './domain/defaults';
 import type {
   AnonymousStudentBandEntry,
@@ -62,6 +68,7 @@ export default function App() {
   const [settings, setSettings] = useState<SchoolSettings>(DEFAULT_SCHOOL_SETTINGS);
   const [mapping, setMapping] = useState<DocxMappingSchema | null>(null);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [unlocked, setUnlocked] = useState<boolean>(() => isAccessUnlocked());
 
   const isOnline = useOnlineStatus();
   const { canInstall, isInstalled, triggerInstall } = usePWAInstall();
@@ -366,8 +373,9 @@ export default function App() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
-      {/* Top Bar 3-zone contract */}
+    <PasswordGate unlocked={unlocked} onUnlock={() => setUnlocked(true)}>
+      <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+        {/* Top Bar 3-zone contract */}
       <header className="no-print sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur-xs dark:border-slate-800 dark:bg-slate-900/95">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-2.5 sm:px-6">
           {/* Left: Brand */}
@@ -450,6 +458,19 @@ export default function App() {
             >
               <FilePlus2 className="h-3.5 w-3.5" />
               Nuova
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAccessUnlocked(false);
+                setUnlocked(false);
+              }}
+              title="Blocca l'accesso con password"
+              aria-label="Blocca accesso"
+              className="inline-flex items-center gap-1 whitespace-nowrap shrink-0 rounded-lg border border-slate-300 px-2.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <Lock className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Blocca</span>
             </button>
           </div>
         </div>
@@ -642,6 +663,7 @@ export default function App() {
         alreadyAcknowledged={Boolean(settings.privacyAcknowledgedAt)}
         onAcknowledge={handleAcknowledgePrivacy}
       />
-    </div>
+      </div>
+    </PasswordGate>
   );
 }

@@ -1,4 +1,4 @@
-import { ArrowLeft, FileDown, FileText, Printer, Sliders } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, FileDown, FileText, Printer, Sliders } from 'lucide-react';
 import { useState } from 'react';
 import { DocumentSheetPreview } from '../components/DocumentSheetPreview';
 import type {
@@ -33,6 +33,7 @@ export function PreviewExportPage({
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [busy, setBusy] = useState<'docx' | 'pdf' | null>(null);
+  const [showInstitutionBanner, setShowInstitutionBanner] = useState(false);
 
   const activeLayout: DocumentLayoutStyle =
     plan.datiGenerali.layoutDocumento ?? settings.defaultLayoutDocumento ?? 'originale';
@@ -163,6 +164,18 @@ export function PreviewExportPage({
 
           <button
             type="button"
+            onClick={() => setShowInstitutionBanner((v) => !v)}
+            className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            {showInstitutionBanner ? (
+              <EyeOff className="h-3.5 w-3.5" />
+            ) : (
+              <Eye className="h-3.5 w-3.5" />
+            )}
+            {showInstitutionBanner ? 'Nascondi banner' : 'Mostra banner'}
+          </button>
+          <button
+            type="button"
             onClick={onOpenMappingSettings}
             className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
           >
@@ -216,7 +229,12 @@ export function PreviewExportPage({
       )}
 
       <div className="rounded-xl bg-slate-200/70 p-3 sm:p-6 dark:bg-slate-950">
-        <DocumentSheetPreview plan={plan} settings={settings} mapping={mapping} />
+        <DocumentSheetPreview
+          plan={plan}
+          settings={settings}
+          mapping={mapping}
+          showInstitutionBanner={showInstitutionBanner}
+        />
       </div>
     </div>
   );

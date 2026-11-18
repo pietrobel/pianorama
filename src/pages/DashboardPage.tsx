@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { DocumentImportReviewModal } from '../components/DocumentImportReviewModal';
 import { PrivacyNoticeBanner } from '../components/PrivacyNoticeBanner';
 import { formatDocenteConTitolo } from '../domain/defaults';
 import type {
@@ -21,7 +22,10 @@ import type {
   Programmazione,
   SchoolSettings,
 } from '../domain/types';
-import { importProgrammazioneFromFile } from '../engine/documentPlanImporter';
+import {
+  importProgrammazioneFromFile,
+  type DocumentImportResult,
+} from '../engine/documentPlanImporter';
 
 interface DashboardPageProps {
   programmazioni: Programmazione[];
@@ -75,6 +79,7 @@ export function DashboardPage({
   const [deleteTarget, setDeleteTarget] = useState<Programmazione | null>(null);
   const [importingDoc, setImportingDoc] = useState(false);
   const [importDocError, setImportDocError] = useState<string | null>(null);
+  const [pendingImportResult, setPendingImportResult] = useState<DocumentImportResult | null>(null);
   const importDocInputRef = useRef<HTMLInputElement>(null);
 
   const anniDisponibili = useMemo(() => {
@@ -158,7 +163,7 @@ export function DashboardPage({
             Archivio programmazioni disciplinari
           </h1>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-            {settings.schoolName} · Anno scolastico predefinito {settings.defaultAnnoScolastico}
+            Uso personale · Anno scolastico predefinito {settings.defaultAnnoScolastico}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -174,7 +179,7 @@ export function DashboardPage({
               setImportDocError(null);
               try {
                 const res = await importProgrammazioneFromFile(file, settings);
-                await onImportDocument(res.plan);
+                setPendingImportResult(res);
               } catch (err) {
                 setImportDocError(
                   err instanceof Error
@@ -571,6 +576,16 @@ export function DashboardPage({
         onConfirm={() => {
           if (deleteTarget) onDelete(deleteTarget.id);
           setDeleteTarget(null);
+        }}
+      />
+
+      <DocumentImportReviewModal
+        open={Boolean(pendingImportResult)}
+        importResult={pendingImportResult}
+        onCancel={() => setPendingImportResult(null)}
+        onConfirm={async (finalPlan) => {
+          setPendingImportResult(null);
+          await onImportDocument(finalPlan);
         }}
       />
     </div>

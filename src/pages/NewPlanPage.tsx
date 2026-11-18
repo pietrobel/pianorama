@@ -9,6 +9,7 @@ import {
   SlidersHorizontal,
 } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { DocumentImportReviewModal } from '../components/DocumentImportReviewModal';
 import { PlessoSelect } from '../components/PlessoSelect';
 import { DISCIPLINE_SECONDARIA, createEmptyProgrammazione } from '../domain/defaults';
 import type {
@@ -145,11 +146,29 @@ export function NewPlanPage({
   const [importingDoc, setImportingDoc] = useState(false);
   const [importDocError, setImportDocError] = useState<string | null>(null);
   const [importedResult, setImportedResult] = useState<DocumentImportResult | null>(null);
+  const [showImportReviewModal, setShowImportReviewModal] = useState(false);
   const docFileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSelectPreset = (nextPreset: ClonePreset) => {
     setPreset(nextPreset);
     setSections(getSectionOptionsForPreset(nextPreset));
+  };
+
+  const syncFormFieldsFromPlan = (plan: Programmazione) => {
+    setDisciplina(plan.datiGenerali.disciplina);
+    setClasse(plan.datiGenerali.classe);
+    setSezione(plan.datiGenerali.sezione);
+    setAnnoScolastico(plan.datiGenerali.annoScolastico);
+    setPlesso(plan.datiGenerali.plesso);
+    setDocente(plan.datiGenerali.docente);
+    setDocenteGenere(plan.datiGenerali.docenteGenere ?? settings.defaultDocenteGenere ?? 'F');
+    setIndicazioniVersione(
+      plan.curricolo.indicazioniVersione ??
+        getDefaultIndicazioniForClasseAndYear(
+          plan.datiGenerali.classe,
+          plan.datiGenerali.annoScolastico
+        )
+    );
   };
 
   const handleDocumentUpload = async (file: File) => {
@@ -158,20 +177,8 @@ export function NewPlanPage({
     try {
       const result = await importProgrammazioneFromFile(file, settings);
       setImportedResult(result);
-      setDisciplina(result.plan.datiGenerali.disciplina);
-      setClasse(result.plan.datiGenerali.classe);
-      setSezione(result.plan.datiGenerali.sezione);
-      setAnnoScolastico(result.plan.datiGenerali.annoScolastico);
-      setPlesso(result.plan.datiGenerali.plesso);
-      setDocente(result.plan.datiGenerali.docente);
-      setDocenteGenere(result.plan.datiGenerali.docenteGenere ?? settings.defaultDocenteGenere ?? 'F');
-      setIndicazioniVersione(
-        result.plan.curricolo.indicazioniVersione ??
-          getDefaultIndicazioniForClasseAndYear(
-            result.plan.datiGenerali.classe,
-            result.plan.datiGenerali.annoScolastico
-          )
-      );
+      syncFormFieldsFromPlan(result.plan);
+      setShowImportReviewModal(true);
     } catch (err) {
       setImportedResult(null);
       setImportDocError(
@@ -401,12 +408,22 @@ export function NewPlanPage({
             )}
 
             {importedResult && (
-              <div className="space-y-1.5 rounded-lg border border-emerald-200 bg-white p-3 text-xs dark:border-emerald-900 dark:bg-slate-900">
-                <p className="flex items-center gap-1.5 font-semibold text-emerald-800 dark:text-emerald-300">
-                  <CheckCircle2 className="h-4 w-4 shrink-0" />
-                  File importato: {importedResult.summary.fileName} ({importedResult.summary.tableRowsExtracted}{' '}
-                  righe di programma estratte)
-                </p>
+              <div className="space-y-2 rounded-lg border border-emerald-200 bg-white p-3 text-xs dark:border-emerald-900 dark:bg-slate-900">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="flex items-center gap-1.5 font-semibold text-emerald-800 dark:text-emerald-300">
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    File importato: {importedResult.summary.fileName} (
+                    {importedResult.plan.curricolo.righeAbilitaConoscenze.length} righe di
+                    programma estratte)
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowImportReviewModal(true)}
+                    className="rounded-md border border-[#1F3864] px-2.5 py-1 text-xs font-semibold text-[#1F3864] hover:bg-blue-50 dark:border-blue-400 dark:text-blue-300 dark:hover:bg-slate-800"
+                  >
+                    Verifica e correggi campi estratti
+                  </button>
+                </div>
                 {importedResult.summary.sectionsMatched.length > 0 && (
                   <p className="text-slate-600 dark:text-slate-300">
                     Sezioni riconosciute: {importedResult.summary.sectionsMatched.join(' · ')}
@@ -743,6 +760,17 @@ export function NewPlanPage({
           </button>
         </div>
       </form>
+
+      <DocumentImportReviewModal
+        open={showImportReviewModal}
+        importResult={importedResult}
+        onCancel={() => setShowImportReviewModal(false)}
+        onConfirm={(finalPlan, updatedResult) => {
+          setImportedResult(updatedResult);
+          syncFormFieldsFromPlan(finalPlan);
+          setShowImportReviewModal(false);
+        }}
+      />
     </div>
   );
 }

@@ -23,6 +23,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ClassCharacteristicsPanel } from '../components/ClassCharacteristicsPanel';
 import { ClassQuestionnairePanel } from '../components/ClassQuestionnairePanel';
 import { CurricoloCatalogSelector } from '../components/CurricoloCatalogSelector';
+import { DocumentImportReviewModal } from '../components/DocumentImportReviewModal';
 import { DocumentSheetPreview } from '../components/DocumentSheetPreview';
 import { FasceLivelloBoard } from '../components/FasceLivelloBoard';
 import { PlessoSelect } from '../components/PlessoSelect';
@@ -77,7 +78,10 @@ import {
   reorderImportedVoices,
   restoreVoiceFromCatalog,
 } from '../engine/curricoloCatalogEngine';
-import { importProgrammazioneFromFile } from '../engine/documentPlanImporter';
+import {
+  importProgrammazioneFromFile,
+  type DocumentImportResult,
+} from '../engine/documentPlanImporter';
 import {
   computeLivelliFromStudents,
   createManualStudentEntry,
@@ -161,6 +165,8 @@ export function PlanEditorPage({
   const gradebookFileRef = useRef<HTMLInputElement>(null);
   const programDocFileRef = useRef<HTMLInputElement>(null);
   const [importingProgramDoc, setImportingProgramDoc] = useState<boolean>(false);
+  const [pendingProgramDocImport, setPendingProgramDocImport] =
+    useState<DocumentImportResult | null>(null);
   const [catalogImportError, setCatalogImportError] = useState<string | null>(null);
 
   const isFirstRender = useRef(true);
@@ -1940,10 +1946,7 @@ export function PlanEditorPage({
                       setCatalogImportError(null);
                       try {
                         const result = await importProgrammazioneFromFile(file, settings, draft);
-                        setDraft(result.plan);
-                        setCatalogImportFeedback(
-                          `Programma importato da "${result.summary.fileName}" (${result.summary.tableRowsExtracted} righe di programma aggiunte alla tabella).`
-                        );
+                        setPendingProgramDocImport(result);
                       } catch (err) {
                         setCatalogImportError(
                           err instanceof Error
@@ -3023,6 +3026,19 @@ export function PlanEditorPage({
         }
         onImport={handleImportCatalogEntries}
         onClose={() => setShowCatalogSelector(false)}
+      />
+
+      <DocumentImportReviewModal
+        open={Boolean(pendingProgramDocImport)}
+        importResult={pendingProgramDocImport}
+        onCancel={() => setPendingProgramDocImport(null)}
+        onConfirm={(finalPlan, updatedResult) => {
+          setDraft(finalPlan);
+          setCatalogImportFeedback(
+            `Contenuti importati da "${updatedResult.summary.fileName}" (${updatedResult.summary.tableRowsExtracted} righe di programma aggiunte alla tabella).`
+          );
+          setPendingProgramDocImport(null);
+        }}
       />
     </div>
   );

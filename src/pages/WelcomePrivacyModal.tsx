@@ -41,7 +41,7 @@ export function WelcomePrivacyModal({
         <div className="mt-5 space-y-4 text-sm leading-relaxed text-slate-700 dark:text-slate-300">
           <p>
             PIANORAMA consente di redigere, riutilizzare ed esportare in <strong>DOCX</strong> e{' '}
-            <strong>PDF</strong> le programmazioni disciplinari secondo il modello ufficiale dell’istituto, lavorando esclusivamente in locale senza server esterni o servizi di intelligenza artificiale.
+            <strong>PDF</strong> le programmazioni disciplinari secondo il modello ufficiale della scuola secondaria di primo grado, lavorando esclusivamente in locale senza server esterni o servizi di intelligenza artificiale.
           </p>
 
           <div className="grid gap-3 sm:grid-cols-2">

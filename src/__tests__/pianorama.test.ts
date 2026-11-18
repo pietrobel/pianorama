@@ -1,5 +1,7 @@
+import JSZip from 'jszip';
 import * as XLSX from 'xlsx';
 import { describe, expect, it } from 'vitest';
+import { isValidAccessPassword } from '../components/PasswordGate';
 import defaultMappingRaw from '../data/defaultDocxMapping.json';
 import defaultRulesRaw from '../data/defaultRules.json';
 import { CURRICOLO_VERTICALE_SEED } from '../data/curricoloCatalogSeed';
@@ -64,7 +66,10 @@ import {
   restoreVoiceFromCatalog,
   validateCatalogJsonPayload,
 } from '../engine/curricoloCatalogEngine';
-import { importProgrammazioneFromBuffer } from '../engine/documentPlanImporter';
+import {
+  applyUnrecognizedBlockAssignments,
+  importProgrammazioneFromBuffer,
+} from '../engine/documentPlanImporter';
 import {
   classifyMediaToFascia,
   computeLivelliFromStudents,
@@ -990,5 +995,221 @@ Utilizzare con sicurezza le tecniche di calcolo \\tab Eseguire espressioni con f
       },
     });
     expect(clonedTerza2028.curricolo.indicazioniVersione).toBe('nuove');
+  });
+
+  it('password gate accetta "canepastore" in modo case-insensitive e rifiuta altre chiavi', () => {
+    expect(isValidAccessPassword('canepastore')).toBe(true);
+    expect(isValidAccessPassword('CANEPASTORE')).toBe(true);
+    expect(isValidAccessPassword('  CanePastore  ')).toBe(true);
+    expect(isValidAccessPassword('sbagliata')).toBe(false);
+    expect(isValidAccessPassword('')).toBe(false);
+  });
+
+  it('modello originale 4 pagine: esporta piano vuoto, completo e testi lunghi con banner PNG, font Arial, interruzione pagina 4 e round-trip importazione fedele', async () => {
+    // 1. Programmazione vuota: conserva tutte le sezioni, inserisce il banner PNG, Arial, cantSplit e pageBreakBefore
+    const emptyPlan = createEmptyProgrammazione(DEFAULT_SCHOOL_SETTINGS, {
+      disciplina: 'Tecnologia',
+      classe: 'Prima',
+      sezione: 'A',
+      layoutDocumento: 'originale',
+    });
+    emptyPlan.datiGenerali.docente = '';
+    emptyPlan.verificheValutazione.firmaDocente = '';
+    emptyPlan.analisiPartenza.descrizioneDisciplinare = '';
+    emptyPlan.interventi.besInterventiProgrammati = '';
+    emptyPlan.metodiStrumenti.ausiliDidattici = '';
+    emptyPlan.curricolo.righeAbilitaConoscenze = [];
+
+    const emptyDocxBytes = await generateProgrammazioneDocxBytes(
+      emptyPlan,
+      DEFAULT_SCHOOL_SETTINGS,
+      mapping
+    );
+    const emptyZip = await JSZip.loadAsync(emptyDocxBytes.buffer as ArrayBuffer);
+    const mediaFiles = Object.keys(emptyZip.files).filter((k) => k.startsWith('word/media/'));
+    expect(mediaFiles.length).toBeGreaterThanOrEqual(1);
+    const documentXml = await emptyZip.file('word/document.xml')!.async('string');
+    expect(documentXml).toContain('Arial');
+    expect(documentXml).toContain('w:cantSplit');
+    expect(documentXml).toContain('w:pageBreakBefore');
+    expect(documentXml).toContain('AUSILI DIDATTICI');
+    expect(documentXml).toContain('VERIFICHE IN ITINERE: MODALIT');
+    expect(documentXml).toContain('VALUTAZIONE');
+    expect(documentXml).toContain('Il/La Docente');
+
+    const emptyPdfBytes = generateProgrammazionePdfBytes(
+      emptyPlan,
+      DEFAULT_SCHOOL_SETTINGS,
+      mapping
+    );
+    expect(String.fromCharCode(emptyPdfBytes[0], emptyPdfBytes[1], emptyPdfBytes[2], emptyPdfBytes[3])).toBe(
+      '%PDF'
+    );
+
+    // 2. Programmazione completamente compilata con testi lunghi multi-linea
+    const fullPlan = createEmptyProgrammazione(DEFAULT_SCHOOL_SETTINGS, {
+      disciplina: 'Italiano',
+      classe: 'Seconda',
+      sezione: 'B',
+      annoScolastico: '2026/27',
+      plesso: 'Villafrati',
+      docente: 'Elena Greco',
+      docenteGenere: 'F',
+      layoutDocumento: 'originale',
+    });
+    fullPlan.composizione = { alunni: 24, maschi: 11, femmine: 13, ripetenti: 1, bes: 3 };
+    fullPlan.situazione.tipologie = ['tranquilla', 'collaborativa', 'motivata'];
+    fullPlan.situazione.livello = 'medio-alto';
+    fullPlan.situazione.mezziIndividuazione = [
+      'Prove di ingresso',
+      'Osservazioni sistematiche scritte ed orali appositamente predisposte',
+    ];
+    fullPlan.analisiPartenza.descrizioneDisciplinare = Array.from({ length: 8 }, (_, idx) =>
+      `Paragrafo ${idx + 1} di analisi dettagliata della situazione iniziale della classe con osservazioni puntuali sulle abilità di lettura, comprensione e produzione scritta.`
+    ).join('\n');
+    fullPlan.analisiPartenza.livelli = {
+      bassoAlunni: 2,
+      medioBassoAlunni: 5,
+      medioAlunni: 11,
+      altoAlunni: 6,
+    };
+    fullPlan.analisiPartenza.altraFonte = 'Colloqui con referente BES';
+    fullPlan.interventi.potenziamentoAltro = 'Laboratorio di scrittura creativa';
+    fullPlan.interventi.consolidamentoAltro = 'Tutoraggio tra pari';
+    fullPlan.interventi.recuperoAltro = 'Sportello pomeridiano settimanale';
+    fullPlan.interventi.besInterventiProgrammati =
+      'Misure compensative e dispensative coerenti con i rispettivi PDP e PEI approvati dal Consiglio di Classe.';
+    fullPlan.curricolo.righeAbilitaConoscenze = [
+      {
+        id: 'r-full-1',
+        competenze: 'Padroneggiare gli strumenti espressivi ed argomentativi.',
+        abilita:
+          'Leggere e comprendere testi espositivi e narrativi complessi.\nIndividuare informazioni esplicite e implicite.',
+        conoscenze:
+          'Struttura del testo narrativo ed espositivo.\nElementi di analisi logica del periodo.',
+      },
+      {
+        id: 'r-full-2',
+        competenze: 'Produrre testi scritti coerenti e corretti.',
+        abilita: 'Pianificare e revisionare elaborati di diversa tipologia.',
+        conoscenze: 'Ortografia, punteggiatura, connettivi testuali.',
+      },
+    ];
+    fullPlan.curricolo.attivitaProgrammate = 'Letture animate e progetto biblioteca scolastica.';
+    fullPlan.metodiStrumenti.altreMetodologie = 'Brainstorming e Circle time';
+    fullPlan.metodiStrumenti.altriSussidi = 'Dizionario digitale e mappe cartacee';
+    fullPlan.metodiStrumenti.ausiliDidattici = 'Antologia in adozione e quaderno operativo.';
+    fullPlan.verificheValutazione.altriTipiProve = 'Compiti autentici semestrali';
+
+    const fullDocxBytes = await generateProgrammazioneDocxBytes(
+      fullPlan,
+      DEFAULT_SCHOOL_SETTINGS,
+      mapping
+    );
+    const fullPdfBytes = generateProgrammazionePdfBytes(
+      fullPlan,
+      DEFAULT_SCHOOL_SETTINGS,
+      mapping
+    );
+    expect(fullDocxBytes.byteLength).toBeGreaterThan(emptyDocxBytes.byteLength);
+    expect(fullPdfBytes.byteLength).toBeGreaterThan(emptyPdfBytes.byteLength);
+
+    // 3. Round-trip importazione del DOCX originale compilato
+    const rt = await importProgrammazioneFromBuffer(
+      fullDocxBytes.buffer as ArrayBuffer,
+      'programmazione_italiano_2B.docx',
+      DEFAULT_SCHOOL_SETTINGS
+    );
+    expect(rt.plan.datiGenerali.disciplina).toBe('Italiano');
+    expect(rt.plan.datiGenerali.classe).toBe('Seconda');
+    expect(rt.plan.datiGenerali.sezione).toBe('B');
+    expect(rt.plan.datiGenerali.annoScolastico).toBe('2026/27');
+    expect(rt.plan.datiGenerali.plesso).toBe('Villafrati');
+    expect(rt.plan.datiGenerali.docente).toBe('Elena Greco');
+    expect(rt.plan.datiGenerali.docenteGenere).toBe('F');
+    expect(rt.plan.composizione).toEqual(fullPlan.composizione);
+    expect(rt.plan.situazione.tipologie).toEqual(['tranquilla', 'collaborativa', 'motivata']);
+    expect(rt.plan.situazione.livello).toBe('medio-alto');
+    expect(rt.plan.analisiPartenza.livelli).toEqual(fullPlan.analisiPartenza.livelli);
+    expect(rt.plan.analisiPartenza.descrizioneDisciplinare).toContain('Paragrafo 8');
+    expect(rt.plan.analisiPartenza.altraFonte).toBe('Colloqui con referente BES');
+    expect(rt.plan.interventi.potenziamentoAltro).toBe('Laboratorio di scrittura creativa');
+    expect(rt.plan.interventi.consolidamentoAltro).toBe('Tutoraggio tra pari');
+    expect(rt.plan.interventi.recuperoAltro).toBe('Sportello pomeridiano settimanale');
+    expect(rt.plan.interventi.besInterventiProgrammati).toContain('PDP e PEI');
+    expect(rt.plan.curricolo.righeAbilitaConoscenze).toHaveLength(2);
+    expect(rt.plan.curricolo.attivitaProgrammate).toBe(
+      'Letture animate e progetto biblioteca scolastica.'
+    );
+    expect(rt.plan.metodiStrumenti.altreMetodologie).toBe('Brainstorming e Circle time');
+    expect(rt.plan.metodiStrumenti.altriSussidi).toBe('Dizionario digitale e mappe cartacee');
+    expect(rt.plan.metodiStrumenti.ausiliDidattici).toBe(
+      'Antologia in adozione e quaderno operativo.'
+    );
+    expect(rt.plan.verificheValutazione.altriTipiProve).toBe('Compiti autentici semestrali');
+    expect(rt.recognizedFields.length).toBeGreaterThanOrEqual(10);
+
+    // 4. Importazione modello .doc HTML-like (tipologie con [X] a destra, composizione 1-riga, tabella 2 colonne ABILITÀ/CONOSCENZE e blocco ambiguo)
+    const htmlLegacyDoc = `<!DOCTYPE html><html><body>
+      <p>PROGRAMMAZIONE DISCIPLINARE di Storia</p>
+      <p>PLESSO DI Mezzojuso</p>
+      <p>ANNO SCOLASTICO 2025/26</p>
+      <p>CLASSE Terza C</p>
+      <p>DISCIPLINA Storia</p>
+      <p>DOCENTE Prof. Luca Ferri</p>
+      <p>COMPOSIZIONE DELLA CLASSE</p>
+      <table><tr>
+        <td>Alunni: 19</td><td>Maschi: 10</td><td>Femmine: 9</td><td>Ripetenti: 0</td><td>Con Bisogni Educativi Speciali (BES): 2</td>
+      </tr></table>
+      <p>SITUAZIONE DELLA CLASSE</p>
+      <table>
+        <tr><td colspan="2">TIPOLOGIA</td><td>LIVELLO</td></tr>
+        <tr><td colspan="2">tranquilla [X] motivata [X] vivace [ ]</td><td>☒ medio</td></tr>
+      </table>
+      <table>
+        <tr><td>ABILITA'</td><td>CONOSCENZE</td></tr>
+        <tr><td>Collocare eventi storici sulla linea del tempo.</td><td>Le due guerre mondiali e la Costituzione italiana.</td></tr>
+      </table>
+      <p>Nota libera fuori sezione sul progetto memoria storica e visite guidate ai musei cittadini.</p>
+      <p>Il docente Prof. Luca Ferri</p>
+    </body></html>`;
+
+    const htmlBuf = new TextEncoder().encode(htmlLegacyDoc).buffer;
+    const htmlImport = await importProgrammazioneFromBuffer(
+      htmlBuf,
+      'vecchio_storia_3C.doc',
+      DEFAULT_SCHOOL_SETTINGS
+    );
+    expect(htmlImport.plan.datiGenerali.disciplina).toBe('Storia');
+    expect(htmlImport.plan.datiGenerali.classe).toBe('Terza');
+    expect(htmlImport.plan.datiGenerali.sezione).toBe('C');
+    expect(htmlImport.plan.datiGenerali.docenteGenere).toBe('M');
+    expect(htmlImport.plan.composizione).toEqual({
+      alunni: 19,
+      maschi: 10,
+      femmine: 9,
+      ripetenti: 0,
+      bes: 2,
+    });
+    expect(htmlImport.plan.situazione.tipologie).toEqual(['tranquilla', 'motivata']);
+    expect(htmlImport.plan.situazione.livello).toBe('medio');
+    expect(htmlImport.plan.curricolo.righeAbilitaConoscenze).toHaveLength(1);
+    expect(htmlImport.plan.curricolo.righeAbilitaConoscenze[0].abilita).toContain(
+      'Collocare eventi storici'
+    );
+    expect(
+      htmlImport.unrecognizedBlocks.some((b) => b.text.includes('progetto memoria storica'))
+    ).toBe(true);
+
+    // Assegnazione manuale del blocco non riconosciuto ad Attività programmate
+    const targetBlk = htmlImport.unrecognizedBlocks.find((b) =>
+      b.text.includes('progetto memoria storica')
+    )!;
+    const assignedPlan = applyUnrecognizedBlockAssignments(
+      htmlImport.plan,
+      htmlImport.unrecognizedBlocks,
+      { [targetBlk.id]: 'curricolo.attivitaProgrammate' }
+    );
+    expect(assignedPlan.curricolo.attivitaProgrammate).toContain('progetto memoria storica');
   });
 });
