@@ -78,6 +78,23 @@ const SURNAME_PARTICLES = new Set([
 ]);
 
 /**
+ * Normalizza Nome e Cognome completi letti dal registro elettronico
+ * ("ROSSI, Mario" -> "ROSSI Mario", "  Rossi   Mario " -> "Rossi Mario").
+ */
+export function formatFullStudentName(rawName: string): string {
+  const cleaned = rawName.trim().replace(/\s+/g, ' ');
+  if (!cleaned) return '';
+  if (cleaned.includes(',')) {
+    return cleaned
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .join(' ');
+  }
+  return cleaned;
+}
+
+/**
  * Estrae esclusivamente il cognome dell'alunno dai formati comuni dei registri elettronici
  * ("ROSSI MARIO", "ROSSI, Mario", "DE LUCA Anna Maria", "D'ANGELO Luca").
  */
@@ -447,13 +464,13 @@ export function parseGradebookBuffer(
       }
     }
 
-    const cognomeOnly = extractCognomeOnly(alunnoRaw);
+    const fullName = formatFullStudentName(alunnoRaw);
     const fascia = classifyMediaToFascia(media, soglie);
     entries.push({
       id: `alunno-${counter}`,
       ordine: counter,
       labelAnonimo: `Alunno ${counter}`,
-      nominativo: keepNames ? cognomeOnly || undefined : undefined,
+      nominativo: keepNames ? fullName || undefined : undefined,
       media,
       fasciaAutomatica: fascia,
       fasciaCorrente: fascia,

@@ -1140,8 +1140,8 @@ export function getDefaultMetodiStrumentiForDisciplina(disciplina: string): {
     altreMetodologie: match.altreMetodologie,
     altriSussidi: match.altriSussidi,
     ausiliDidattici: match.ausiliDidattici,
-    premessaMetodologica: `${DEFAULT_PREMESSA_METODOLOGICA} ${match.premessaSpecifica}`.trim(),
-    didatticaDigitaleIntegrata: `${DEFAULT_DDI_TEXT} ${match.ddiSpecifica}`.trim(),
+    premessaMetodologica: DEFAULT_PREMESSA_METODOLOGICA,
+    didatticaDigitaleIntegrata: DEFAULT_DDI_TEXT,
   };
 }
 
@@ -1167,7 +1167,7 @@ export function getDefaultVerificheValutazioneForDisciplina(disciplina: string):
     verificheScritte: [...match.verificheScritte],
     verificheOrali: [...match.verificheOrali],
     altriTipiProve: match.altriTipiProve,
-    criteriValutazione: `${DEFAULT_VALUTAZIONE_TEXT} ${match.criteriSpecificiDisciplina}`.trim(),
+    criteriValutazione: DEFAULT_VALUTAZIONE_TEXT,
   };
 }
 
@@ -1185,16 +1185,30 @@ export function getDefaultRilevazioneForDisciplina(disciplina: string): {
 export const PLESSI_ISTITUTO: string[] = ['Villafrati', 'Mezzojuso', 'Godrano'];
 
 export const DEFAULT_PREMESSA_METODOLOGICA =
-  'In sede di progettazione disciplinare sono scelte metodologie, strategie e tecniche d’intervento didattico al fine di attivare i percorsi di apprendimento degli alunni e rispondere alle esigenze e ai tempi di apprendimento di ciascuno, anche nell’ambito della didattica digitale integrata (Piano scolastico per la DDI). Tra le risorse didattiche si utilizzano contenuti audio/video disponibili su piattaforme istituzionali (es. RAI Scuola, RAI Cultura), risorse educative aperte (OER), libri di testo digitali, mappe concettuali e schede predisposte dal docente.';
+  'Il lavoro verrà organizzato tenendo conto della fisionomia della classe, delle esperienze pregresse della maggioranza, dei singoli e delle dinamiche relazionali dei gruppi. Il cammino di apprendimento avrà come punto di partenza e riferimento costante l’esperienza vissuta dai ragazzi. La lezione sarà di tipo interattivo per favorire il confronto e lo scambio di opinioni tra alunni e insegnante e alunni tra loro. Il percorso di apprendimento sarà caratterizzato, perciò, dalla significatività dei contenuti nei confronti dell’allievo, dalla valorizzazione dei suoi interessi, dalla soddisfazione dei suoi bisogni, da uno sviluppo progressivo di concetti, capacità ed acquisizione dei codici comportamentali.\n\nIn riferimento a Piano scolastico per la Didattica Digitale Integrata, si integreranno i materiali di studio tradizionali, (libro di testo, mappe concettuali e schede), con altre tipologie di materiali e supporti didattici, quali filmati, documentari, lezioni e approfondimenti presenti sulla piattaforma web RAI Scuola, video su YouTube e file audio; strumenti educativi e didattici efficaci per gli Studenti, in grado di valorizzare le risorse educative aperte (OER-Open Educational Resources) già presenti in rete e ottimizzati per la fruizione on line.';
 
 export const DEFAULT_DDI_TEXT =
-  'In caso di attivazione della Didattica Digitale Integrata, le attività sincrone e asincrone saranno strutturate garantendo inclusione, consegna guidata dei materiali sulla piattaforma d’istituto, momenti di restituzione individuale e utilizzo di risorse multimediali accessibili.';
+  'In linea con il “Piano Scolastico per la Didattica Digitale Integrata” adottato dal nostro Istituto e il Regolamento per la Didattica Digitale Integrata, il Docente si riserva di utilizzare le funzionalità di Google Classroom e delle altre applicazioni inserite nella GSuite dell’Istituto per condividere con gli studenti documenti e materiali utili, assegnare compiti e svolgere eventuali verifiche.';
 
 export const DEFAULT_VALUTAZIONE_TEXT =
-  'La valutazione, intesa come strumento formativo e regolativo del processo di insegnamento-apprendimento, si articolerà in fase diagnostica, formativa in itinere e sommativa, in coerenza con i criteri deliberati dal Collegio dei Docenti nel PTOF e con il Regolamento DDI (Art. 10). Terrà conto della situazione di partenza, dei progressi conseguiti, dell’impegno, della partecipazione, dell’autonomia nel metodo di studio e del raggiungimento degli obiettivi essenziali, nonché di eventuali piani personalizzati (PDP/PEI) per alunni con Bisogni Educativi Speciali.';
+  'Al fine di valutare il percorso formativo, si avvierà un’azione costante di registrazione delle attività svolte, dei progressi ottenuti o meno da parte del singolo allievo, dai gruppi o dal gruppo classe. Saranno presi in considerazione gli interessi manifestati, l’atteggiamento verso lo studio, le più generali dinamiche relazionali degli alunni, il grado di autonomia nell’affrontare e risolvere i problemi, le doti di riflessione e la capacità di analisi critica. La valutazione, inoltre, sarà intesa come modalità di verifica del processo di insegnamento/apprendimento per l’eventuale revisione e riprogettazione. Nel valutare l’alunno, si terrà conto non solo dell’acquisizione dei contenuti proposti ma di tutti quei fattori che incidono sul processo di apprendimento e di formazione (interesse, impegno, abilità operative, applicazione, partecipazione, motivazione, socializzazione …).\n\nIn linea con quanto dettagliato nel Piano scolastico per la Didattica Digitale Integrata e nell’“Art. 10 - Criteri di valutazione degli apprendimenti” del Regolamento della DDI adottato dall’Istituto, anche la valutazione nella Didattica Digitale Integrata seguirà i criteri della valutazione degli apprendimenti definiti nel PTOF. In particolare, sono distinte le valutazioni formative svolte in itinere dai Docenti, anche attraverso semplici feedback orali o scritti, le valutazioni sommative al termine di uno o più moduli didattici o unità didattiche, e le valutazioni intermedie e finali realizzate in sede di scrutinio.\n\nPer gli Studenti con Bisogni Educativi Speciali la valutazione tiene conto dei criteri e degli strumenti definiti e concordati nei Piani Didattici Personalizzati e nei Piani Educativi Individualizzati.';
 
 export const DEFAULT_NOTA_CURRICOLO =
-  'Tenuto conto della eterogeneità degli alunni relativamente ai livelli di partenza ed alle capacità/abilità di ciascuno, vengono specificate di seguito le Competenze, le Abilità (o Obiettivi specifici) e le Conoscenze (Contenuti) disciplinari da raggiungere in coerenza con il Curricolo Verticale di Istituto.';
+  'Tenuto conto della eterogeneità degli alunni relativamente ai livelli di partenza ed alle capacità/abilità di ciascuno, vengono specificate di seguito le Abilità e le Conoscenze disciplinari da raggiungere';
+
+export function getCurricoloIntroNoteText(
+  notaIntroduttiva: string | undefined,
+  indicazioniVersione: IndicazioniVersion | undefined
+): string {
+  const raw = (notaIntroduttiva ?? '').trim();
+  const base = raw || DEFAULT_NOTA_CURRICOLO;
+  if ((indicazioniVersione ?? 'vecchie') === 'nuove') {
+    return base
+      .replace(/le Abilità e le Conoscenze/gi, 'gli Obiettivi e le Conoscenze')
+      .replace(/le Competenze, le Abilità \(o Obiettivi specifici\)/gi, 'gli Obiettivi');
+  }
+  return base;
+}
 
 export const DEFAULT_BES_INTERVENTI_TEXT =
   'Per gli alunni con Bisogni Educativi Speciali (BES/DSA), in coerenza con i Piani Didattici Personalizzati (PDP) e con gli eventuali Piani Educativi Individualizzati (PEI) predisposti dal Consiglio di Classe, vengono adottati strumenti compensativi (mappe concettuali, schemi guida, formulari, sintesi vocali, audiolibri, calcolatrice, tabelle di supporto, dizionari digitali e risorse multimediali accessibili) e misure dispensative (dispensa dalla lettura ad alta voce in classe, dalla copiatura rapida alla lavagna e dal carico eccessivo di compiti domestici; previsione di tempi aggiuntivi o riduzione quantitativa delle prove mantenendo inalterati gli obiettivi essenziali).';
@@ -1520,6 +1534,7 @@ export function createEmptyProgrammazione(
       femmine: 10,
       ripetenti: 0,
       bes: 0,
+      disabilita: 0,
     },
     situazione: {
       tipologie: ['collaborativa', 'motivata'],

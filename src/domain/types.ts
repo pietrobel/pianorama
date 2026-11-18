@@ -33,6 +33,7 @@ export interface ComposizioneClasse {
   femmine: number;
   ripetenti: number;
   bes: number;
+  disabilita?: number;
 }
 
 export type MetodoStudioStato =
@@ -463,16 +464,29 @@ export interface PianoramaBackupEnvelope {
 }
 
 /**
- * Restituisce una copia della programmazione priva dell'elenco nominativo
- * e delle note sensibili individuali degli alunni, così che l'esportazione
- * ufficiale DOCX/PDF riporti esclusivamente i conteggi aggregati.
+ * Restituisce una copia della programmazione priva di medie, categorie BES/DSA/PEI
+ * e note sensibili individuali degli alunni, conservando solo i nominativi per la
+ * tabella delle fasce di livello quando importati.
  */
 export function sanitizePlanForOfficialExport(plan: Programmazione): Programmazione {
+  const bandEntries = (plan.analisiPartenza.alunniAnonimiFasce ?? [])
+    .filter((entry) => Boolean(entry.nominativo?.trim()))
+    .map((entry) => ({
+      id: entry.id,
+      ordine: entry.ordine,
+      labelAnonimo: entry.labelAnonimo,
+      nominativo: entry.nominativo?.trim(),
+      media: null,
+      fasciaAutomatica: entry.fasciaAutomatica,
+      fasciaCorrente: entry.fasciaCorrente,
+      spostatoDalDocente: entry.spostatoDalDocente,
+    }));
+
   return {
     ...plan,
     analisiPartenza: {
       ...plan.analisiPartenza,
-      alunniAnonimiFasce: undefined,
+      alunniAnonimiFasce: bandEntries.length > 0 ? bandEntries : undefined,
       registroClasseRilevata: undefined,
     },
   };

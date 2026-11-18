@@ -392,70 +392,167 @@ export function importCatalogEntriesToVoices(
 }
 
 /**
- * Converte e raggruppa le voci importate dal curricolo verticale in righe a 3 colonne
- * (Competenze | Abilità / Obiettivi | Conoscenze / Contenuti), raggruppate per nucleo tematico e classe.
+ * Estrae le competenze attese (senza duplicati) dalle voci di catalogo selezionate,
+ * così da inserirle sotto "TRAGUARDI PER LO SVILUPPO DELLE COMPETENZE" prima delle competenze digitali.
+ */
+export function extractCompetenzeFromCatalogVoices(
+  voices: ImportedCurricoloVoice[],
+  existingCompetenze: string[] = []
+): string[] {
+  const seen = new Set(existingCompetenze.map((c) => c.trim().toLowerCase()).filter(Boolean));
+  const next = [...existingCompetenze];
+  for (const v of voices) {
+    if (v.tipo !== 'competenza') continue;
+    const text = v.testo.trim();
+    if (!text) continue;
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    next.push(text);
+  }
+  return next;
+}
+
+const CANONICAL_NUCLEO_ORDER: Record<string, string[]> = {
+  matematica: [
+    'numeri',
+    'spazio e figure',
+    'relazioni e funzioni',
+    'dati e previsioni',
+    'ragionamento',
+    'digitale',
+  ],
+  scienze: [
+    'biologia',
+    'fisica',
+    'chimica',
+    'astronomia',
+    'studio del territorio',
+    'scienze sperimentali',
+    'metodo scientifico',
+    'digitale',
+  ],
+  italiano: [
+    'oralità',
+    'ascolto e parlato',
+    'lettura',
+    'scrittura',
+    'lessico',
+    'riflessione sulla lingua',
+    'letteratura',
+    'digitale',
+  ],
+  tecnologia: [
+    'vedere, osservare',
+    'disegno tecnico',
+    'materiali',
+    'progettazione',
+    'informatica',
+  ],
+};
+
+function getNucleoSortRank(disciplina: string, nucleo: string): number {
+  const nLower = nucleo.trim().toLowerCase();
+  // Contenuti digitali o STEAM sempre in fondo alla tabella dopo i nuclei disciplinari
+  if (nLower.includes('digital') || nLower.includes('steam') || nLower.includes('altro')) {
+    return 900;
+  }
+  const order = CANONICAL_NUCLEO_ORDER[disciplina.trim().toLowerCase()];
+  if (!order) return 100;
+  const idx = order.findIndex((prefix) => nLower.includes(prefix));
+  return idx === -1 ? 200 : idx;
+}
+
+/**
+ * Converte e raggruppa le voci importate dal curricolo verticale in righe a 2 colonne
+ * (Abilità / Obiettivi a sinistra · Conoscenze / Contenuti a destra), raggruppate per
+ * nucleo tematico (es. Numeri, Spazio e figure, Biologia, Fisica...) con i contenuti digitali in coda.
+ * Le competenze vengono gestite separatamente dopo i Traguardi per lo sviluppo delle competenze.
  */
 export function buildProgramRowsFromCatalogVoices(
   voices: ImportedCurricoloVoice[],
-  existingRows: AbilitaConoscenzaRow[] = []
+  existingRows: AbilitaConoscenzaRow[] = [],
+  options?: { indicazioniVersione?: IndicazioniVersion }
 ): AbilitaConoscenzaRow[] {
   if (!voices.length) return existingRows;
 
   type GroupBucket = {
     nucleo: string;
     classe: ClasseSecondaria;
-    competenze: string[];
+    disciplina: string;
     abilita: string[];
     conoscenze: string[];
   };
 
   const buckets = new Map<string, GroupBucket>();
+  const targetVersion = options?.indicazioniVersione;
+
   for (const v of voices) {
+    if (v.tipo === 'competenza') continue;
     const cleanText = v.testo.trim();
     if (!cleanText) continue;
-    const nucleo = v.nucleoTematico.trim() || 'Generale';
-    const key = `${v.classeOrigine}::${nucleo.toLowerCase()}`;
+
+    // Se in catalogo sono presenti entrambi i tipi, privilegia quelli coerenti con la versione selezionata
+    if (
+      targetVersion === 'nuove' &&
+      v.tipo === 'abilita' &&
+      voices.some((other) => other.tipo === 'obiettivo_specifico')
+    ) {
+      continue;
+    }
+    if (
+      targetVersion === 'vecchie' &&
+      v.tipo === 'obiettivo_specifico' &&
+      voices.some((other) => other.tipo === 'abilita')
+    ) {
+      continue;
+    }
+
+    const nucleo = v.nucleoTematico.trim() || 'Contenuti disciplinari';
+    const key = `${nucleo.toLowerCase()}`;
     let bucket = buckets.get(key);
     if (!bucket) {
       bucket = {
         nucleo,
         classe: v.classeOrigine,
-        competenze: [],
+        disciplina: v.disciplina,
         abilita: [],
         conoscenze: [],
       };
       buckets.set(key, bucket);
     }
-    if (v.tipo === 'competenza') {
-      if (!bucket.competenze.includes(cleanText)) bucket.competenze.push(cleanText);
-    } else if (v.tipo === 'abilita' || v.tipo === 'obiettivo_specifico') {
+    if (v.tipo === 'abilita' || v.tipo === 'obiettivo_specifico') {
       if (!bucket.abilita.includes(cleanText)) bucket.abilita.push(cleanText);
     } else if (v.tipo === 'conoscenza') {
       if (!bucket.conoscenze.includes(cleanText)) bucket.conoscenze.push(cleanText);
     }
   }
 
-  const normalizeKey = (c: string, a: string, k: string) =>
-    `${c.trim().toLowerCase()}||${a.trim().toLowerCase()}||${k.trim().toLowerCase()}`;
+  const orderedBuckets = Array.from(buckets.values()).sort(
+    (a, b) =>
+      getNucleoSortRank(a.disciplina, a.nucleo) - getNucleoSortRank(b.disciplina, b.nucleo)
+  );
+
+  const normalizeKey = (t: string, a: string, k: string) =>
+    `${t.trim().toLowerCase()}||${a.trim().toLowerCase()}||${k.trim().toLowerCase()}`;
 
   const existingKeys = new Set(
-    existingRows.map((r) =>
-      normalizeKey(r.competenze || r.traguardo || '', r.abilita, r.conoscenze)
-    )
+    existingRows.map((r) => normalizeKey(r.traguardo || '', r.abilita, r.conoscenze))
   );
 
   const nextRows: AbilitaConoscenzaRow[] = [...existingRows];
-  for (const bucket of buckets.values()) {
-    const compText =
-      bucket.competenze.length > 0
-        ? bucket.competenze.join('\n• ').replace(/^/, '• ')
-        : `[${bucket.nucleo}]`;
-    const abText = bucket.abilita.length > 0 ? bucket.abilita.map((t) => `• ${t}`).join('\n') : '';
+  for (const bucket of orderedBuckets) {
+    const abText =
+      bucket.abilita.length > 0
+        ? `${bucket.nucleo}\n${bucket.abilita.map((t) => `• ${t}`).join('\n')}`
+        : '';
     const conText =
-      bucket.conoscenze.length > 0 ? bucket.conoscenze.map((t) => `• ${t}`).join('\n') : '';
+      bucket.conoscenze.length > 0
+        ? `${bucket.nucleo}\n${bucket.conoscenze.map((t) => `• ${t}`).join('\n')}`
+        : '';
 
-    if (!compText && !abText && !conText) continue;
-    const sig = normalizeKey(compText, abText, conText);
+    if (!abText && !conText) continue;
+    const sig = normalizeKey(bucket.nucleo, abText, conText);
     if (existingKeys.has(sig)) continue;
     existingKeys.add(sig);
 
@@ -464,7 +561,7 @@ export function buildProgramRowsFromCatalogVoices(
         typeof crypto !== 'undefined' && crypto.randomUUID
           ? crypto.randomUUID()
           : `row-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      competenze: compText,
+      competenze: '',
       traguardo: bucket.nucleo,
       abilita: abText,
       conoscenze: conText,
