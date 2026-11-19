@@ -18,6 +18,12 @@ import type {
 } from '../domain/types';
 import { ensureClassDimensions } from '../engine/classCharacteristicsEngine';
 import { getDefaultIndicazioniForClasseAndYear } from '../engine/curricoloCatalogEngine';
+import {
+  computeMergedProgrammazioni,
+  mergeItemsById,
+  type BackupMergeOptions,
+  type BackupRestoreResult,
+} from '../crypto/backupCrypto';
 import type { PianoramaRepository } from './repository';
 
 interface KeyValueRecord {
@@ -350,44 +356,122 @@ export class DexiePianoramaRepository implements PianoramaRepository {
     };
   }
 
-  async restoreAllData(data: BackupPlainData): Promise<void> {
+  async restoreAllData(
+    data: BackupPlainData,
+    options: BackupMergeOptions = { mode: 'merge', duplicatePolicy: 'skip' }
+  ): Promise<BackupRestoreResult> {
     await this.init();
     try {
-      await this.db.transaction(
+      return await this.db.transaction(
         'rw',
         [this.db.programmazioni, this.db.library, this.db.rules, this.db.kv],
         async () => {
-          await this.db.programmazioni.clear();
-          await this.db.library.clear();
-          await this.db.rules.clear();
+          if (options.mode === 'replace') {
+            await this.db.programmazioni.clear();
+            await this.db.library.clear();
+            await this.db.rules.clear();
 
-          if (data.programmazioni?.length) {
-            await this.db.programmazioni.bulkPut(data.programmazioni.map(normalizeLoadedPlan));
+            const normalizedPlans = (data.programmazioni ?? []).map(normalizeLoadedPlan);
+            if (normalizedPlans.length > 0) {
+              await this.db.programmazioni.bulkPut(normalizedPlans);
+            }
+            if (data.library?.length) {
+              await this.db.library.bulkPut(data.library);
+            }
+            if (data.rules?.length) {
+              await this.db.rules.bulkPut(data.rules);
+            }
+            if (data.settings) {
+              await this.db.kv.put({
+                key: 'settings',
+                value: { ...DEFAULT_SCHOOL_SETTINGS, ...data.settings },
+              });
+            }
+            if (data.docxMapping) {
+              await this.db.kv.put({
+                key: 'docxMapping',
+                value: data.docxMapping,
+              });
+            }
+            if (data.curricoloCatalog?.length) {
+              await this.db.kv.put({
+                key: 'curricoloCatalog',
+                value: data.curricoloCatalog,
+              });
+            }
+
+            return {
+              mode: 'replace',
+              addedPlans: normalizedPlans.length,
+              overwrittenPlans: 0,
+              skippedPlans: 0,
+              keptLocalPlans: 0,
+            };
           }
+
+          const overwriteDuplicates = options.duplicatePolicy === 'overwrite';
+          const [localPlans, localLibrary, localRules, localCatalogRow] = await Promise.all([
+            this.db.programmazioni.toArray(),
+            this.db.library.toArray(),
+            this.db.rules.toArray(),
+            this.db.kv.get('curricoloCatalog'),
+          ]);
+
+          const planMerge = computeMergedProgrammazioni(
+            localPlans,
+            data.programmazioni ?? [],
+            overwriteDuplicates
+          );
+
+          if (planMerge.idsToDelete.length > 0) {
+            await this.db.programmazioni.bulkDelete(planMerge.idsToDelete);
+          }
+          if (planMerge.plansToPut.length > 0) {
+            await this.db.programmazioni.bulkPut(
+              planMerge.plansToPut.map(normalizeLoadedPlan)
+            );
+          }
+
           if (data.library?.length) {
-            await this.db.library.bulkPut(data.library);
+            const mergedLib = mergeItemsById(
+              localLibrary,
+              data.library,
+              overwriteDuplicates
+            );
+            await this.db.library.bulkPut(mergedLib);
           }
+
           if (data.rules?.length) {
-            await this.db.rules.bulkPut(data.rules);
+            const mergedRules = mergeItemsById(
+              localRules,
+              data.rules,
+              overwriteDuplicates
+            );
+            await this.db.rules.bulkPut(mergedRules);
           }
-          if (data.settings) {
-            await this.db.kv.put({
-              key: 'settings',
-              value: { ...DEFAULT_SCHOOL_SETTINGS, ...data.settings },
-            });
-          }
-          if (data.docxMapping) {
-            await this.db.kv.put({
-              key: 'docxMapping',
-              value: data.docxMapping,
-            });
-          }
+
           if (data.curricoloCatalog?.length) {
+            const existingCatalog = Array.isArray(localCatalogRow?.value)
+              ? (localCatalogRow.value as CurricoloCatalogEntry[])
+              : CURRICOLO_VERTICALE_SEED;
+            const mergedCatalog = mergeItemsById(
+              existingCatalog,
+              data.curricoloCatalog,
+              overwriteDuplicates
+            );
             await this.db.kv.put({
               key: 'curricoloCatalog',
-              value: data.curricoloCatalog,
+              value: mergedCatalog,
             });
           }
+
+          return {
+            mode: 'merge',
+            addedPlans: planMerge.addedPlans,
+            overwrittenPlans: planMerge.overwrittenPlans,
+            skippedPlans: planMerge.skippedPlans,
+            keptLocalPlans: planMerge.keptLocalPlans,
+          };
         }
       );
     } catch (err) {

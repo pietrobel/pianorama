@@ -1,27 +1,44 @@
-import { CheckCircle2, Download, Lock, ShieldCheck, Upload } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { CheckCircle2, Download, GitMerge, Lock, ShieldCheck, Upload } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
 import { ConfirmModal } from '../components/ConfirmModal';
 import {
+  analyzeBackupMerge,
   createBackupEnvelope,
   decryptBackupEnvelope,
   parseBackupEnvelope,
   summarizeBackupData,
+  type BackupDuplicatePolicy,
+  type BackupMergeOptions,
   type BackupPreviewSummary,
+  type BackupRestoreMode,
+  type BackupRestoreResult,
 } from '../crypto/backupCrypto';
-import type { BackupPlainData, PianoramaBackupEnvelope, SchoolSettings } from '../domain/types';
+import type {
+  BackupPlainData,
+  PianoramaBackupEnvelope,
+  Programmazione,
+  SchoolSettings,
+} from '../domain/types';
 
 interface BackupPageProps {
   settings: SchoolSettings;
+  existingPlans: Programmazione[];
   onExportAll: () => Promise<BackupPlainData>;
-  onRestoreAll: (data: BackupPlainData) => Promise<void>;
+  onRestoreAll: (
+    data: BackupPlainData,
+    options: BackupMergeOptions
+  ) => Promise<BackupRestoreResult>;
   onMarkBackupDone: () => Promise<void>;
+  onGoToPlans?: () => void;
 }
 
 export function BackupPage({
   settings,
+  existingPlans,
   onExportAll,
   onRestoreAll,
   onMarkBackupDone,
+  onGoToPlans,
 }: BackupPageProps) {
   const [encryptEnabled, setEncryptEnabled] = useState(true);
   const [exportPassword, setExportPassword] = useState('');
@@ -35,9 +52,16 @@ export function BackupPage({
   const [importPassword, setImportPassword] = useState('');
   const [previewData, setPreviewData] = useState<BackupPlainData | null>(null);
   const [previewSummary, setPreviewSummary] = useState<BackupPreviewSummary | null>(null);
+  const [restoreMode, setRestoreMode] = useState<BackupRestoreMode>('merge');
+  const [duplicatePolicy, setDuplicatePolicy] = useState<BackupDuplicatePolicy>('skip');
   const [importError, setImportError] = useState<string | null>(null);
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
   const [confirmOverwrite, setConfirmOverwrite] = useState(false);
+
+  const mergeAnalysis = useMemo(() => {
+    if (!previewData) return null;
+    return analyzeBackupMerge(existingPlans, previewData.programmazioni);
+  }, [existingPlans, previewData]);
 
   const handleExport = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,6 +122,7 @@ export function BackupPage({
     setPreviewData(null);
     setPreviewSummary(null);
     setImportPassword('');
+    setRestoreMode('merge');
 
     try {
       const text = await file.text();
@@ -134,10 +159,19 @@ export function BackupPage({
     setConfirmOverwrite(false);
     setImportError(null);
     try {
-      await onRestoreAll(previewData);
-      setImportSuccess(
-        `Ripristino completato: caricate ${previewData.programmazioni.length} programmazioni, ${previewData.library.length} voci di libreria e ${previewData.rules.length} regole.`
-      );
+      const result = await onRestoreAll(previewData, {
+        mode: restoreMode,
+        duplicatePolicy,
+      });
+      if (result.mode === 'merge') {
+        setImportSuccess(
+          `Unione completata senza perdere le nuove programmazioni: ${result.addedPlans} aggiunte, ${result.overwrittenPlans} uguali sovrascritte, ${result.skippedPlans} uguali mantenute, ${result.keptLocalPlans} recenti conservate.`
+        );
+      } else {
+        setImportSuccess(
+          `Ripristino completo eseguito: caricate ${previewData.programmazioni.length} programmazioni, ${previewData.library.length} voci di libreria e ${previewData.rules.length} regole.`
+        );
+      }
       setPendingEnvelope(null);
       setPreviewData(null);
       setPreviewSummary(null);
@@ -145,6 +179,19 @@ export function BackupPage({
     } catch (err) {
       setImportError(err instanceof Error ? err.message : 'Errore durante il ripristino.');
     }
+  };
+
+  const buildConfirmDescription = () => {
+    if (!previewSummary || !mergeAnalysis) return '';
+    if (restoreMode === 'replace') {
+      return `ATTENZIONE: l’operazione cancellerà tutte le ${existingPlans.length} programmazioni attuali (comprese le ${mergeAnalysis.onlyLocalPlans.length} create dopo il backup) e sostituirà l’archivio con le ${previewSummary.programmazioniCount} del backup del ${new Date(
+        previewSummary.exportedAt
+      ).toLocaleDateString('it-IT')}.`;
+    }
+    const overwrite = duplicatePolicy === 'overwrite';
+    return overwrite
+      ? `Verranno aggiunte ${mergeAnalysis.newPlans.length} nuove programmazioni, sovrascritte ${mergeAnalysis.matchingPlans.length} programmazioni uguali con quelle del backup e mantenute intatte le ${mergeAnalysis.onlyLocalPlans.length} programmazioni create nel frattempo.`
+      : `Verranno aggiunte ${mergeAnalysis.newPlans.length} nuove programmazioni, mantenute invariate le ${mergeAnalysis.matchingPlans.length} programmazioni uguali già presenti e conservate tutte le ${mergeAnalysis.onlyLocalPlans.length} programmazioni create nel frattempo.`;
   };
 
   return (
@@ -249,7 +296,7 @@ export function BackupPage({
           </button>
         </form>
 
-        {/* IMPORTAZIONE CON ANTEPRIMA */}
+        {/* IMPORTAZIONE CON ANTEPRIMA E UNIONE SICURA */}
         <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center gap-2.5">
             <Upload className="h-5 w-5 text-[#1F3864] dark:text-blue-400" />
@@ -258,7 +305,7 @@ export function BackupPage({
             </h2>
           </div>
           <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
-            Prima di sovrascrivere l’archivio attuale, PIANORAMA mostra il riepilogo completo dei contenuti e richiede una conferma esplicita.
+            In modalità predefinita, PIANORAMA <strong>unisce</strong> il backup all’archivio attuale mantenendo le nuove programmazioni create nel frattempo e consentendo di scegliere se sovrascrivere eventuali file uguali.
           </p>
 
           <input
@@ -303,8 +350,8 @@ export function BackupPage({
             </form>
           )}
 
-          {previewSummary && (
-            <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
+          {previewSummary && mergeAnalysis && (
+            <div className="space-y-4 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
               <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
                 Anteprima contenuto del backup
               </h3>
@@ -313,24 +360,136 @@ export function BackupPage({
                 <dd className="font-mono-num font-medium">
                   {new Date(previewSummary.exportedAt).toLocaleString('it-IT')}
                 </dd>
-                <dt className="text-slate-500">Programmazioni:</dt>
+                <dt className="text-slate-500">Nel backup:</dt>
                 <dd className="font-mono-num font-semibold">
-                  {previewSummary.programmazioniCount} ({previewSummary.bozzeCount} bozze ·{' '}
+                  {previewSummary.programmazioniCount} programmazioni ({previewSummary.bozzeCount} bozze ·{' '}
                   {previewSummary.completateCount} completate · {previewSummary.archiviateCount}{' '}
                   archiviate)
                 </dd>
-                <dt className="text-slate-500">Voci libreria:</dt>
-                <dd className="font-mono-num font-medium">{previewSummary.libraryCount}</dd>
-                <dt className="text-slate-500">Regole locali:</dt>
-                <dd className="font-mono-num font-medium">{previewSummary.rulesCount}</dd>
+                <dt className="text-slate-500">Voci libreria / Regole:</dt>
+                <dd className="font-mono-num font-medium">
+                  {previewSummary.libraryCount} / {previewSummary.rulesCount}
+                </dd>
+                <dt className="text-slate-500">Nuove da aggiungere:</dt>
+                <dd className="font-mono-num font-semibold text-emerald-700 dark:text-emerald-400">
+                  {mergeAnalysis.newPlans.length}
+                </dd>
+                <dt className="text-slate-500">Uguali già presenti:</dt>
+                <dd className="font-mono-num font-semibold text-amber-700 dark:text-amber-300">
+                  {mergeAnalysis.matchingPlans.length}
+                </dd>
+                <dt className="text-slate-500">Create nel frattempo:</dt>
+                <dd className="font-mono-num font-semibold text-[#1F3864] dark:text-blue-300">
+                  {mergeAnalysis.onlyLocalPlans.length}
+                </dd>
               </dl>
+
+              {mergeAnalysis.matchingPlans.length > 0 && (
+                <div className="rounded-md border border-amber-200 bg-amber-50/70 p-2.5 text-[11px] text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+                  <p className="font-semibold">
+                    Programmazioni uguali trovate ({mergeAnalysis.matchingPlans.length}):
+                  </p>
+                  <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                    {mergeAnalysis.matchingPlans.slice(0, 6).map(({ backupPlan }) => (
+                      <li key={backupPlan.id}>
+                        {backupPlan.datiGenerali.disciplina || 'Disciplina'} ·{' '}
+                        {backupPlan.datiGenerali.classe} {backupPlan.datiGenerali.sezione} (
+                        {backupPlan.datiGenerali.annoScolastico})
+                      </li>
+                    ))}
+                    {mergeAnalysis.matchingPlans.length > 6 && (
+                      <li>…e altre {mergeAnalysis.matchingPlans.length - 6}</li>
+                    )}
+                  </ul>
+                </div>
+              )}
+
+              {/* Scelta modalità ripristino */}
+              <div className="space-y-2 border-t border-slate-200 pt-3 dark:border-slate-700">
+                <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  Modalità di importazione
+                </p>
+
+                <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-slate-300 bg-white p-2.5 text-xs dark:border-slate-700 dark:bg-slate-900">
+                  <input
+                    type="radio"
+                    name="restoreMode"
+                    checked={restoreMode === 'merge'}
+                    onChange={() => setRestoreMode('merge')}
+                    className="mt-0.5 h-3.5 w-3.5 accent-[#1F3864]"
+                  />
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-1.5 font-semibold text-slate-900 dark:text-slate-100">
+                      <GitMerge className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-400" />
+                      <span>Unisci all’archivio attuale (consigliata — mantieni le nuove)</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Conserva le {mergeAnalysis.onlyLocalPlans.length} programmazioni create nel frattempo e importa quelle del backup.
+                    </p>
+                  </div>
+                </label>
+
+                {restoreMode === 'merge' && (
+                  <div className="ml-5 space-y-1.5 rounded-lg border border-slate-200 bg-white p-2.5 text-xs dark:border-slate-700 dark:bg-slate-900">
+                    <p className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                      In caso di file / programmazioni uguali:
+                    </p>
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <input
+                        type="radio"
+                        name="duplicatePolicy"
+                        checked={duplicatePolicy === 'skip'}
+                        onChange={() => setDuplicatePolicy('skip')}
+                        className="h-3.5 w-3.5 accent-[#1F3864]"
+                      />
+                      <span>Mantieni i file attuali già presenti (importa solo i nuovi)</span>
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <input
+                        type="radio"
+                        name="duplicatePolicy"
+                        checked={duplicatePolicy === 'overwrite'}
+                        onChange={() => setDuplicatePolicy('overwrite')}
+                        className="h-3.5 w-3.5 accent-[#1F3864]"
+                      />
+                      <span>Sovrascrivi i file uguali con la versione del backup</span>
+                    </label>
+                  </div>
+                )}
+
+                <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-slate-200 bg-white p-2.5 text-xs dark:border-slate-700 dark:bg-slate-900">
+                  <input
+                    type="radio"
+                    name="restoreMode"
+                    checked={restoreMode === 'replace'}
+                    onChange={() => setRestoreMode('replace')}
+                    className="mt-0.5 h-3.5 w-3.5 accent-amber-700"
+                  />
+                  <div>
+                    <span className="font-semibold text-amber-800 dark:text-amber-300">
+                      Sostituisci tutto l’archivio (cancella le nuove programmazioni)
+                    </span>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Elimina i dati attuali e ripristina esattamente la fotografia del backup.
+                    </p>
+                  </div>
+                </label>
+              </div>
 
               <button
                 type="button"
                 onClick={() => setConfirmOverwrite(true)}
-                className="mt-2 w-full rounded-lg bg-amber-700 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-800"
+                className={`mt-2 w-full rounded-lg px-4 py-2 text-xs font-semibold text-white ${
+                  restoreMode === 'replace'
+                    ? 'bg-amber-700 hover:bg-amber-800'
+                    : 'bg-[#1F3864] hover:bg-[#172b4d]'
+                }`}
               >
-                Conferma ripristino e sovrascrittura archivio locale
+                {restoreMode === 'replace'
+                  ? 'Sostituisci completamente archivio locale'
+                  : duplicatePolicy === 'overwrite'
+                  ? 'Unisci al database e sovrascrivi uguali'
+                  : 'Unisci al database mantenendo gli attuali'}
               </button>
             </div>
           )}
@@ -341,28 +500,37 @@ export function BackupPage({
             </p>
           )}
           {importSuccess && (
-            <p
+            <div
               role="status"
-              className="rounded-lg bg-emerald-50 p-3 text-xs font-medium text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200"
+              className="space-y-2 rounded-lg bg-emerald-50 p-3 text-xs font-medium text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200"
             >
-              {importSuccess}
-            </p>
+              <p>{importSuccess}</p>
+              {onGoToPlans && (
+                <button
+                  type="button"
+                  onClick={onGoToPlans}
+                  className="inline-flex items-center rounded-md bg-emerald-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-900"
+                >
+                  Vai alle programmazioni
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>
 
       <ConfirmModal
         open={confirmOverwrite}
-        title="Sovrascrivere tutti i dati locali con il backup?"
-        description={
-          previewSummary
-            ? `L’operazione sostituirà l’archivio attuale con ${previewSummary.programmazioniCount} programmazioni, ${previewSummary.libraryCount} voci di libreria e ${previewSummary.rulesCount} regole esportate il ${new Date(
-                previewSummary.exportedAt
-              ).toLocaleDateString('it-IT')}.`
-            : ''
+        title={
+          restoreMode === 'replace'
+            ? 'Sovrascrivere tutto l’archivio locale?'
+            : 'Confermare l’unione del backup?'
         }
-        confirmLabel="Sì, ripristina il backup"
-        destructive
+        description={buildConfirmDescription()}
+        confirmLabel={
+          restoreMode === 'replace' ? 'Sì, sostituisci tutto' : 'Sì, procedi con l’unione'
+        }
+        destructive={restoreMode === 'replace'}
         onCancel={() => setConfirmOverwrite(false)}
         onConfirm={handleConfirmRestore}
       />

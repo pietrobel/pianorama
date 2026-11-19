@@ -16,6 +16,10 @@ import {
   isAccessUnlocked,
   setAccessUnlocked,
 } from './components/PasswordGate';
+import type {
+  BackupMergeOptions,
+  BackupRestoreResult,
+} from './crypto/backupCrypto';
 import { DEFAULT_SCHOOL_SETTINGS } from './domain/defaults';
 import type {
   AnonymousStudentBandEntry,
@@ -293,10 +297,13 @@ export default function App() {
     setMapping(fresh);
   };
 
-  const handleRestoreAll = async (data: BackupPlainData) => {
-    await repository.restoreAllData(data);
+  const handleRestoreAll = async (
+    data: BackupPlainData,
+    options: BackupMergeOptions
+  ): Promise<BackupRestoreResult> => {
+    const result = await repository.restoreAllData(data, options);
     await loadAllFromStorage();
-    setRoute({ page: 'dashboard' });
+    return result;
   };
 
   const handleMarkBackupDone = async () => {
@@ -635,9 +642,11 @@ export default function App() {
             {route.page === 'backup' && (
               <BackupPage
                 settings={settings}
+                existingPlans={programmazioni}
                 onExportAll={() => repository.exportAllData()}
                 onRestoreAll={handleRestoreAll}
                 onMarkBackupDone={handleMarkBackupDone}
+                onGoToPlans={() => setRoute({ page: 'dashboard' })}
               />
             )}
 

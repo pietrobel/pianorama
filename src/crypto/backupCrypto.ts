@@ -1,4 +1,8 @@
-import type { BackupPlainData, PianoramaBackupEnvelope } from '../domain/types';
+import type {
+  BackupPlainData,
+  PianoramaBackupEnvelope,
+  Programmazione,
+} from '../domain/types';
 
 const PBKDF2_ITERATIONS = 250_000;
 
@@ -172,4 +176,154 @@ export function summarizeBackupData(data: BackupPlainData): BackupPreviewSummary
     rulesCount: data.rules?.length ?? 0,
     schoolName: data.settings?.schoolName || 'Istituto non specificato',
   };
+}
+
+export type BackupRestoreMode = 'merge' | 'replace';
+export type BackupDuplicatePolicy = 'skip' | 'overwrite';
+
+export interface BackupMergeOptions {
+  mode: BackupRestoreMode;
+  duplicatePolicy: BackupDuplicatePolicy;
+}
+
+export interface BackupRestoreResult {
+  mode: BackupRestoreMode;
+  addedPlans: number;
+  overwrittenPlans: number;
+  skippedPlans: number;
+  keptLocalPlans: number;
+}
+
+export interface BackupMatchedPlanPair {
+  backupPlan: Programmazione;
+  existingPlan: Programmazione;
+  matchedBy: 'id' | 'identity';
+}
+
+export interface BackupMergeAnalysis {
+  newPlans: Programmazione[];
+  matchingPlans: BackupMatchedPlanPair[];
+  onlyLocalPlans: Programmazione[];
+}
+
+function normKeyPart(v: string | undefined): string {
+  return (v ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+/**
+ * Chiave naturale della programmazione (anno scolastico + classe + sezione + disciplina)
+ * per riconoscere programmazioni uguali anche se salvate con ID diversi.
+ */
+export function buildPlanIdentityKey(plan: Programmazione): string {
+  const anno = normKeyPart(plan.datiGenerali?.annoScolastico);
+  const classe = normKeyPart(plan.datiGenerali?.classe);
+  const sezione = normKeyPart(plan.datiGenerali?.sezione);
+  const disciplina = normKeyPart(plan.datiGenerali?.disciplina);
+  if (!classe || !disciplina) return '';
+  return `${anno}|${classe}|${sezione}|${disciplina}`;
+}
+
+export function analyzeBackupMerge(
+  localPlans: Programmazione[],
+  backupPlans: Programmazione[]
+): BackupMergeAnalysis {
+  const matchedLocalIds = new Set<string>();
+  const newPlans: Programmazione[] = [];
+  const matchingPlans: BackupMatchedPlanPair[] = [];
+
+  for (const backupPlan of backupPlans) {
+    const byId = localPlans.find(
+      (p) => p.id === backupPlan.id && !matchedLocalIds.has(p.id)
+    );
+    if (byId) {
+      matchedLocalIds.add(byId.id);
+      matchingPlans.push({ backupPlan, existingPlan: byId, matchedBy: 'id' });
+      continue;
+    }
+
+    const identityKey = buildPlanIdentityKey(backupPlan);
+    const byIdentity = identityKey
+      ? localPlans.find(
+          (p) => !matchedLocalIds.has(p.id) && buildPlanIdentityKey(p) === identityKey
+        )
+      : undefined;
+    if (byIdentity) {
+      matchedLocalIds.add(byIdentity.id);
+      matchingPlans.push({ backupPlan, existingPlan: byIdentity, matchedBy: 'identity' });
+      continue;
+    }
+
+    newPlans.push(backupPlan);
+  }
+
+  const onlyLocalPlans = localPlans.filter((p) => !matchedLocalIds.has(p.id));
+  return { newPlans, matchingPlans, onlyLocalPlans };
+}
+
+export function computeMergedProgrammazioni(
+  localPlans: Programmazione[],
+  backupPlans: Programmazione[],
+  overwriteDuplicates: boolean
+): {
+  plansToPut: Programmazione[];
+  idsToDelete: string[];
+  mergedAll: Programmazione[];
+  addedPlans: number;
+  overwrittenPlans: number;
+  skippedPlans: number;
+  keptLocalPlans: number;
+} {
+  const analysis = analyzeBackupMerge(localPlans, backupPlans);
+  const plansToPut: Programmazione[] = [...analysis.newPlans];
+  const idsToDelete: string[] = [];
+
+  for (const pair of analysis.matchingPlans) {
+    if (overwriteDuplicates) {
+      if (pair.existingPlan.id !== pair.backupPlan.id) {
+        idsToDelete.push(pair.existingPlan.id);
+      }
+      plansToPut.push(pair.backupPlan);
+    }
+  }
+
+  const deleteSet = new Set(idsToDelete);
+  const putById = new Map(plansToPut.map((p) => [p.id, p]));
+  const mergedAll: Programmazione[] = [];
+  for (const local of localPlans) {
+    if (deleteSet.has(local.id)) continue;
+    mergedAll.push(putById.get(local.id) ?? local);
+  }
+  const localIds = new Set(localPlans.map((p) => p.id));
+  for (const added of plansToPut) {
+    if (!localIds.has(added.id)) {
+      mergedAll.push(added);
+    }
+  }
+
+  return {
+    plansToPut,
+    idsToDelete,
+    mergedAll,
+    addedPlans: analysis.newPlans.length,
+    overwrittenPlans: overwriteDuplicates ? analysis.matchingPlans.length : 0,
+    skippedPlans: overwriteDuplicates ? 0 : analysis.matchingPlans.length,
+    keptLocalPlans: analysis.onlyLocalPlans.length,
+  };
+}
+
+export function mergeItemsById<T extends { id: string }>(
+  localItems: T[],
+  backupItems: T[],
+  overwriteDuplicates: boolean
+): T[] {
+  const resultMap = new Map<string, T>();
+  for (const item of localItems) {
+    resultMap.set(item.id, item);
+  }
+  for (const item of backupItems) {
+    if (overwriteDuplicates || !resultMap.has(item.id)) {
+      resultMap.set(item.id, item);
+    }
+  }
+  return Array.from(resultMap.values());
 }

@@ -1,4 +1,8 @@
 import type {
+  BackupMergeOptions,
+  BackupRestoreResult,
+} from '../crypto/backupCrypto';
+import type {
   BackupPlainData,
   CurricoloCatalogEntry,
   DocxMappingSchema,
@@ -41,7 +45,10 @@ export interface PianoramaRepository {
   saveDocxMapping(mapping: DocxMappingSchema): Promise<void>;
   resetDefaultDocxMapping(): Promise<DocxMappingSchema>;
 
-  // Backup completo
+  // Backup completo o unione con archivio attuale
   exportAllData(): Promise<BackupPlainData>;
-  restoreAllData(data: BackupPlainData): Promise<void>;
+  restoreAllData(
+    data: BackupPlainData,
+    options?: BackupMergeOptions
+  ): Promise<BackupRestoreResult>;
 }

@@ -34,8 +34,11 @@ import {
   type SuggestionRule,
 } from '../domain/types';
 import {
+  analyzeBackupMerge,
+  computeMergedProgrammazioni,
   createBackupEnvelope,
   decryptBackupEnvelope,
+  mergeItemsById,
   parseBackupEnvelope,
 } from '../crypto/backupCrypto';
 import {
@@ -1679,6 +1682,129 @@ Utilizzare con sicurezza le tecniche di calcolo \\tab Eseguire espressioni con f
     expect(clip.html).not.toContain('OSSERVAZIONE_RISERVATA_DA_NON_ESPORTARE');
     expect(clip.plainText).toContain('Esposito Chiara');
     expect(clip.plainText).toContain('Alunni: 1\tAlunni: 1\tAlunni: 1\tAlunni: 1');
+  });
+
+  it('unisce un backup .pianorama conservando le nuove programmazioni e gestendo skip o sovrascrittura dei file uguali', () => {
+    const localMatchingById = createEmptyProgrammazione(DEFAULT_SCHOOL_SETTINGS, {
+      classe: 'Prima',
+      sezione: 'A',
+      disciplina: 'Italiano',
+      annoScolastico: '2026/27',
+    });
+    localMatchingById.analisiPartenza.descrizioneDisciplinare = 'VERSIONE_LOCALE_ID';
+
+    const localMatchingByIdentity = createEmptyProgrammazione(DEFAULT_SCHOOL_SETTINGS, {
+      classe: 'Seconda',
+      sezione: 'B',
+      disciplina: 'Storia',
+      annoScolastico: '2026/27',
+    });
+    localMatchingByIdentity.analisiPartenza.descrizioneDisciplinare = 'VERSIONE_LOCALE_STESSA_CLASSE';
+
+    const localNewer = createEmptyProgrammazione(DEFAULT_SCHOOL_SETTINGS, {
+      classe: 'Terza',
+      sezione: 'C',
+      disciplina: 'Geografia',
+      annoScolastico: '2026/27',
+    });
+    localNewer.analisiPartenza.descrizioneDisciplinare = 'NUOVA_LOCALE_DA_MANTENERE';
+
+    const backupSameId = {
+      ...localMatchingById,
+      analisiPartenza: {
+        ...localMatchingById.analisiPartenza,
+        descrizioneDisciplinare: 'VERSIONE_BACKUP_ID',
+      },
+    };
+    const backupSameIdentityDifferentId = createEmptyProgrammazione(DEFAULT_SCHOOL_SETTINGS, {
+      classe: 'Seconda',
+      sezione: 'B',
+      disciplina: 'Storia',
+      annoScolastico: '2026/27',
+    });
+    backupSameIdentityDifferentId.analisiPartenza.descrizioneDisciplinare =
+      'VERSIONE_BACKUP_STESSA_CLASSE';
+
+    const backupMissingLocally = createEmptyProgrammazione(DEFAULT_SCHOOL_SETTINGS, {
+      classe: 'Prima',
+      sezione: 'D',
+      disciplina: 'Matematica',
+      annoScolastico: '2026/27',
+    });
+    backupMissingLocally.analisiPartenza.descrizioneDisciplinare = 'NUOVA_DAL_BACKUP';
+
+    const localList = [localMatchingById, localMatchingByIdentity, localNewer];
+    const backupList = [backupSameId, backupSameIdentityDifferentId, backupMissingLocally];
+
+    const analysis = analyzeBackupMerge(localList, backupList);
+    expect(analysis.newPlans).toHaveLength(1);
+    expect(analysis.newPlans[0].id).toBe(backupMissingLocally.id);
+    expect(analysis.matchingPlans).toHaveLength(2);
+    expect(analysis.matchingPlans.map((m) => m.matchedBy)).toEqual(['id', 'identity']);
+    expect(analysis.onlyLocalPlans).toHaveLength(1);
+    expect(analysis.onlyLocalPlans[0].id).toBe(localNewer.id);
+
+    // 1) Unione mantenendo i file uguali attuali (skip)
+    const mergedSkip = computeMergedProgrammazioni(localList, backupList, false);
+    expect(mergedSkip.addedPlans).toBe(1);
+    expect(mergedSkip.overwrittenPlans).toBe(0);
+    expect(mergedSkip.skippedPlans).toBe(2);
+    expect(mergedSkip.keptLocalPlans).toBe(1);
+    expect(mergedSkip.mergedAll).toHaveLength(4);
+    expect(
+      mergedSkip.mergedAll.find((p) => p.id === localMatchingById.id)?.analisiPartenza
+        .descrizioneDisciplinare
+    ).toBe('VERSIONE_LOCALE_ID');
+    expect(
+      mergedSkip.mergedAll.find((p) => p.id === localNewer.id)?.analisiPartenza
+        .descrizioneDisciplinare
+    ).toBe('NUOVA_LOCALE_DA_MANTENERE');
+
+    // 2) Unione con sovrascrittura dei file uguali (overwrite) e nessun duplicato
+    const mergedOverwrite = computeMergedProgrammazioni(localList, backupList, true);
+    expect(mergedOverwrite.addedPlans).toBe(1);
+    expect(mergedOverwrite.overwrittenPlans).toBe(2);
+    expect(mergedOverwrite.keptLocalPlans).toBe(1);
+    expect(mergedOverwrite.idsToDelete).toEqual([localMatchingByIdentity.id]);
+    expect(mergedOverwrite.mergedAll).toHaveLength(4);
+    expect(
+      mergedOverwrite.mergedAll.find((p) => p.id === backupSameId.id)?.analisiPartenza
+        .descrizioneDisciplinare
+    ).toBe('VERSIONE_BACKUP_ID');
+    expect(
+      mergedOverwrite.mergedAll.find((p) => p.id === backupSameIdentityDifferentId.id)
+        ?.analisiPartenza.descrizioneDisciplinare
+    ).toBe('VERSIONE_BACKUP_STESSA_CLASSE');
+    expect(
+      mergedOverwrite.mergedAll.some((p) => p.id === localMatchingByIdentity.id)
+    ).toBe(false);
+    expect(
+      mergedOverwrite.mergedAll.find((p) => p.id === localNewer.id)?.analisiPartenza
+        .descrizioneDisciplinare
+    ).toBe('NUOVA_LOCALE_DA_MANTENERE');
+
+    // 3) Verifica merge generico per libreria/regole
+    const mergedIdsSkip = mergeItemsById(
+      [{ id: 'a', val: 'local' }, { id: 'localOnly', val: 'new' }],
+      [{ id: 'a', val: 'backup' }, { id: 'b', val: 'backupNew' }],
+      false
+    );
+    expect(mergedIdsSkip).toEqual([
+      { id: 'a', val: 'local' },
+      { id: 'localOnly', val: 'new' },
+      { id: 'b', val: 'backupNew' },
+    ]);
+
+    const mergedIdsOverwrite = mergeItemsById(
+      [{ id: 'a', val: 'local' }, { id: 'localOnly', val: 'new' }],
+      [{ id: 'a', val: 'backup' }, { id: 'b', val: 'backupNew' }],
+      true
+    );
+    expect(mergedIdsOverwrite).toEqual([
+      { id: 'a', val: 'backup' },
+      { id: 'localOnly', val: 'new' },
+      { id: 'b', val: 'backupNew' },
+    ]);
   });
 });
 
