@@ -18,6 +18,7 @@ import {
   FONTI_RILEVAZIONE_OPTIONS,
   formatDocenteConTitolo,
   formatFirmaDocente,
+  getCurricoloIntroNoteText,
   LIVELLI_CLASSE_OPTIONS,
   METODI_OPTIONS,
   MEZZI_INDIVIDUAZIONE_OPTIONS,
@@ -35,11 +36,10 @@ import {
   type Programmazione,
   type SchoolSettings,
 } from '../domain/types';
-import { getActiveDimensionsForDocument } from '../engine/classCharacteristicsEngine';
 import {
-  CURRICOLO_TYPE_LABELS,
-  CURRICOLO_TYPE_ORDER,
-} from '../engine/curricoloCatalogEngine';
+  buildUnifiedClassDescriptionText,
+  getStudentNamesByLevelBand,
+} from '../engine/classCharacteristicsEngine';
 import { buildClassCompositionIntro } from '../engine/questionnaireEngine';
 import {
   getSchoolBannerUint8Array,
@@ -391,12 +391,13 @@ export function createProgrammazioneDocument(
   const schoolNameText = settings.schoolName || mapping.institutionHeader.schoolName;
   const addressText = settings.schoolAddressLine || mapping.institutionHeader.addressLine;
   const contactsText = settings.schoolContactsLine || mapping.institutionHeader.contactsLine;
-  const activeCharacteristics = getActiveDimensionsForDocument(
-    plan.situazione.caratteristicheDimensioni,
-    settings.soglieQuoteCaratteristiche,
-    `${plan.id}|${plan.datiGenerali.classe}|${plan.datiGenerali.sezione}|${plan.datiGenerali.disciplina}`
-  );
   const compositionIntro = buildClassCompositionIntro(plan);
+  const unifiedClassDescription = buildUnifiedClassDescriptionText(
+    plan,
+    settings,
+    compositionIntro
+  );
+  const bandStudents = getStudentNamesByLevelBand(plan);
 
   const bannerTargetWidth = 580;
   const bannerRatioHeight = Math.round(
@@ -597,6 +598,8 @@ export function createProgrammazioneDocument(
         }),
       ];
 
+  const disabilitaCount = plan.composizione.disabilita ?? 0;
+
   const composizioneTable = isOriginal
     ? new Table({
         width: { size: 100, type: WidthType.PERCENTAGE },
@@ -605,16 +608,16 @@ export function createProgrammazioneDocument(
             cantSplit: true,
             children: [
               cell([pText(`Alunni: ${plan.composizione.alunni}`, { spaceBefore: 10, spaceAfter: 10 })], {
-                widthPct: 16,
+                widthPct: 14,
               }),
               cell([pText(`Maschi: ${plan.composizione.maschi}`, { spaceBefore: 10, spaceAfter: 10 })], {
-                widthPct: 16,
+                widthPct: 14,
               }),
               cell([pText(`Femmine: ${plan.composizione.femmine}`, { spaceBefore: 10, spaceAfter: 10 })], {
-                widthPct: 16,
+                widthPct: 14,
               }),
               cell([pText(`Ripetenti: ${plan.composizione.ripetenti}`, { spaceBefore: 10, spaceAfter: 10 })], {
-                widthPct: 17,
+                widthPct: 15,
               }),
               cell(
                 [
@@ -623,7 +626,16 @@ export function createProgrammazioneDocument(
                     spaceAfter: 10,
                   }),
                 ],
-                { widthPct: 35 }
+                { widthPct: 27 }
+              ),
+              cell(
+                [
+                  pText(`Con disabilità: ${disabilitaCount}`, {
+                    spaceBefore: 10,
+                    spaceAfter: 10,
+                  }),
+                ],
+                { widthPct: 16 }
               ),
             ],
           }),
@@ -636,13 +648,17 @@ export function createProgrammazioneDocument(
             cantSplit: true,
             tableHeader: true,
             children: [
-              cell([headerCellText('Alunni')], { header: true, widthPct: 18 }),
-              cell([headerCellText('Maschi')], { header: true, widthPct: 18 }),
-              cell([headerCellText('Femmine')], { header: true, widthPct: 18 }),
-              cell([headerCellText('Ripetenti')], { header: true, widthPct: 18 }),
+              cell([headerCellText('Alunni')], { header: true, widthPct: 15 }),
+              cell([headerCellText('Maschi')], { header: true, widthPct: 14 }),
+              cell([headerCellText('Femmine')], { header: true, widthPct: 14 }),
+              cell([headerCellText('Ripetenti')], { header: true, widthPct: 15 }),
               cell([headerCellText('Con Bisogni Educativi Speciali (BES)')], {
                 header: true,
-                widthPct: 28,
+                widthPct: 24,
+              }),
+              cell([headerCellText('Con disabilità')], {
+                header: true,
+                widthPct: 18,
               }),
             ],
           }),
@@ -654,6 +670,7 @@ export function createProgrammazioneDocument(
               cell([pText(String(plan.composizione.femmine), { align: AlignmentType.CENTER })]),
               cell([pText(String(plan.composizione.ripetenti), { align: AlignmentType.CENTER })]),
               cell([pText(String(plan.composizione.bes), { align: AlignmentType.CENTER, bold: true })]),
+              cell([pText(String(disabilitaCount), { align: AlignmentType.CENTER, bold: true })]),
             ],
           }),
         ],
@@ -764,6 +781,16 @@ export function createProgrammazioneDocument(
         ],
       });
 
+  const buildBandNamesCell = (names: string[]) => {
+    if (!bandStudents.hasAnyImportedStudents) {
+      return [pText(' ', { spaceAfter: 240 })];
+    }
+    if (names.length === 0) {
+      return [pText(' ', { spaceAfter: 40 })];
+    }
+    return names.map((name) => pText(name, { size: 18, spaceBefore: 10, spaceAfter: 15 }));
+  };
+
   const livelliTable = isOriginal
     ? new Table({
         width: { size: 92, type: WidthType.PERCENTAGE },
@@ -774,11 +801,11 @@ export function createProgrammazioneDocument(
               cell(
                 [
                   pText('Livello basso', { bold: true, spaceBefore: 10, spaceAfter: 10 }),
-                  pText('(voti inferiori alla sufficienza)', { size: 18, spaceBefore: 0, spaceAfter: 60 }),
+                  pText('(voti inferiori alla sufficienza)', { size: 18, spaceBefore: 0, spaceAfter: 40 }),
                   pText(`Alunni: ${plan.analisiPartenza.livelli.bassoAlunni}`, {
                     bold: true,
-                    spaceBefore: 40,
-                    spaceAfter: 180,
+                    spaceBefore: 20,
+                    spaceAfter: 40,
                   }),
                 ],
                 { widthPct: 25 }
@@ -786,11 +813,11 @@ export function createProgrammazioneDocument(
               cell(
                 [
                   pText('Livello medio/basso', { bold: true, spaceBefore: 10, spaceAfter: 10 }),
-                  pText('(voto 6)', { size: 18, spaceBefore: 0, spaceAfter: 60 }),
+                  pText('(voto 6)', { size: 18, spaceBefore: 0, spaceAfter: 40 }),
                   pText(`Alunni: ${plan.analisiPartenza.livelli.medioBassoAlunni}`, {
                     bold: true,
-                    spaceBefore: 40,
-                    spaceAfter: 180,
+                    spaceBefore: 20,
+                    spaceAfter: 40,
                   }),
                 ],
                 { widthPct: 25 }
@@ -798,11 +825,11 @@ export function createProgrammazioneDocument(
               cell(
                 [
                   pText('Livello medio', { bold: true, spaceBefore: 10, spaceAfter: 10 }),
-                  pText('(voti 7/8)', { size: 18, spaceBefore: 0, spaceAfter: 60 }),
+                  pText('(voti 7/8)', { size: 18, spaceBefore: 0, spaceAfter: 40 }),
                   pText(`Alunni: ${plan.analisiPartenza.livelli.medioAlunni}`, {
                     bold: true,
-                    spaceBefore: 40,
-                    spaceAfter: 180,
+                    spaceBefore: 20,
+                    spaceAfter: 40,
                   }),
                 ],
                 { widthPct: 25 }
@@ -810,15 +837,24 @@ export function createProgrammazioneDocument(
               cell(
                 [
                   pText('Livello alto', { bold: true, spaceBefore: 10, spaceAfter: 10 }),
-                  pText('(voti 9/ 10)', { size: 18, spaceBefore: 0, spaceAfter: 60 }),
+                  pText('(voti 9/ 10)', { size: 18, spaceBefore: 0, spaceAfter: 40 }),
                   pText(`Alunni: ${plan.analisiPartenza.livelli.altoAlunni}`, {
                     bold: true,
-                    spaceBefore: 40,
-                    spaceAfter: 180,
+                    spaceBefore: 20,
+                    spaceAfter: 40,
                   }),
                 ],
                 { widthPct: 25 }
               ),
+            ],
+          }),
+          new TableRow({
+            cantSplit: true,
+            children: [
+              cell(buildBandNamesCell(bandStudents.bands.basso), { widthPct: 25 }),
+              cell(buildBandNamesCell(bandStudents.bands.medio_basso), { widthPct: 25 }),
+              cell(buildBandNamesCell(bandStudents.bands.medio), { widthPct: 25 }),
+              cell(buildBandNamesCell(bandStudents.bands.alto), { widthPct: 25 }),
             ],
           }),
         ],
@@ -845,54 +881,66 @@ export function createProgrammazioneDocument(
               cell([pText(`Alunni: ${plan.analisiPartenza.livelli.altoAlunni}`, { align: AlignmentType.CENTER })]),
             ],
           }),
+          new TableRow({
+            cantSplit: true,
+            children: [
+              cell(buildBandNamesCell(bandStudents.bands.basso), { widthPct: 25 }),
+              cell(buildBandNamesCell(bandStudents.bands.medio_basso), { widthPct: 25 }),
+              cell(buildBandNamesCell(bandStudents.bands.medio), { widthPct: 25 }),
+              cell(buildBandNamesCell(bandStudents.bands.alto), { widthPct: 25 }),
+            ],
+          }),
         ],
       });
 
+  const resolvedCompetenze = plan.curricolo.competenzeAttese.length
+    ? plan.curricolo.competenzeAttese
+    : (plan.curricolo.vociCatalogoImportate ?? [])
+        .filter((v) => v.tipo === 'competenza' && v.testo.trim())
+        .map((v) => v.testo.trim());
+
   const curricoloCatalogParagraphs: Paragraph[] = [
-    ...(plan.curricolo.competenzeAttese.length
+    ...(resolvedCompetenze.length
       ? [
-          pText('Traguardi e competenze attese:', { bold: true, color: accentHex, keepNext: true }),
-          ...plan.curricolo.competenzeAttese.map((c) => pText(`• ${c}`, { spaceAfter: 25 })),
+          pText('Competenze:', { bold: true, color: accentHex, spaceBefore: 30, keepNext: true }),
+          ...resolvedCompetenze.map((c) => pText(`• ${c}`, { spaceAfter: 20 })),
         ]
       : []),
     ...(plan.curricolo.competenzeDigitali.length
       ? [
-          pText('Competenze digitali (DigComp 2.2) e trasversali:', {
+          pText('Competenze digitali:', {
             bold: true,
             color: accentHex,
+            spaceBefore: 30,
             keepNext: true,
           }),
-          ...plan.curricolo.competenzeDigitali.map((c) => pText(`• ${c}`, { spaceAfter: 25 })),
-        ]
-      : []),
-    ...(plan.curricolo.vociCatalogoImportate?.some((v) => v.testo.trim())
-      ? [
-          pText('Voci dal Curricolo Verticale:', {
-            bold: true,
-            color: accentHex,
-            spaceBefore: 60,
-            keepNext: true,
-          }),
-          ...CURRICOLO_TYPE_ORDER.flatMap((tipo) => {
-            const list = (plan.curricolo.vociCatalogoImportate ?? []).filter(
-              (v) => v.tipo === tipo && v.testo.trim()
-            );
-            if (!list.length) return [];
-            return [
-              pText(CURRICOLO_TYPE_LABELS[tipo], { bold: true, spaceAfter: 15 }),
-              ...list.map((v) => {
-                const nucleo = v.nucleoTematico ? `[${v.nucleoTematico}] ` : '';
-                const origin =
-                  v.classeOrigine !== plan.datiGenerali.classe
-                    ? ` (Provenienza: Classe ${v.classeOrigine})`
-                    : '';
-                return pText(`• ${nucleo}${v.testo}${origin}`, { spaceAfter: 20 });
-              }),
-            ];
-          }),
+          ...plan.curricolo.competenzeDigitali.map((c) => pText(`• ${c}`, { spaceAfter: 20 })),
         ]
       : []),
   ];
+
+  const leftCurricoloHeader =
+    (plan.curricolo.indicazioniVersione ?? 'vecchie') === 'nuove' ? 'OBIETTIVI' : 'ABILITÀ';
+  const notaIntroCurricolo = getCurricoloIntroNoteText(
+    plan.curricolo.notaIntroduttiva,
+    plan.curricolo.indicazioniVersione
+  );
+
+  const renderCurricoloCellParagraphs = (text: string, nucleoHint?: string) => {
+    const clean = (text ?? '').trim();
+    if (!clean) return [pText('—')];
+    const lines = clean.split('\n');
+    return lines.map((line, idx) => {
+      const trimmed = line.trim();
+      const isNucleoTitle =
+        idx === 0 &&
+        !trimmed.startsWith('•') &&
+        !trimmed.startsWith('-') &&
+        ((nucleoHint && trimmed.toLowerCase() === nucleoHint.trim().toLowerCase()) ||
+          lines.length > 1);
+      return pText(line, { bold: isNucleoTitle, spaceAfter: isNucleoTitle ? 25 : 20 });
+    });
+  };
 
   const curricoloSectionBlocks: (Paragraph | Table)[] = isOriginal
     ? [
@@ -927,7 +975,7 @@ export function createProgrammazioneDocument(
                     }),
                     ...curricoloCatalogParagraphs,
                   ],
-                  { columnSpan: 3, widthPct: 100 }
+                  { columnSpan: 2, widthPct: 100 }
                 ),
               ],
             }),
@@ -936,14 +984,14 @@ export function createProgrammazioneDocument(
               children: [
                 cell(
                   [
-                    pText(plan.curricolo.notaIntroduttiva, {
+                    pText(notaIntroCurricolo, {
                       italic: true,
                       align: AlignmentType.JUSTIFIED,
                       spaceBefore: 40,
                       spaceAfter: 40,
                     }),
                   ],
-                  { columnSpan: 3, widthPct: 100 }
+                  { columnSpan: 2, widthPct: 100 }
                 ),
               ],
             }),
@@ -951,12 +999,14 @@ export function createProgrammazioneDocument(
               cantSplit: true,
               tableHeader: true,
               children: [
-                cell([headerCellText('COMPETENZE', true, 'E6E6E6')], { header: true, widthPct: 30 }),
-                cell([headerCellText('ABILITÀ / OBIETTIVI', true, 'E6E6E6')], {
+                cell([headerCellText(leftCurricoloHeader, true, 'E6E6E6')], {
                   header: true,
-                  widthPct: 36,
+                  widthPct: 50,
                 }),
-                cell([headerCellText('CONOSCENZE', true, 'E6E6E6')], { header: true, widthPct: 34 }),
+                cell([headerCellText('CONOSCENZE', true, 'E6E6E6')], {
+                  header: true,
+                  widthPct: 50,
+                }),
               ],
             }),
             ...(plan.curricolo.righeAbilitaConoscenze.length
@@ -965,9 +1015,12 @@ export function createProgrammazioneDocument(
                     new TableRow({
                       cantSplit: true,
                       children: [
-                        cell(pMultiLine(row.competenze || row.traguardo || '—'), { widthPct: 30 }),
-                        cell(pMultiLine(row.abilita || '—'), { widthPct: 36 }),
-                        cell(pMultiLine(row.conoscenze || '—'), { widthPct: 34 }),
+                        cell(renderCurricoloCellParagraphs(row.abilita, row.traguardo), {
+                          widthPct: 50,
+                        }),
+                        cell(renderCurricoloCellParagraphs(row.conoscenze, row.traguardo), {
+                          widthPct: 50,
+                        }),
                       ],
                     })
                 )
@@ -975,9 +1028,8 @@ export function createProgrammazioneDocument(
                   new TableRow({
                     cantSplit: true,
                     children: [
-                      cell([pText(' ', { spaceAfter: 360 })], { widthPct: 30 }),
-                      cell([pText(' ', { spaceAfter: 360 })], { widthPct: 36 }),
-                      cell([pText(' ', { spaceAfter: 360 })], { widthPct: 34 }),
+                      cell([pText(' ', { spaceAfter: 360 })], { widthPct: 50 }),
+                      cell([pText(' ', { spaceAfter: 360 })], { widthPct: 50 }),
                     ],
                   }),
                 ]),
@@ -995,8 +1047,8 @@ export function createProgrammazioneDocument(
           'TRAGUARDI PER LO SVILUPPO DELLE COMPETENZE IN RELAZIONE AL CURRICOLO VERTICALE DEL NOSTRO ISTITUTO',
           { boxed: false }
         ),
-        pText(plan.curricolo.notaIntroduttiva, { italic: true }),
         ...curricoloCatalogParagraphs,
+        pText(notaIntroCurricolo, { italic: true, spaceBefore: 40 }),
         new Table({
           width: { size: 100, type: WidthType.PERCENTAGE },
           rows: [
@@ -1004,9 +1056,8 @@ export function createProgrammazioneDocument(
               cantSplit: true,
               tableHeader: true,
               children: [
-                cell([headerCellText('COMPETENZE', false)], { header: true, widthPct: 34 }),
-                cell([headerCellText('ABILITÀ / OBIETTIVI', false)], { header: true, widthPct: 33 }),
-                cell([headerCellText('CONOSCENZE (CONTENUTI)', false)], { header: true, widthPct: 33 }),
+                cell([headerCellText(leftCurricoloHeader, false)], { header: true, widthPct: 50 }),
+                cell([headerCellText('CONOSCENZE', false)], { header: true, widthPct: 50 }),
               ],
             }),
             ...(plan.curricolo.righeAbilitaConoscenze.length
@@ -1015,9 +1066,12 @@ export function createProgrammazioneDocument(
                     new TableRow({
                       cantSplit: true,
                       children: [
-                        cell(pMultiLine(row.competenze || row.traguardo || '—')),
-                        cell(pMultiLine(row.abilita || '—')),
-                        cell(pMultiLine(row.conoscenze || '—')),
+                        cell(renderCurricoloCellParagraphs(row.abilita, row.traguardo), {
+                          widthPct: 50,
+                        }),
+                        cell(renderCurricoloCellParagraphs(row.conoscenze, row.traguardo), {
+                          widthPct: 50,
+                        }),
                       ],
                     })
                 )
@@ -1025,8 +1079,7 @@ export function createProgrammazioneDocument(
                   new TableRow({
                     cantSplit: true,
                     children: [
-                      cell([pText('Nessuna competenza inserita.', { italic: true })]),
-                      cell([pText('Nessuna abilità inserita.', { italic: true })]),
+                      cell([pText('Nessuna voce inserita.', { italic: true })]),
                       cell([pText('Nessuna conoscenza inserita.', { italic: true })]),
                     ],
                   }),
@@ -1052,40 +1105,6 @@ export function createProgrammazioneDocument(
     // SITUAZIONE DELLA CLASSE
     sectionBanner('SITUAZIONE DELLA CLASSE', { highlightE6: isOriginal }),
     situazioneTable,
-    ...(activeCharacteristics.length > 0 || !isOriginal
-      ? [
-          pText('Presentazione e caratteristiche della classe:', {
-            bold: true,
-            color: accentHex,
-            spaceBefore: 80,
-            spaceAfter: 30,
-            keepNext: true,
-          }),
-          pText(compositionIntro, { spaceAfter: 40, align: isOriginal ? AlignmentType.JUSTIFIED : AlignmentType.LEFT }),
-          ...activeCharacteristics.map(
-            (item) =>
-              new Paragraph({
-                alignment: isOriginal ? AlignmentType.JUSTIFIED : AlignmentType.LEFT,
-                spacing: { before: 15, after: 40 },
-                children: [
-                  new TextRun({
-                    text: `${item.nome}: `,
-                    font,
-                    size: bodySize,
-                    bold: true,
-                    color: accentHex,
-                  }),
-                  new TextRun({
-                    text: item.testo,
-                    font,
-                    size: bodySize,
-                    color: isOriginal ? '000000' : '1E293B',
-                  }),
-                ],
-              })
-          ),
-        ]
-      : []),
 
     // ANALISI DELLA SITUAZIONE DI PARTENZA
     sectionBanner('ANALISI DELLA SITUAZIONE DI PARTENZA', { center: false }),
@@ -1106,8 +1125,8 @@ export function createProgrammazioneDocument(
               new TextRun({ text: ':', font, size: bodySize, color: '000000' }),
             ],
           }),
-          ...(plan.analisiPartenza.descrizioneDisciplinare.trim()
-            ? pMultiLine(`1. ${plan.analisiPartenza.descrizioneDisciplinare.trim()}`, {
+          ...(unifiedClassDescription
+            ? pMultiLine(`1. ${unifiedClassDescription}`, {
                 align: AlignmentType.JUSTIFIED,
                 spaceAfter: 80,
               })
@@ -1121,7 +1140,7 @@ export function createProgrammazioneDocument(
             keepNext: true,
           }),
           ...pMultiLine(
-            plan.analisiPartenza.descrizioneDisciplinare.trim() ||
+            unifiedClassDescription ||
               `${compositionIntro} Descrizione sintetica non ancora compilata.`,
             { spaceAfter: 100 }
           ),

@@ -444,7 +444,7 @@ export function DocumentImportReviewModal({
               </label>
             </div>
 
-            <div className="grid grid-cols-5 gap-2 pt-1 text-xs">
+            <div className="grid grid-cols-3 gap-2 pt-1 text-xs sm:grid-cols-6">
               {(
                 [
                   ['alunni', 'Alunni'],
@@ -452,6 +452,7 @@ export function DocumentImportReviewModal({
                   ['femmine', 'Femmine'],
                   ['ripetenti', 'Ripetenti'],
                   ['bes', 'BES'],
+                  ['disabilita', 'Con disabilità'],
                 ] as const
               ).map(([fieldKey, label]) => (
                 <label key={fieldKey} className="block">
@@ -459,7 +460,7 @@ export function DocumentImportReviewModal({
                   <input
                     type="number"
                     min={0}
-                    value={draftPlan.composizione[fieldKey]}
+                    value={draftPlan.composizione[fieldKey] ?? 0}
                     onChange={(e) => {
                       const val = Math.max(0, Number(e.target.value) || 0);
                       setDraftPlan((prev) =>
@@ -606,21 +607,29 @@ export function DocumentImportReviewModal({
                         </button>
                       </div>
                     </div>
-                    <div className="grid gap-2 sm:grid-cols-3">
+                    <div
+                      className={`grid gap-2 ${
+                        row.competenze?.trim() ? 'sm:grid-cols-3' : 'sm:grid-cols-2'
+                      }`}
+                    >
+                      {row.competenze?.trim() && (
+                        <label className="block text-[11px]">
+                          <span className="font-medium text-slate-600 dark:text-slate-400">
+                            Competenze / Nucleo
+                          </span>
+                          <textarea
+                            rows={2}
+                            value={row.competenze ?? ''}
+                            onChange={(e) => updateRowField(idx, 'competenze', e.target.value)}
+                            className="mt-0.5 w-full rounded border border-slate-300 bg-white p-1.5 text-xs dark:border-slate-700 dark:bg-slate-900"
+                          />
+                        </label>
+                      )}
                       <label className="block text-[11px]">
                         <span className="font-medium text-slate-600 dark:text-slate-400">
-                          Competenze / Nucleo
-                        </span>
-                        <textarea
-                          rows={2}
-                          value={row.competenze ?? ''}
-                          onChange={(e) => updateRowField(idx, 'competenze', e.target.value)}
-                          className="mt-0.5 w-full rounded border border-slate-300 bg-white p-1.5 text-xs dark:border-slate-700 dark:bg-slate-900"
-                        />
-                      </label>
-                      <label className="block text-[11px]">
-                        <span className="font-medium text-slate-600 dark:text-slate-400">
-                          Abilità / Obiettivi
+                          {draftPlan.curricolo.indicazioniVersione === 'nuove'
+                            ? 'Obiettivi'
+                            : 'Abilità / Obiettivi'}
                         </span>
                         <textarea
                           rows={2}

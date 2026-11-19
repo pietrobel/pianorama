@@ -35,7 +35,11 @@ interface FasceLivelloBoardProps {
   soglie: SoglieFasce;
   classeRilevata?: string;
   onChangeEntries: (next: AnonymousStudentBandEntry[]) => void;
-  onSyncComposizione?: (totaleAlunni: number, totaleBes: number) => void;
+  onSyncComposizione?: (
+    totaleAlunni: number,
+    totaleBes: number,
+    totaleDisabilita?: number
+  ) => void;
 }
 
 const BAND_ORDER: FasciaLivelloKey[] = [
@@ -132,8 +136,14 @@ export function FasceLivelloBoard({
   const livelli = computeLivelliFromStudents(entries);
   const daVerificareCount = entries.filter((e) => e.fasciaCorrente === 'da_verificare').length;
   const movedCount = entries.filter((e) => e.spostatoDalDocente).length;
+  const disabilitaCount = entries.filter(
+    (e) => e.categoriaInclusione === 'disabilita_pei'
+  ).length;
   const besCount = entries.filter(
-    (e) => e.categoriaInclusione && e.categoriaInclusione !== 'nessuno'
+    (e) =>
+      e.categoriaInclusione &&
+      e.categoriaInclusione !== 'nessuno' &&
+      e.categoriaInclusione !== 'disabilita_pei'
   ).length;
 
   const formatMedia = (m: number | null) =>
@@ -228,11 +238,11 @@ export function FasceLivelloBoard({
           {onSyncComposizione && entries.length > 0 && (
             <button
               type="button"
-              onClick={() => onSyncComposizione(entries.length, besCount)}
+              onClick={() => onSyncComposizione(entries.length, besCount, disabilitaCount)}
               className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
             >
               <Users className="h-3.5 w-3.5" />
-              Aggiorna Composizione ({entries.length} / {besCount} BES)
+              Aggiorna Composizione ({entries.length} / {besCount} BES / {disabilitaCount} Dis.)
             </button>
           )}
 
@@ -255,13 +265,13 @@ export function FasceLivelloBoard({
         >
           <label className="block">
             <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Cognome (solo locale, opzionale)
+              Nome e cognome (opzionale)
             </span>
             <input
               type="text"
               value={newNome}
               onChange={(e) => setNewNome(e.target.value)}
-              placeholder="es. Rossi"
+              placeholder="es. Rossi Mario"
               className="mt-1 w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-950"
             />
           </label>
@@ -357,7 +367,7 @@ export function FasceLivelloBoard({
       )}
 
       <p className="text-xs text-slate-500 dark:text-slate-400">
-        Tutti i nominativi e le note sensibili restano solo su questo dispositivo. Nei documenti DOCX e PDF ufficiali vengono esportati esclusivamente i conteggi aggregati per fascia. Puoi spostare ogni alunno con il menu, il trascinamento o da tastiera (Spazio/Invio + Frecce).
+        Medie dei voti, classificazioni BES/DSA/PEI e note sensibili restano solo su questo dispositivo. Nei documenti DOCX e PDF ufficiali vengono riportati i conteggi aggregati e, se presenti, i nominativi nella riga dedicata della tabella Livelli di partenza. Puoi spostare ogni alunno con il menu, il trascinamento o da tastiera (Spazio/Invio + Frecce).
       </p>
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">

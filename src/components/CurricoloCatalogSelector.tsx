@@ -94,10 +94,26 @@ export function CurricoloCatalogSelector({
     return base;
   }, [catalog, planDisciplina]);
 
-  const targetEntries = useMemo(
-    () => filterCatalogEntries(catalog, selectedClasse, selectedDisciplina, selectedIndicazioni),
-    [catalog, selectedClasse, selectedDisciplina, selectedIndicazioni]
-  );
+  const targetEntries = useMemo(() => {
+    const filtered = filterCatalogEntries(
+      catalog,
+      selectedClasse,
+      selectedDisciplina,
+      selectedIndicazioni
+    );
+    if (
+      selectedIndicazioni === 'vecchie' &&
+      !filtered.some((e) => e.tipo === 'competenza')
+    ) {
+      const compEntries = filterCatalogEntries(
+        catalog,
+        selectedClasse,
+        selectedDisciplina
+      ).filter((e) => e.tipo === 'competenza');
+      return [...compEntries, ...filtered];
+    }
+    return filtered;
+  }, [catalog, selectedClasse, selectedDisciplina, selectedIndicazioni]);
 
   const alternateIndicazioni: IndicazioniVersion =
     selectedIndicazioni === 'nuove' ? 'vecchie' : 'nuove';

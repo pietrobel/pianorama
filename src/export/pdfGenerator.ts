@@ -3,6 +3,7 @@ import {
   FONTI_RILEVAZIONE_OPTIONS,
   formatDocenteConTitolo,
   formatFirmaDocente,
+  getCurricoloIntroNoteText,
   LIVELLI_CLASSE_OPTIONS,
   METODI_OPTIONS,
   MEZZI_INDIVIDUAZIONE_OPTIONS,
@@ -21,11 +22,10 @@ import {
   type Programmazione,
   type SchoolSettings,
 } from '../domain/types';
-import { getActiveDimensionsForDocument } from '../engine/classCharacteristicsEngine';
 import {
-  CURRICOLO_TYPE_LABELS,
-  CURRICOLO_TYPE_ORDER,
-} from '../engine/curricoloCatalogEngine';
+  buildUnifiedClassDescriptionText,
+  getStudentNamesByLevelBand,
+} from '../engine/classCharacteristicsEngine';
 import { buildClassCompositionIntro } from '../engine/questionnaireEngine';
 import { buildDocxFilename } from './docxGenerator';
 import {
@@ -539,15 +539,17 @@ export function generateProgrammazionePdfBytes(
   // =========================================================================
   // COMPOSIZIONE DELLA CLASSE
   // =========================================================================
+  const disabilitaCount = plan.composizione.disabilita ?? 0;
   drawSectionHeading('COMPOSIZIONE DELLA CLASSE', { highlightE6: isOriginal });
   if (isOriginal) {
-    ensureSpace(12);
+    ensureSpace(14);
     const wArr = [
+      contentWidth * 0.14,
+      contentWidth * 0.14,
+      contentWidth * 0.14,
+      contentWidth * 0.15,
+      contentWidth * 0.27,
       contentWidth * 0.16,
-      contentWidth * 0.16,
-      contentWidth * 0.16,
-      contentWidth * 0.17,
-      contentWidth * 0.35,
     ];
     const labels = [
       `Alunni: ${plan.composizione.alunni}`,
@@ -555,13 +557,14 @@ export function generateProgrammazionePdfBytes(
       `Femmine: ${plan.composizione.femmine}`,
       `Ripetenti: ${plan.composizione.ripetenti}`,
       `Con Bisogni Educativi Speciali (BES): ${plan.composizione.bes}`,
+      `Con disabilità: ${disabilitaCount}`,
     ];
-    const boxH = 9.5;
+    const boxH = 10;
     let cx = marginX;
     doc.setDrawColor(0, 0, 0);
     doc.setLineWidth(0.3);
     doc.setFont(fontFamily, 'normal');
-    doc.setFontSize(9.5);
+    doc.setFontSize(9.2);
     doc.setTextColor(0, 0, 0);
     for (let i = 0; i < wArr.length; i++) {
       doc.rect(cx, y, wArr[i], boxH);
@@ -573,18 +576,19 @@ export function generateProgrammazionePdfBytes(
   } else {
     ensureSpace(14);
     const compCols = [
-      { label: 'Alunni', val: String(plan.composizione.alunni), w: 30 },
-      { label: 'Maschi', val: String(plan.composizione.maschi), w: 30 },
-      { label: 'Femmine', val: String(plan.composizione.femmine), w: 30 },
-      { label: 'Ripetenti', val: String(plan.composizione.ripetenti), w: 30 },
-      { label: 'Con BES', val: String(plan.composizione.bes), w: contentWidth - 120 },
+      { label: 'Alunni', val: String(plan.composizione.alunni), w: 24 },
+      { label: 'Maschi', val: String(plan.composizione.maschi), w: 24 },
+      { label: 'Femmine', val: String(plan.composizione.femmine), w: 24 },
+      { label: 'Ripetenti', val: String(plan.composizione.ripetenti), w: 24 },
+      { label: 'Con BES', val: String(plan.composizione.bes), w: contentWidth - 128 },
+      { label: 'Con disabilità', val: String(disabilitaCount), w: 32 },
     ];
     let cx = marginX;
     for (const col of compCols) {
       doc.setFillColor(accR, accG, accB);
       doc.rect(cx, y, col.w, 6, 'F');
       doc.setFont(fontFamily, 'bold');
-      doc.setFontSize(9.5);
+      doc.setFontSize(9);
       doc.setTextColor(255, 255, 255);
       doc.text(col.label, cx + col.w / 2, y + 4.2, { align: 'center' });
 
@@ -710,22 +714,12 @@ export function generateProgrammazionePdfBytes(
   }
 
   const compositionIntro = buildClassCompositionIntro(plan);
-  const activeCharacteristics = getActiveDimensionsForDocument(
-    plan.situazione.caratteristicheDimensioni,
-    settings.soglieQuoteCaratteristiche,
-    `${plan.id}|${plan.datiGenerali.classe}|${plan.datiGenerali.sezione}|${plan.datiGenerali.disciplina}`
+  const unifiedClassDescription = buildUnifiedClassDescriptionText(
+    plan,
+    settings,
+    compositionIntro
   );
-  if (activeCharacteristics.length > 0 || !isOriginal) {
-    drawParagraph('Presentazione e caratteristiche della classe:', {
-      bold: true,
-      size: 10,
-      color: [accR, accG, accB],
-    });
-    drawParagraph(compositionIntro, { size: 10 });
-    for (const item of activeCharacteristics) {
-      drawParagraph(`${item.nome}: ${item.testo}`, { size: 10 });
-    }
-  }
+  const bandStudents = getStudentNamesByLevelBand(plan);
 
   // =========================================================================
   // ANALISI DELLA SITUAZIONE DI PARTENZA
@@ -737,8 +731,8 @@ export function generateProgrammazionePdfBytes(
       underlined: true,
       size: 9.8,
     });
-    if (plan.analisiPartenza.descrizioneDisciplinare.trim()) {
-      drawParagraph(`1. ${plan.analisiPartenza.descrizioneDisciplinare.trim()}`, {
+    if (unifiedClassDescription) {
+      drawParagraph(`1. ${unifiedClassDescription}`, {
         size: 10,
         align: 'justify',
       });
@@ -747,35 +741,50 @@ export function generateProgrammazionePdfBytes(
     }
     drawParagraph('2. Livelli di partenza rilevati', { bold: true, size: 10, spaceAfter: 2 });
 
-    ensureSpace(32);
     const boxW = (contentWidth * 0.92) / 4;
-    const boxH = 26;
-    const livelliBoxes = [
+    const boxH = 22;
+    const livelliBoxes: { title: string; sub: string; val: number; names: string[] }[] = [
       {
         title: 'Livello basso',
         sub: '(voti inferiori alla sufficienza)',
         val: plan.analisiPartenza.livelli.bassoAlunni,
+        names: bandStudents.bands.basso,
       },
       {
         title: 'Livello medio/basso',
         sub: '(voto 6)',
         val: plan.analisiPartenza.livelli.medioBassoAlunni,
+        names: bandStudents.bands.medio_basso,
       },
       {
         title: 'Livello medio',
         sub: '(voti 7/8)',
         val: plan.analisiPartenza.livelli.medioAlunni,
+        names: bandStudents.bands.medio,
       },
       {
         title: 'Livello alto',
         sub: '(voti 9/ 10)',
         val: plan.analisiPartenza.livelli.altoAlunni,
+        names: bandStudents.bands.alto,
       },
     ];
+
+    doc.setFont(fontFamily, 'normal');
+    doc.setFontSize(8.5);
+    const wrappedNameCols = livelliBoxes.map((b) => {
+      if (!bandStudents.hasAnyImportedStudents) return [] as string[];
+      return b.names.flatMap((n) => doc.splitTextToSize(pdfSafeText(n), boxW - 4) as string[]);
+    });
+    const maxNameLines = Math.max(0, ...wrappedNameCols.map((c) => c.length));
+    const namesRowH = bandStudents.hasAnyImportedStudents ? Math.max(8, maxNameLines * 3.6 + 4) : 10;
+
+    ensureSpace(boxH + namesRowH + 6);
     let lx = marginX;
     doc.setDrawColor(0, 0, 0);
     doc.setLineWidth(0.3);
-    for (const lb of livelliBoxes) {
+    for (let i = 0; i < livelliBoxes.length; i++) {
+      const lb = livelliBoxes[i];
       doc.rect(lx, y, boxW, boxH);
       doc.setFont(fontFamily, 'bold');
       doc.setFontSize(9.5);
@@ -788,9 +797,16 @@ export function generateProgrammazionePdfBytes(
       doc.setFont(fontFamily, 'bold');
       doc.setFontSize(9.5);
       doc.text(`Alunni: ${lb.val}`, lx + 2, y + 17.5);
+
+      doc.rect(lx, y + boxH, boxW, namesRowH);
+      if (wrappedNameCols[i].length > 0) {
+        doc.setFont(fontFamily, 'normal');
+        doc.setFontSize(8.5);
+        doc.text(wrappedNameCols[i], lx + 2, y + boxH + 4);
+      }
       lx += boxW;
     }
-    y += boxH + 4;
+    y += boxH + namesRowH + 4;
   } else {
     drawParagraph('SITUAZIONE DI PARTENZA DEGLI ALUNNI IN RELAZIONE ALLA DISCIPLINA:', {
       bold: true,
@@ -798,13 +814,52 @@ export function generateProgrammazionePdfBytes(
       color: [accR, accG, accB],
     });
     drawParagraph(
-      plan.analisiPartenza.descrizioneDisciplinare.trim() ||
+      unifiedClassDescription ||
         `${compositionIntro} Descrizione sintetica non ancora compilata.`
     );
-    drawParagraph(
-      `Livelli rilevati - Basso: ${plan.analisiPartenza.livelli.bassoAlunni} alunni | Medio/basso: ${plan.analisiPartenza.livelli.medioBassoAlunni} alunni | Medio: ${plan.analisiPartenza.livelli.medioAlunni} alunni | Alto: ${plan.analisiPartenza.livelli.altoAlunni} alunni`,
-      { bold: true, size: 10, color: [accR, accG, accB] }
+    const boxW = contentWidth / 4;
+    const headers = [
+      `Basso: ${plan.analisiPartenza.livelli.bassoAlunni}`,
+      `Medio/basso: ${plan.analisiPartenza.livelli.medioBassoAlunni}`,
+      `Medio: ${plan.analisiPartenza.livelli.medioAlunni}`,
+      `Alto: ${plan.analisiPartenza.livelli.altoAlunni}`,
+    ];
+    const nameLists = [
+      bandStudents.bands.basso,
+      bandStudents.bands.medio_basso,
+      bandStudents.bands.medio,
+      bandStudents.bands.alto,
+    ];
+    doc.setFont(fontFamily, 'normal');
+    doc.setFontSize(8.5);
+    const wrappedNameCols = nameLists.map((list) =>
+      bandStudents.hasAnyImportedStudents
+        ? list.flatMap((n) => doc.splitTextToSize(pdfSafeText(n), boxW - 4) as string[])
+        : ([] as string[])
     );
+    const maxNameLines = Math.max(0, ...wrappedNameCols.map((c) => c.length));
+    const namesRowH = bandStudents.hasAnyImportedStudents ? Math.max(8, maxNameLines * 3.6 + 4) : 9;
+    ensureSpace(10 + namesRowH + 4);
+    let lx = marginX;
+    for (let i = 0; i < 4; i++) {
+      doc.setFillColor(accR, accG, accB);
+      doc.rect(lx, y, boxW, 6, 'F');
+      doc.setFont(fontFamily, 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(255, 255, 255);
+      doc.text(headers[i], lx + boxW / 2, y + 4.2, { align: 'center' });
+
+      doc.setDrawColor(180, 195, 210);
+      doc.rect(lx, y + 6, boxW, namesRowH);
+      if (wrappedNameCols[i].length > 0) {
+        doc.setFont(fontFamily, 'normal');
+        doc.setFontSize(8.5);
+        doc.setTextColor(15, 23, 42);
+        doc.text(wrappedNameCols[i], lx + 2, y + 10);
+      }
+      lx += boxW;
+    }
+    y += 6 + namesRowH + 4;
   }
 
   drawParagraph('FONTI DI RILEVAZIONE DEI DATI', {
@@ -953,6 +1008,18 @@ export function generateProgrammazionePdfBytes(
   // =========================================================================
   // TRAGUARDI / CURRICOLO / COMPETENZE / ABILITÀ / CONOSCENZE
   // =========================================================================
+  const resolvedCompetenze = plan.curricolo.competenzeAttese.length
+    ? plan.curricolo.competenzeAttese
+    : (plan.curricolo.vociCatalogoImportate ?? [])
+        .filter((v) => v.tipo === 'competenza' && v.testo.trim())
+        .map((v) => v.testo.trim());
+  const leftCurricoloHeader =
+    (plan.curricolo.indicazioniVersione ?? 'vecchie') === 'nuove' ? 'OBIETTIVI' : 'ABILITA';
+  const notaIntroCurricolo = getCurricoloIntroNoteText(
+    plan.curricolo.notaIntroduttiva,
+    plan.curricolo.indicazioniVersione
+  );
+
   if (isOriginal) {
     ensureSpace(28);
     // Cella introduttiva unificata del blocco Curricolo
@@ -971,55 +1038,37 @@ export function generateProgrammazionePdfBytes(
     doc.text(titleLines, marginX + 2, y + 5);
     y += topCellH;
 
+    if (resolvedCompetenze.length) {
+      drawParagraph('Competenze:', { bold: true, size: 9.8, spaceAfter: 1 });
+      for (const c of resolvedCompetenze) {
+        drawParagraph(`- ${c}`, { size: 9.5, spaceAfter: 1 });
+      }
+    }
+    if (plan.curricolo.competenzeDigitali.length) {
+      drawParagraph('Competenze digitali:', { bold: true, size: 9.8, spaceAfter: 1 });
+      for (const c of plan.curricolo.competenzeDigitali) {
+        drawParagraph(`- ${c}`, { size: 9.5, spaceAfter: 1 });
+      }
+    }
+
     doc.setFont(fontFamily, 'italic');
     doc.setFontSize(9.5);
-    const notaLines = doc.splitTextToSize(pdfSafeText(plan.curricolo.notaIntroduttiva), contentWidth - 4);
+    const notaLines = doc.splitTextToSize(pdfSafeText(notaIntroCurricolo), contentWidth - 4);
     const notaH = notaLines.length * 4.1 + 4;
     ensureSpace(notaH);
     doc.rect(marginX, y, contentWidth, notaH);
     doc.text(notaLines, marginX + 2, y + 4.5);
     y += notaH;
 
-    if (plan.curricolo.competenzeAttese.length) {
-      drawParagraph('Traguardi e competenze attese:', { bold: true, size: 10 });
-      for (const c of plan.curricolo.competenzeAttese) {
-        drawParagraph(`- ${c}`, { size: 9.5, spaceAfter: 1 });
-      }
-    }
-    if (plan.curricolo.competenzeDigitali.length) {
-      drawParagraph('Competenze digitali (DigComp 2.2):', { bold: true, size: 10 });
-      for (const c of plan.curricolo.competenzeDigitali) {
-        drawParagraph(`- ${c}`, { size: 9.5, spaceAfter: 1 });
-      }
-    }
-    if (plan.curricolo.vociCatalogoImportate?.some((v) => v.testo.trim())) {
-      drawParagraph('Voci dal Curricolo Verticale:', { bold: true, size: 10 });
-      for (const tipo of CURRICOLO_TYPE_ORDER) {
-        const list = (plan.curricolo.vociCatalogoImportate ?? []).filter(
-          (v) => v.tipo === tipo && v.testo.trim()
-        );
-        if (!list.length) continue;
-        drawParagraph(CURRICOLO_TYPE_LABELS[tipo], { bold: true, size: 9.2, spaceAfter: 0.8 });
-        for (const v of list) {
-          const nucleo = v.nucleoTematico ? `[${v.nucleoTematico}] ` : '';
-          const origin =
-            v.classeOrigine !== plan.datiGenerali.classe
-              ? ` (Provenienza: Classe ${v.classeOrigine})`
-              : '';
-          drawParagraph(`- ${nucleo}${v.testo}${origin}`, { size: 9.2, spaceAfter: 0.8 });
-        }
-      }
-    }
-
-    drawThreeColRow('COMPETENZE', 'ABILITA / OBIETTIVI', 'CONOSCENZE', { isHeader: true });
+    drawTwoColRow(leftCurricoloHeader, 'CONOSCENZE', leftCurricoloHeader, { isHeader: true });
     if (plan.curricolo.righeAbilitaConoscenze.length) {
       for (const row of plan.curricolo.righeAbilitaConoscenze) {
-        drawThreeColRow(row.competenze || row.traguardo || '-', row.abilita, row.conoscenze, {
+        drawTwoColRow(row.abilita, row.conoscenze, leftCurricoloHeader, {
           repeatHeaderOnBreak: true,
         });
       }
     } else {
-      drawThreeColRow(' ', ' ', ' ');
+      drawTwoColRow(' ', ' ', leftCurricoloHeader);
     }
     y += 3;
   } else {
@@ -1027,51 +1076,29 @@ export function generateProgrammazionePdfBytes(
       'TRAGUARDI PER LO SVILUPPO DELLE COMPETENZE IN RELAZIONE AL CURRICOLO VERTICALE DEL NOSTRO ISTITUTO',
       { boxed: false }
     );
-    drawParagraph(plan.curricolo.notaIntroduttiva, { italic: true });
-    if (plan.curricolo.competenzeAttese.length) {
-      drawParagraph('Traguardi e competenze attese:', { bold: true, size: 10, color: [accR, accG, accB] });
-      for (const c of plan.curricolo.competenzeAttese) {
+    if (resolvedCompetenze.length) {
+      drawParagraph('Competenze:', { bold: true, size: 10, color: [accR, accG, accB] });
+      for (const c of resolvedCompetenze) {
         drawParagraph(`- ${c}`);
       }
     }
     if (plan.curricolo.competenzeDigitali.length) {
-      drawParagraph('Competenze digitali (DigComp 2.2):', { bold: true, size: 10, color: [accR, accG, accB] });
+      drawParagraph('Competenze digitali:', { bold: true, size: 10, color: [accR, accG, accB] });
       for (const c of plan.curricolo.competenzeDigitali) {
         drawParagraph(`- ${c}`);
       }
     }
-    if (plan.curricolo.vociCatalogoImportate?.some((v) => v.testo.trim())) {
-      drawParagraph('Voci importate dal Curricolo Verticale:', {
-        bold: true,
-        size: 10,
-        color: [accR, accG, accB],
-      });
-      for (const tipo of CURRICOLO_TYPE_ORDER) {
-        const list = (plan.curricolo.vociCatalogoImportate ?? []).filter(
-          (v) => v.tipo === tipo && v.testo.trim()
-        );
-        if (!list.length) continue;
-        drawParagraph(CURRICOLO_TYPE_LABELS[tipo], { bold: true, size: 9.5 });
-        for (const v of list) {
-          const nucleo = v.nucleoTematico ? `[${v.nucleoTematico}] ` : '';
-          const origin =
-            v.classeOrigine !== plan.datiGenerali.classe
-              ? ` (Provenienza: Classe ${v.classeOrigine})`
-              : '';
-          drawParagraph(`- ${nucleo}${v.testo}${origin}`);
-        }
-      }
-    }
+    drawParagraph(notaIntroCurricolo, { italic: true });
     y += 1.5;
-    drawThreeColRow('COMPETENZE', 'ABILITA / OBIETTIVI', 'CONOSCENZE (CONTENUTI)', { isHeader: true });
+    drawTwoColRow(leftCurricoloHeader, 'CONOSCENZE', leftCurricoloHeader, { isHeader: true });
     if (plan.curricolo.righeAbilitaConoscenze.length) {
       for (const row of plan.curricolo.righeAbilitaConoscenze) {
-        drawThreeColRow(row.competenze || row.traguardo || '-', row.abilita, row.conoscenze, {
+        drawTwoColRow(row.abilita, row.conoscenze, leftCurricoloHeader, {
           repeatHeaderOnBreak: true,
         });
       }
     } else {
-      drawThreeColRow('-', 'Nessuna abilità inserita.', 'Nessuna conoscenza inserita.');
+      drawTwoColRow('Nessuna voce inserita.', 'Nessuna conoscenza inserita.', leftCurricoloHeader);
     }
     y += 2;
   }

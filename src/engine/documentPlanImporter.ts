@@ -19,8 +19,11 @@ import {
 } from '../domain/defaults';
 import type {
   AbilitaConoscenzaRow,
+  AnonymousStudentBandEntry,
   ClasseSecondaria,
   DocenteGenere,
+  FasciaLivelloKey,
+  IndicazioniVersion,
   Programmazione,
   SchoolSettings,
 } from '../domain/types';
@@ -619,9 +622,11 @@ function isNonCurriculumTable(table: string[][]): boolean {
 function detectCurriculumRowsFromTables(tables: string[][][]): {
   rows: AbilitaConoscenzaRow[];
   matchedTableIndexes: Set<number>;
+  detectedIndicazioni?: IndicazioniVersion;
 } {
   const rows: AbilitaConoscenzaRow[] = [];
   const matchedTableIndexes = new Set<number>();
+  let detectedIndicazioni: IndicazioniVersion | undefined;
   let lastMatchedColShape: {
     len: number;
     nucleoCol: number;
@@ -661,6 +666,14 @@ function detectCurriculumRowsFromTables(tables: string[][][]): {
         compCol = cIdx;
         abCol = aIdx;
         conCol = kIdx;
+        if (aIdx !== -1 && !detectedIndicazioni) {
+          const abHeader = cellsLower[aIdx];
+          if (/obiettiv/.test(abHeader) && !/abilit/.test(abHeader)) {
+            detectedIndicazioni = 'nuove';
+          } else if (/abilit/.test(abHeader) && !/obiettiv/.test(abHeader)) {
+            detectedIndicazioni = 'vecchie';
+          }
+        }
         break;
       }
     }
@@ -738,7 +751,7 @@ function detectCurriculumRowsFromTables(tables: string[][][]): {
     }
   });
 
-  return { rows, matchedTableIndexes };
+  return { rows, matchedTableIndexes, detectedIndicazioni };
 }
 
 function shouldMergeWithPreviousRow(
@@ -764,7 +777,10 @@ function shouldMergeWithPreviousRow(
   return false;
 }
 
-function detectCurriculumRowsFromLines(lines: string[], fullText: string): AbilitaConoscenzaRow[] {
+function detectCurriculumRowsFromLines(
+  lines: string[],
+  fullText: string
+): { rows: AbilitaConoscenzaRow[]; detectedIndicazioni?: IndicazioniVersion } {
   const sectionText = extractSectionSlice(
     fullText,
     /(?:TRAGUARDI PER LO SVILUPPO DELLE COMPETENZE|OBIETTIVI DI APPRENDIMENTO|PROGRAMMAZIONE DIDATTICA|CONTENUTI E ABILIT[ÀA'])/i,
@@ -782,6 +798,7 @@ function detectCurriculumRowsFromLines(lines: string[], fullText: string): Abili
   const rows: AbilitaConoscenzaRow[] = [];
   let inCurricoloHeader = false;
   let expectedCols: 2 | 3 = 2;
+  let detectedIndicazioni: IndicazioniVersion | undefined;
 
   for (const line of sourceLines) {
     const lower = line.toLowerCase();
@@ -792,6 +809,10 @@ function detectCurriculumRowsFromLines(lines: string[], fullText: string): Abili
     if (isHeaderCandidate && (line.includes('|') || line.length < 90)) {
       inCurricoloHeader = true;
       expectedCols = /competen|traguard/.test(lower) && line.split('|').length >= 3 ? 3 : 2;
+      if (!detectedIndicazioni) {
+        if (/obiettiv/.test(lower) && !/abilit/.test(lower)) detectedIndicazioni = 'nuove';
+        else if (/abilit/.test(lower) && !/obiettiv/.test(lower)) detectedIndicazioni = 'vecchie';
+      }
       continue;
     }
     if (/^attivit[àa]['’]?\s+programmate\s*:?/i.test(lower) || /^criteri metodologici/i.test(lower)) {
@@ -867,7 +888,7 @@ function detectCurriculumRowsFromLines(lines: string[], fullText: string): Abili
     }
   }
 
-  if (rows.length > 0) return rows;
+  if (rows.length > 0) return { rows, detectedIndicazioni };
 
   const competenzeBuf: string[] = [];
   const abilitaBuf: string[] = [];
@@ -886,6 +907,10 @@ function detectCurriculumRowsFromLines(lines: string[], fullText: string): Abili
     }
     if (/^(?:abilit[àa']|obiettivi(?:\s+specifici)?)/.test(lower)) {
       activeCol = 'ab';
+      if (!detectedIndicazioni) {
+        if (/^obiettivi/.test(lower)) detectedIndicazioni = 'nuove';
+        else if (/^abilit/.test(lower)) detectedIndicazioni = 'vecchie';
+      }
       const rest = line
         .replace(/^(?:abilit[àa']|obiettivi(?:\s+specifici)?)\s*[:\-]?\s*/i, '')
         .trim();
@@ -922,7 +947,7 @@ function detectCurriculumRowsFromLines(lines: string[], fullText: string): Abili
     });
   }
 
-  return rows;
+  return { rows, detectedIndicazioni };
 }
 
 function cleanExtractedAltroValue(raw: string): string {
@@ -1076,14 +1101,13 @@ export async function importProgrammazioneFromBuffer(
     );
   }
 
-  // 2. Composizione della classe (supporta sia 1 riga x 5 celle che 2 righe x 5 celle e testo in linea)
+  // 2. Composizione della classe (supporta sia 1 riga x 5/6 celle che 2 righe x 5/6 celle e testo in linea, incluso "Con disabilità" / "H")
   const compTable = tables.find(
     (t) =>
       t[0]?.some((c) => /alunni/i.test(c)) &&
       t[0]?.some((c) => /maschi/i.test(c))
   );
   if (compTable) {
-    // Formato a 1 riga del modello originale: ["Alunni: 20", "Maschi: 10", "Femmine: 10", "Ripetenti: 0", "Con BES: 2"]
     const firstRowHasNums = compTable[0].filter((c) => /\d+/.test(c)).length >= 3;
     const targetRow = firstRowHasNums ? compTable[0] : compTable[1];
     if (targetRow && targetRow.length >= 5) {
@@ -1097,16 +1121,23 @@ export async function importProgrammazioneFromBuffer(
       if (!Number.isNaN(nums[2])) basePlan.composizione.femmine = nums[2];
       if (!Number.isNaN(nums[3])) basePlan.composizione.ripetenti = nums[3];
       if (!Number.isNaN(nums[4])) basePlan.composizione.bes = nums[4];
+      if (targetRow.length >= 6 && !Number.isNaN(nums[5])) {
+        basePlan.composizione.disabilita = nums[5];
+      } else {
+        basePlan.composizione.disabilita = basePlan.composizione.disabilita ?? 0;
+      }
       sectionsMatched.push('Composizione');
       recordRecognized(
         'composizione',
         'Composizione classe',
         'Composizione',
-        `Alunni ${basePlan.composizione.alunni}, M ${basePlan.composizione.maschi}, F ${basePlan.composizione.femmine}, Rip. ${basePlan.composizione.ripetenti}, BES ${basePlan.composizione.bes}`
+        `Alunni ${basePlan.composizione.alunni}, M ${basePlan.composizione.maschi}, F ${basePlan.composizione.femmine}, Rip. ${basePlan.composizione.ripetenti}, BES ${basePlan.composizione.bes}, Disabilità ${basePlan.composizione.disabilita ?? 0}`
       );
     }
   } else {
-    const compPipeLine = lines.find((l) => /^\d+\s*\|\s*\d+\s*\|\s*\d+\s*\|\s*\d+\s*\|\s*\d+/.test(l));
+    const compPipeLine = lines.find((l) =>
+      /^\d+\s*\|\s*\d+\s*\|\s*\d+\s*\|\s*\d+\s*\|\s*\d+(?:\s*\|\s*\d+)?/.test(l)
+    );
     if (compPipeLine) {
       const nums = compPipeLine.split('|').map((p) => parseInt(p.trim(), 10));
       if (nums.length >= 5 && nums.every((n) => !Number.isNaN(n))) {
@@ -1116,13 +1147,14 @@ export async function importProgrammazioneFromBuffer(
           femmine: nums[2],
           ripetenti: nums[3],
           bes: nums[4],
+          disabilita: nums[5] ?? 0,
         };
         sectionsMatched.push('Composizione');
         recordRecognized(
           'composizione',
           'Composizione classe',
           'Composizione',
-          `Alunni ${nums[0]}, M ${nums[1]}, F ${nums[2]}, Rip. ${nums[3]}, BES ${nums[4]}`
+          `Alunni ${nums[0]}, M ${nums[1]}, F ${nums[2]}, Rip. ${nums[3]}, BES ${nums[4]}, Disabilità ${nums[5] ?? 0}`
         );
       }
     } else {
@@ -1130,19 +1162,23 @@ export async function importProgrammazioneFromBuffer(
       const maschiM = fullText.match(/\bMaschi\s*[:\-]\s*(\d{1,2})\b/i);
       const femmineM = fullText.match(/\bFemmine\s*[:\-]\s*(\d{1,2})\b/i);
       const ripM = fullText.match(/\bRipetenti\s*[:\-]\s*(\d{1,2})\b/i);
-      const besM = fullText.match(/(?:Con Bisogni Educativi Speciali\s*\(BES\)|BES)\s*[:\-]\s*(\d{1,2})\b/i);
-      if (alunniM || maschiM || femmineM || besM) {
+      const besM = fullText.match(
+        /(?:Con Bisogni Educativi Speciali\s*\(BES\)|BES)\s*[:\-]\s*(\d{1,2})\b/i
+      );
+      const disM = fullText.match(/(?:Con\s+disabilit[àa]|Alunni\s+H|^H)\s*[:\-]\s*(\d{1,2})\b/im);
+      if (alunniM || maschiM || femmineM || besM || disM) {
         if (alunniM) basePlan.composizione.alunni = Number(alunniM[1]);
         if (maschiM) basePlan.composizione.maschi = Number(maschiM[1]);
         if (femmineM) basePlan.composizione.femmine = Number(femmineM[1]);
         if (ripM) basePlan.composizione.ripetenti = Number(ripM[1]);
         if (besM) basePlan.composizione.bes = Number(besM[1]);
+        if (disM) basePlan.composizione.disabilita = Number(disM[1]);
         sectionsMatched.push('Composizione');
         recordRecognized(
           'composizione',
           'Composizione classe',
           'Composizione',
-          `Alunni ${basePlan.composizione.alunni}, M ${basePlan.composizione.maschi}, F ${basePlan.composizione.femmine}, Rip. ${basePlan.composizione.ripetenti}, BES ${basePlan.composizione.bes}`
+          `Alunni ${basePlan.composizione.alunni}, M ${basePlan.composizione.maschi}, F ${basePlan.composizione.femmine}, Rip. ${basePlan.composizione.ripetenti}, BES ${basePlan.composizione.bes}, Disabilità ${basePlan.composizione.disabilita ?? 0}`
         );
       }
     }
@@ -1364,7 +1400,7 @@ export async function importProgrammazioneFromBuffer(
     }
   }
 
-  // 4a. Livelli di partenza rilevati (tabella a 4 colonne o riga riassuntiva)
+  // 4a. Livelli di partenza rilevati (tabella a 4 colonne, eventuale riga nomi sotto, o riga riassuntiva)
   const livelliTable = tables.find(
     (t) =>
       t[0]?.some((c) => /livello basso/i.test(c)) &&
@@ -1372,10 +1408,9 @@ export async function importProgrammazioneFromBuffer(
   );
   if (livelliTable) {
     const row0 = livelliTable[0];
-    const rowData =
-      livelliTable.length >= 2 && row0.every((c) => !/alunni\s*:\s*\d+/i.test(c))
-        ? livelliTable[1]
-        : row0;
+    const rowDataIdx =
+      livelliTable.length >= 2 && row0.every((c) => !/alunni\s*:\s*\d+/i.test(c)) ? 1 : 0;
+    const rowData = livelliTable[rowDataIdx];
     const extractAlunni = (cell: string) => {
       const m = cell.match(/alunni\s*[:\-]?\s*(\d+)/i);
       return m ? parseInt(m[1], 10) : NaN;
@@ -1397,6 +1432,38 @@ export async function importProgrammazioneFromBuffer(
           'Analisi',
           `Basso: ${basePlan.analisiPartenza.livelli.bassoAlunni}, Medio/basso: ${basePlan.analisiPartenza.livelli.medioBassoAlunni}, Medio: ${basePlan.analisiPartenza.livelli.medioAlunni}, Alto: ${basePlan.analisiPartenza.livelli.altoAlunni}`
         );
+      }
+    }
+    // Riga sottostante con i nominativi degli alunni per fascia (se presente e non vuota)
+    const namesRow = livelliTable[rowDataIdx + 1];
+    if (namesRow && namesRow.length >= 4) {
+      const bandOrder: FasciaLivelloKey[] = ['basso', 'medio_basso', 'medio', 'alto'];
+      const importedStudents: AnonymousStudentBandEntry[] = [];
+      let order = 1;
+      for (let i = 0; i < 4; i++) {
+        const cell = (namesRow[i] ?? '').trim();
+        if (!cell || isPlaceholderValue(cell)) continue;
+        consumedSubstrings.push(cell);
+        const names = cell
+          .split(/[\n,;]+/)
+          .map((n) => n.trim())
+          .filter((n) => n.length > 1 && !isPlaceholderValue(n));
+        for (const nom of names) {
+          importedStudents.push({
+            id: makeId('imp-stud'),
+            ordine: order,
+            labelAnonimo: `Alunno ${order}`,
+            nominativo: nom,
+            media: null,
+            fasciaAutomatica: bandOrder[i],
+            fasciaCorrente: bandOrder[i],
+            spostatoDalDocente: false,
+          });
+          order += 1;
+        }
+      }
+      if (importedStudents.length > 0 && !(basePlan.analisiPartenza.alunniAnonimiFasce?.length)) {
+        basePlan.analisiPartenza.alunniAnonimiFasce = importedStudents;
       }
     }
   } else {
@@ -1432,17 +1499,47 @@ export async function importProgrammazioneFromBuffer(
   }
 
   // 5. Traguardi, Competenze attese/digitali & Tabella / Programma Curricolo
-  const compAttSlice = extractSectionSlice(fullText, /Traguardi e competenze attese\s*:/i, [
-    /Competenze digitali/i,
-    /Voci dal Curricolo Verticale/i,
-    /Tenuto conto della eterogeneit/i,
-    /(?:^|\n)\s*(?:COMPETENZE\b|ABILIT[ÀA']\b)/i,
-  ]);
-  if (compAttSlice) {
-    const extractedComp = compAttSlice
+  const traguardiBlock = extractSectionSlice(
+    fullText,
+    /TRAGUARDI PER LO SVILUPPO DELLE COMPETENZE[^\n]*/i,
+    [
+      /Voci dal Curricolo Verticale/i,
+      /Tenuto conto della eterogeneit/i,
+      /Tenuto conto delle Indicazioni/i,
+      /^\s*(?:COMPETENZE\b|ABILIT[ÀA']\b|OBIETTIVI\b)\s*(?:\||$)/im,
+      /^\s*Attivit[àa]\s+programmate\s*:/im,
+    ]
+  );
+
+  const compAttSlice =
+    extractSectionSlice(traguardiBlock, /(?:Traguardi e competenze attese|Competenze)\s*:/i, [
+      /Competenze digitali/i,
+      /Voci dal Curricolo Verticale/i,
+      /Tenuto conto/i,
+    ]) ||
+    extractSectionSlice(fullText, /Traguardi e competenze attese\s*:/i, [
+      /Competenze digitali/i,
+      /Voci dal Curricolo Verticale/i,
+      /Tenuto conto della eterogeneit/i,
+      /(?:^|\n)\s*(?:COMPETENZE\b|ABILIT[ÀA']\b|OBIETTIVI\b)/i,
+    ]);
+  const compLinesSource = compAttSlice
+    ? compAttSlice
+    : traguardiBlock
+    ? extractSectionSlice(`__START__\n${traguardiBlock}`, /^__START__\s*/i, [
+        /Competenze digitali/i,
+      ])
+    : '';
+  if (compLinesSource) {
+    const extractedComp = compLinesSource
       .split('\n')
       .map((l) => l.replace(/^[•\-\*]\s*/, '').trim())
-      .filter((l) => l.length > 3 && !isPlaceholderValue(l));
+      .filter(
+        (l) =>
+          l.length > 3 &&
+          !isPlaceholderValue(l) &&
+          !/^nessuna competenza/i.test(l)
+      );
     if (extractedComp.length > 0) {
       basePlan.curricolo.competenzeAttese = extractedComp;
       recordRecognized(
@@ -1455,19 +1552,25 @@ export async function importProgrammazioneFromBuffer(
   }
 
   const compDigSlice = extractSectionSlice(
-    fullText,
+    traguardiBlock || fullText,
     /Competenze digitali\s*(?:\([^)]*\))?[^:\n]*:/i,
     [
       /Voci dal Curricolo Verticale/i,
       /Tenuto conto della eterogeneit/i,
-      /(?:^|\n)\s*(?:COMPETENZE\b|ABILIT[ÀA']\b)/i,
+      /Tenuto conto delle Indicazioni/i,
+      /(?:^|\n)\s*(?:COMPETENZE\b|ABILIT[ÀA']\b|OBIETTIVI\b)/i,
     ]
   );
   if (compDigSlice) {
     const extractedDig = compDigSlice
       .split('\n')
       .map((l) => l.replace(/^[•\-\*]\s*/, '').trim())
-      .filter((l) => l.length > 3 && !isPlaceholderValue(l));
+      .filter(
+        (l) =>
+          l.length > 3 &&
+          !isPlaceholderValue(l) &&
+          !/^nessuna competenza/i.test(l)
+      );
     if (extractedDig.length > 0) {
       basePlan.curricolo.competenzeDigitali = extractedDig;
       recordRecognized(
@@ -1481,7 +1584,7 @@ export async function importProgrammazioneFromBuffer(
 
   const presSinteticaSlice = extractSectionSlice(
     fullText,
-    /Presentazione sintetica della classe\s*:/i,
+    /(?:Presentazione sintetica della classe|Presentazione e caratteristiche della classe)\s*:/i,
     [
       /(?:^|\n)\s*ANALISI DELLA SITUAZIONE DI PARTENZA/i,
       /(?:^|\n)\s*SITU[A-Z\s']+DISCIPLINA/i,
@@ -1489,11 +1592,24 @@ export async function importProgrammazioneFromBuffer(
   );
   if (presSinteticaSlice) {
     consumedSubstrings.push(presSinteticaSlice);
+    if (!basePlan.analisiPartenza.descrizioneDisciplinare.trim() && !isPlaceholderValue(presSinteticaSlice)) {
+      basePlan.analisiPartenza.descrizioneDisciplinare = presSinteticaSlice;
+      recordRecognized('analisiDesc', 'Analisi situazione di partenza', 'Analisi', presSinteticaSlice);
+    }
   }
 
-  const { rows: tableRows, matchedTableIndexes } = detectCurriculumRowsFromTables(tables);
-  const extractedRows =
-    tableRows.length > 0 ? tableRows : detectCurriculumRowsFromLines(lines, fullText);
+  const {
+    rows: tableRows,
+    matchedTableIndexes,
+    detectedIndicazioni: tblIndicazioni,
+  } = detectCurriculumRowsFromTables(tables);
+  const lineRes =
+    tableRows.length > 0 ? { rows: [], detectedIndicazioni: undefined } : detectCurriculumRowsFromLines(lines, fullText);
+  const extractedRows = tableRows.length > 0 ? tableRows : lineRes.rows;
+  const detectedIndicazioni = tblIndicazioni ?? lineRes.detectedIndicazioni;
+  if (detectedIndicazioni && !existingPlan) {
+    basePlan.curricolo.indicazioniVersione = detectedIndicazioni;
+  }
 
   if (extractedRows.length > 0) {
     basePlan.curricolo.righeAbilitaConoscenze = existingPlan
@@ -1502,13 +1618,15 @@ export async function importProgrammazioneFromBuffer(
     sectionsMatched.push(`Programma (${extractedRows.length} righe)`);
     recordRecognized(
       'curricoloRighe',
-      'Tabella Competenze / Abilità / Conoscenze',
+      detectedIndicazioni === 'nuove'
+        ? 'Tabella Obiettivi / Conoscenze'
+        : 'Tabella Abilità / Conoscenze',
       'Curricolo',
       `${extractedRows.length} righe estratte`
     );
   } else {
     warnings.push(
-      'Non è stata individuata una tabella compilata di Competenze/Abilità/Conoscenze: verifica la Sezione 5 o assegna eventuali blocchi non riconosciuti.'
+      'Non è stata individuata una tabella compilata di Abilità/Obiettivi e Conoscenze: verifica la Sezione 5 o assegna eventuali blocchi non riconosciuti.'
     );
   }
 
@@ -1575,18 +1693,19 @@ export async function importProgrammazioneFromBuffer(
     /^programmazione disciplinare\b/i,
     /^scuola\b|^plesso\b|^anno scolastico\b|^classe\b|^disciplina\b|^docente\b/i,
     /^composizione della classe/i,
-    /^alunni\b|^maschi\b|^femmine\b|^ripetenti\b|^con bisogni/i,
+    /^alunni\b|^maschi\b|^femmine\b|^ripetenti\b|^con bisogni|^con disabilit/i,
     /^situazione della classe/i,
+    /^presentazione e caratteristiche/i,
     /^tipologia\b|^livello\b|^mezzi utilizzati/i,
     /^analisi della situazione/i,
     /^situazione di partenza degli alunni/i,
-    /^livelli di partenza|^livello basso|^livello medio|^livello alto/i,
+    /^livelli di partenza|^livello basso|^livello medio|^livello alto|^alunni:\s*\d+/i,
     /^fonti di rilevazione/i,
     /^strategie ed interventi/i,
     /^gruppi di livello|^potenziamento|^consolidamento|^recupero/i,
     /^alunni con bes/i,
-    /^traguardi per lo sviluppo|^tenuto conto della eterogeneit|^\(clicca sul link/i,
-    /^competenze\b|^abilit[àa']\b|^conoscenze\b|^attivit[àa'] programmate/i,
+    /^traguardi per lo sviluppo|^tenuto conto|^nessuna competenza|^\(clicca sul link/i,
+    /^competenze(?:\s+digitali)?\s*:?$|^abilit[àa']\b|^obiettivi\b|^conoscenze\b|^attivit[àa'] programmate/i,
     /^criteri metodologici|^metodi\b|^mezzi e strumenti|^ausili didattici|^\(libri di testo|^didattica digitale/i,
     /^verifiche in itinere|^scritta\b|^orale\b|^altri tipi di prove/i,
     /^valutazione$|^il\/la docente$|^il docente\b|^la docente\b/i,

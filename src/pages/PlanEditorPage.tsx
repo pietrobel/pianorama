@@ -72,6 +72,7 @@ import {
   CURRICOLO_TYPE_ORDER,
   INDICAZIONI_LABELS,
   buildProgramRowsFromCatalogVoices,
+  extractCompetenzeFromCatalogVoices,
   getDefaultIndicazioniForClasseAndYear,
   importCatalogEntriesToVoices,
   isVoiceRestorable,
@@ -292,14 +293,20 @@ export function PlanEditorPage({
       (v) => v.classeOrigine !== draft.datiGenerali.classe
     ).length;
     setDraft((prev) => {
+      const nextCompetenze = extractCompetenzeFromCatalogVoices(
+        newVoices,
+        prev.curricolo.competenzeAttese
+      );
       const nextRows = buildProgramRowsFromCatalogVoices(
         newVoices,
-        prev.curricolo.righeAbilitaConoscenze
+        prev.curricolo.righeAbilitaConoscenze,
+        { indicazioniVersione: prev.curricolo.indicazioniVersione }
       );
       return {
         ...prev,
         curricolo: {
           ...prev.curricolo,
+          competenzeAttese: nextCompetenze,
           vociCatalogoImportate: [...(prev.curricolo.vociCatalogoImportate ?? []), ...newVoices],
           righeAbilitaConoscenze: nextRows,
         },
@@ -310,7 +317,7 @@ export function PlanEditorPage({
             evento: 'Importazione da Curricolo Verticale',
             dettaglio: `Importate ${newVoices.length} voci dal catalogo locale (${
               crossClassCount > 0 ? `${crossClassCount} da altra classe` : `Classe ${draft.datiGenerali.classe}`
-            }) e aggiornata la tabella Competenze / Abilità / Conoscenze.`,
+            }): competenze aggiunte dopo i Traguardi e programma raggruppato nella tabella a 2 colonne.`,
           },
           ...(prev.cronologiaModifiche ?? []),
         ],
@@ -318,7 +325,9 @@ export function PlanEditorPage({
     });
     setCatalogImportError(null);
     setCatalogImportFeedback(
-      `Importate ${newVoices.length} voci dal catalogo curricolare e inserite nella tabella a 3 colonne (Competenze, Abilità/Obiettivi, Conoscenze).`
+      `Importate ${newVoices.length} voci dal catalogo curricolare: competenze inserite dopo i Traguardi e contenuti raggruppati per nucleo nella tabella a 2 colonne (${
+        draft.curricolo.indicazioniVersione === 'nuove' ? 'Obiettivi' : 'Abilità'
+      }, Conoscenze).`
     );
   };
 
@@ -971,19 +980,6 @@ export function PlanEditorPage({
                                   ...prev.metodiStrumenti,
                                   metodi: nextMetodiDef.metodi,
                                   mezziEStrumenti: nextMetodiDef.mezziEStrumenti,
-                                  ...(prev.metodiStrumenti.premessaMetodologica ===
-                                    prevMetodiDef.premessaMetodologica ||
-                                  !prev.metodiStrumenti.premessaMetodologica.trim()
-                                    ? { premessaMetodologica: nextMetodiDef.premessaMetodologica }
-                                    : {}),
-                                  ...(prev.metodiStrumenti.didatticaDigitaleIntegrata ===
-                                    prevMetodiDef.didatticaDigitaleIntegrata ||
-                                  !prev.metodiStrumenti.didatticaDigitaleIntegrata.trim()
-                                    ? {
-                                        didatticaDigitaleIntegrata:
-                                          nextMetodiDef.didatticaDigitaleIntegrata,
-                                      }
-                                    : {}),
                                   ...(prev.metodiStrumenti.altreMetodologie ===
                                     prevMetodiDef.altreMetodologie ||
                                   !prev.metodiStrumenti.altreMetodologie
@@ -1012,11 +1008,6 @@ export function PlanEditorPage({
                                     prevVerifDef.altriTipiProve ||
                                   !prev.verificheValutazione.altriTipiProve
                                     ? { altriTipiProve: nextVerifDef.altriTipiProve }
-                                    : {}),
-                                  ...(prev.verificheValutazione.criteriValutazione ===
-                                    prevVerifDef.criteriValutazione ||
-                                  !prev.verificheValutazione.criteriValutazione
-                                    ? { criteriValutazione: nextVerifDef.criteriValutazione }
                                     : {}),
                                 },
                               }
@@ -1267,7 +1258,7 @@ export function PlanEditorPage({
 
               <PrivacyNoticeBanner compact />
 
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-6">
                 {(
                   [
                     ['alunni', 'Alunni totali'],
@@ -1275,6 +1266,7 @@ export function PlanEditorPage({
                     ['femmine', 'Femmine'],
                     ['ripetenti', 'Ripetenti'],
                     ['bes', 'Con BES'],
+                    ['disabilita', 'Con disabilità'],
                   ] as const
                 ).map(([field, label]) => (
                   <label key={field} className="block">
@@ -1285,7 +1277,7 @@ export function PlanEditorPage({
                       type="number"
                       min={0}
                       max={40}
-                      value={draft.composizione[field]}
+                      value={draft.composizione[field] ?? 0}
                       onChange={(e) => {
                         const nextValue = Math.max(0, Number(e.target.value) || 0);
                         setDraft((prev) => ({
@@ -1315,7 +1307,7 @@ export function PlanEditorPage({
               </div>
 
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Alunni totali, maschi e femmine vengono inclusi automaticamente nella presentazione della classe. Modificando <strong>Alunni totali</strong>, la barra delle caratteristiche aggiorna prima lo spazio <em>non definito</em> e poi gli indicatori a destra.
+                La descrizione unitaria della classe (composizione, caratteristiche e situazione disciplinare) viene stampata una sola volta dopo «Analisi della situazione di partenza». Modificando <strong>Alunni totali</strong>, la barra delle caratteristiche aggiorna prima lo spazio <em>non definito</em> e poi gli indicatori a destra.
               </p>
 
               {sumSex !== draft.composizione.alunni && (
@@ -1515,7 +1507,7 @@ export function PlanEditorPage({
                       Livelli di partenza rilevati e elenco alunni offline
                     </h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Compila i conteggi o inserisci gli alunni direttamente nelle 5 colonne sottostanti (import .xlsx o inserimento manuale). I file DOCX/PDF ufficiali esportano solo i totali per fascia.
+                      Compila i conteggi o inserisci gli alunni nelle 5 colonne sottostanti (import .xlsx o inserimento manuale). Nei file DOCX/PDF ufficiali vengono riportati i conteggi e i nominativi importati nella riga dedicata di Livelli di partenza (medie, BES/DSA/PEI e note restano privati).
                     </p>
                     <label className="mt-1.5 flex cursor-pointer items-center gap-2 text-xs text-slate-700 dark:text-slate-300">
                       <input
@@ -1524,7 +1516,7 @@ export function PlanEditorPage({
                         onChange={(e) => setKeepNamesOffline(e.target.checked)}
                         className="h-3.5 w-3.5 accent-[#1F3864]"
                       />
-                      <span>Conserva solo il cognome in locale durante import .xlsx</span>
+                      <span>Conserva nome e cognome in locale durante import .xlsx (riportati nella riga alunni di Livelli di partenza)</span>
                     </label>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -1687,13 +1679,14 @@ export function PlanEditorPage({
                         },
                       }));
                     }}
-                    onSyncComposizione={(totaleAlunni, totaleBes) => {
+                    onSyncComposizione={(totaleAlunni, totaleBes, totaleDisabilita = 0) => {
                       setDraft((prev) => ({
                         ...prev,
                         composizione: {
                           ...prev.composizione,
                           alunni: totaleAlunni,
                           bes: totaleBes,
+                          disabilita: totaleDisabilita,
                         },
                         situazione: {
                           ...prev.situazione,
@@ -1705,7 +1698,7 @@ export function PlanEditorPage({
                         },
                       }));
                       setGradebookStatus(
-                        `Composizione aggiornata: ${totaleAlunni} alunni totali, ${totaleBes} con BES/DSA/PEI.`
+                        `Composizione aggiornata: ${totaleAlunni} alunni totali, ${totaleBes} BES, ${totaleDisabilita} con disabilità.`
                       );
                     }}
                   />
@@ -2219,6 +2212,90 @@ export function PlanEditorPage({
                 ))}
               </div>
 
+              <div className="space-y-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    Competenze digitali (DigComp 2.2 — inserite dopo le competenze disciplinari)
+                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const defs = getDefaultCurricoloForDisciplina(
+                          draft.datiGenerali.disciplina
+                        );
+                        setDraft((prev) => ({
+                          ...prev,
+                          curricolo: {
+                            ...prev.curricolo,
+                            competenzeDigitali: defs.competenzeDigitali,
+                            attivitaProgrammate: defs.attivitaProgrammate,
+                          },
+                        }));
+                      }}
+                      className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                      Predefiniti per {draft.datiGenerali.disciplina}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDraft((prev) => ({
+                          ...prev,
+                          curricolo: {
+                            ...prev.curricolo,
+                            competenzeDigitali: [...prev.curricolo.competenzeDigitali, ''],
+                          },
+                        }))
+                      }
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-[#1F3864] hover:underline dark:text-blue-400"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Aggiungi competenza digitale
+                    </button>
+                  </div>
+                </div>
+                {draft.curricolo.competenzeDigitali.map((compDig, idx) => (
+                  <div key={idx} className="flex gap-2">
+                    <input
+                      type="text"
+                      value={compDig}
+                      onChange={(e) =>
+                        setDraft((prev) => {
+                          const next = [...prev.curricolo.competenzeDigitali];
+                          next[idx] = e.target.value;
+                          return {
+                            ...prev,
+                            curricolo: { ...prev.curricolo, competenzeDigitali: next },
+                          };
+                        })
+                      }
+                      placeholder="Competenza digitale DigComp 2.2 collegata alla disciplina..."
+                      className="flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"
+                    />
+                    <button
+                      type="button"
+                      aria-label="Rimuovi competenza digitale"
+                      onClick={() =>
+                        setDraft((prev) => ({
+                          ...prev,
+                          curricolo: {
+                            ...prev.curricolo,
+                            competenzeDigitali: prev.curricolo.competenzeDigitali.filter(
+                              (_, i) => i !== idx
+                            ),
+                          },
+                        }))
+                      }
+                      className="rounded-lg p-2 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
               {/* Voci importate dal Catalogo Curricolo Verticale / manuali */}
               <div className="space-y-3 border-t border-slate-200 pt-4 dark:border-slate-800">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2366,10 +2443,18 @@ export function PlanEditorPage({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                      Tabella Programma disciplinare (3 colonne: Competenze · Abilità / Obiettivi · Conoscenze / Contenuti)
+                      Tabella Programma disciplinare (2 colonne:{' '}
+                      {(draft.curricolo.indicazioniVersione ??
+                        getDefaultIndicazioniForClasseAndYear(
+                          draft.datiGenerali.classe,
+                          draft.datiGenerali.annoScolastico
+                        )) === 'nuove'
+                        ? 'Obiettivi'
+                        : 'Abilità'}{' '}
+                      · Conoscenze)
                     </h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Questa tabella costituisce il programma vero e proprio stampato in anteprima, DOCX e PDF.
+                      Contenuti raggruppati per nucleo tematico (es. Numeri, Spazio e figure; Biologia, Fisica…), seguiti da eventuali contenuti digitali.
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -2381,9 +2466,14 @@ export function PlanEditorPage({
                             ...prev,
                             curricolo: {
                               ...prev.curricolo,
+                              competenzeAttese: extractCompetenzeFromCatalogVoices(
+                                prev.curricolo.vociCatalogoImportate ?? [],
+                                prev.curricolo.competenzeAttese
+                              ),
                               righeAbilitaConoscenze: buildProgramRowsFromCatalogVoices(
                                 prev.curricolo.vociCatalogoImportate ?? [],
-                                prev.curricolo.righeAbilitaConoscenze
+                                prev.curricolo.righeAbilitaConoscenze,
+                                { indicazioniVersione: prev.curricolo.indicazioniVersione }
                               ),
                             },
                           }))
@@ -2422,185 +2512,91 @@ export function PlanEditorPage({
                   </p>
                 ) : (
                   <div className="space-y-3">
-                    {draft.curricolo.righeAbilitaConoscenze.map((row) => (
-                      <div
-                        key={row.id}
-                        className="grid gap-3 rounded-lg border border-slate-200 p-3 lg:grid-cols-[1fr_1fr_1fr_auto] dark:border-slate-800"
-                      >
-                        <label className="block">
-                          <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                            Competenze
-                          </span>
-                          <textarea
-                            rows={4}
-                            value={row.competenze ?? row.traguardo ?? ''}
-                            onChange={(e) =>
-                              setDraft((prev) => ({
-                                ...prev,
-                                curricolo: {
-                                  ...prev.curricolo,
-                                  righeAbilitaConoscenze: prev.curricolo.righeAbilitaConoscenze.map(
-                                    (r) => (r.id === row.id ? { ...r, competenze: e.target.value } : r)
-                                  ),
-                                },
-                              }))
-                            }
-                            placeholder="Competenze / nucleo tematico..."
-                            className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-                          />
-                        </label>
-                        <label className="block">
-                          <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                            Abilità / Obiettivi
-                          </span>
-                          <textarea
-                            rows={4}
-                            value={row.abilita}
-                            onChange={(e) =>
-                              setDraft((prev) => ({
-                                ...prev,
-                                curricolo: {
-                                  ...prev.curricolo,
-                                  righeAbilitaConoscenze: prev.curricolo.righeAbilitaConoscenze.map(
-                                    (r) => (r.id === row.id ? { ...r, abilita: e.target.value } : r)
-                                  ),
-                                },
-                              }))
-                            }
-                            placeholder="Abilità o obiettivi di apprendimento..."
-                            className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-                          />
-                        </label>
-                        <label className="block">
-                          <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                            Conoscenze (Contenuti)
-                          </span>
-                          <textarea
-                            rows={4}
-                            value={row.conoscenze}
-                            onChange={(e) =>
-                              setDraft((prev) => ({
-                                ...prev,
-                                curricolo: {
-                                  ...prev.curricolo,
-                                  righeAbilitaConoscenze: prev.curricolo.righeAbilitaConoscenze.map(
-                                    (r) =>
-                                      r.id === row.id ? { ...r, conoscenze: e.target.value } : r
-                                  ),
-                                },
-                              }))
-                            }
-                            placeholder="Conoscenze / contenuti disciplinari..."
-                            className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-                          />
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setDraft((prev) => ({
-                              ...prev,
-                              curricolo: {
-                                ...prev.curricolo,
-                                righeAbilitaConoscenze:
-                                  prev.curricolo.righeAbilitaConoscenze.filter(
-                                    (r) => r.id !== row.id
-                                  ),
-                              },
-                            }))
-                          }
-                          aria-label="Elimina riga programma"
-                          className="self-start rounded-lg p-2 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+                    {draft.curricolo.righeAbilitaConoscenze.map((row) => {
+                      const isNuove =
+                        (draft.curricolo.indicazioniVersione ??
+                          getDefaultIndicazioniForClasseAndYear(
+                            draft.datiGenerali.classe,
+                            draft.datiGenerali.annoScolastico
+                          )) === 'nuove';
+                      return (
+                        <div
+                          key={row.id}
+                          className="grid gap-3 rounded-lg border border-slate-200 p-3 lg:grid-cols-[1fr_1fr_auto] dark:border-slate-800"
                         >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ))}
+                          <label className="block">
+                            <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                              {isNuove ? 'Obiettivi' : 'Abilità'}
+                            </span>
+                            <textarea
+                              rows={4}
+                              value={row.abilita}
+                              onChange={(e) =>
+                                setDraft((prev) => ({
+                                  ...prev,
+                                  curricolo: {
+                                    ...prev.curricolo,
+                                    righeAbilitaConoscenze: prev.curricolo.righeAbilitaConoscenze.map(
+                                      (r) => (r.id === row.id ? { ...r, abilita: e.target.value } : r)
+                                    ),
+                                  },
+                                }))
+                              }
+                              placeholder={
+                                isNuove
+                                  ? 'Obiettivi specifici di apprendimento...'
+                                  : 'Abilità disciplinari...'
+                              }
+                              className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                              Conoscenze (Contenuti)
+                            </span>
+                            <textarea
+                              rows={4}
+                              value={row.conoscenze}
+                              onChange={(e) =>
+                                setDraft((prev) => ({
+                                  ...prev,
+                                  curricolo: {
+                                    ...prev.curricolo,
+                                    righeAbilitaConoscenze: prev.curricolo.righeAbilitaConoscenze.map(
+                                      (r) =>
+                                        r.id === row.id ? { ...r, conoscenze: e.target.value } : r
+                                    ),
+                                  },
+                                }))
+                              }
+                              placeholder="Conoscenze / contenuti disciplinari raggruppati per nucleo..."
+                              className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDraft((prev) => ({
+                                ...prev,
+                                curricolo: {
+                                  ...prev.curricolo,
+                                  righeAbilitaConoscenze:
+                                    prev.curricolo.righeAbilitaConoscenze.filter(
+                                      (r) => r.id !== row.id
+                                    ),
+                                },
+                              }))
+                            }
+                            aria-label="Elimina riga programma"
+                            className="self-start rounded-lg p-2 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
-              </div>
-
-              <div className="space-y-2 border-t border-slate-200 pt-4 dark:border-slate-800">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    Competenze digitali (DigComp 2.2) e trasversali per {draft.datiGenerali.disciplina}
-                  </span>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const defs = getDefaultCurricoloForDisciplina(
-                          draft.datiGenerali.disciplina
-                        );
-                        setDraft((prev) => ({
-                          ...prev,
-                          curricolo: {
-                            ...prev.curricolo,
-                            competenzeDigitali: defs.competenzeDigitali,
-                            attivitaProgrammate: defs.attivitaProgrammate,
-                          },
-                        }));
-                      }}
-                      className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                    >
-                      <RotateCcw className="h-3 w-3" />
-                      Predefiniti per {draft.datiGenerali.disciplina}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setDraft((prev) => ({
-                          ...prev,
-                          curricolo: {
-                            ...prev.curricolo,
-                            competenzeDigitali: [...prev.curricolo.competenzeDigitali, ''],
-                          },
-                        }))
-                      }
-                      className="inline-flex items-center gap-1 text-xs font-semibold text-[#1F3864] hover:underline dark:text-blue-400"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      Aggiungi competenza digitale
-                    </button>
-                  </div>
-                </div>
-                {draft.curricolo.competenzeDigitali.map((compDig, idx) => (
-                  <div key={idx} className="flex gap-2">
-                    <input
-                      type="text"
-                      value={compDig}
-                      onChange={(e) =>
-                        setDraft((prev) => {
-                          const next = [...prev.curricolo.competenzeDigitali];
-                          next[idx] = e.target.value;
-                          return {
-                            ...prev,
-                            curricolo: { ...prev.curricolo, competenzeDigitali: next },
-                          };
-                        })
-                      }
-                      placeholder="Competenza digitale DigComp 2.2 collegata alla disciplina..."
-                      className="flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"
-                    />
-                    <button
-                      type="button"
-                      aria-label="Rimuovi competenza digitale"
-                      onClick={() =>
-                        setDraft((prev) => ({
-                          ...prev,
-                          curricolo: {
-                            ...prev.curricolo,
-                            competenzeDigitali: prev.curricolo.competenzeDigitali.filter(
-                              (_, i) => i !== idx
-                            ),
-                          },
-                        }))
-                      }
-                      className="rounded-lg p-2 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
               </div>
 
               <label className="block border-t border-slate-200 pt-4 dark:border-slate-800">

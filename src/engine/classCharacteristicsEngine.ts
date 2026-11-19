@@ -5,6 +5,9 @@ import {
 import type {
   ClassCharacteristicDimension,
   ClassCharacteristicSegment,
+  FasciaLivelloKey,
+  Programmazione,
+  SchoolSettings,
   SoglieQuoteCaratteristiche,
 } from '../domain/types';
 
@@ -1162,4 +1165,162 @@ export function getActiveDimensionsForDocument(
 export function computeStudentCountFromPct(pct: number, alunniTotali: number): number {
   if (alunniTotali <= 0) return 0;
   return Math.round((pct / 100) * alunniTotali);
+}
+
+/**
+ * Restituisce i nominativi completi degli alunni importati suddivisi nelle 4 fasce di livello.
+ */
+export function getStudentNamesByLevelBand(
+  plan: Programmazione
+): {
+  hasAnyImportedStudents: boolean;
+  bands: Record<'basso' | 'medio_basso' | 'medio' | 'alto', string[]>;
+} {
+  const bands: Record<'basso' | 'medio_basso' | 'medio' | 'alto', string[]> = {
+    basso: [],
+    medio_basso: [],
+    medio: [],
+    alto: [],
+  };
+  const list = plan.analisiPartenza.alunniAnonimiFasce ?? [];
+  let hasAny = false;
+  for (const entry of list) {
+    const name = (entry.nominativo ?? '').trim();
+    if (!name) continue;
+    hasAny = true;
+    const key: FasciaLivelloKey = entry.fasciaCorrente;
+    if (key === 'basso' || key === 'medio_basso' || key === 'medio' || key === 'alto') {
+      bands[key].push(name);
+    }
+  }
+  return { hasAnyImportedStudents: hasAny, bands };
+}
+
+/**
+ * Compone un'unica descrizione coerente della classe da mostrare sotto
+ * "ANALISI DELLA SITUAZIONE DI PARTENZA -> Situazione di partenza degli alunni in relazione alla disciplina",
+ * evitando duplicazioni tra caratteristiche della classe e descrizione disciplinare.
+ */
+export function buildUnifiedClassDescriptionText(
+  plan: Programmazione,
+  settings: SchoolSettings,
+  compositionIntro: string
+): string {
+  const desc = (plan.analisiPartenza.descrizioneDisciplinare ?? '').trim();
+  const seed = `${plan.id}|${plan.datiGenerali.classe}|${plan.datiGenerali.sezione}|${plan.datiGenerali.disciplina}`;
+  const activeChars = getActiveDimensionsForDocument(
+    plan.situazione.caratteristicheDimensioni,
+    settings.soglieQuoteCaratteristiche,
+    seed
+  );
+
+  // Controlla se le caratteristiche differiscono dal solo valore predefinito di Metodo di studio
+  const dims = plan.situazione.caratteristicheDimensioni ?? [];
+  const metodoDim = dims.find((d) => d.id === 'dim-metodo');
+  const isOnlyDefaultMetodo =
+    activeChars.length === 1 &&
+    activeChars[0].id === 'dim-metodo' &&
+    Boolean(
+      metodoDim &&
+        !metodoDim.isTestoManuale &&
+        metodoDim.segmenti.find((s) => s.etichetta === 'in consolidamento')?.quotaPercentuale === 100
+    );
+
+  if (desc) {
+    const descLower = desc.toLowerCase();
+    const extraChars = activeChars.filter(
+      (item) => !descLower.includes(item.testo.toLowerCase())
+    );
+    if (extraChars.length === 0 || (extraChars.length === 1 && isOnlyDefaultMetodo && descLower.includes('metodo'))) {
+      return desc;
+    }
+    const extraLines = extraChars.map((item) => `${item.nome}: ${item.testo}`);
+    return `${desc}\n${extraLines.join('\n')}`;
+  }
+
+  if (activeChars.length > 0 && !isOnlyDefaultMetodo) {
+    const charLines = activeChars.map((item) => `${item.nome}: ${item.testo}`);
+    return [compositionIntro.trim(), ...charLines].filter(Boolean).join('\n');
+  }
+
+  return '';
+}
+
+/**
+ * Restituisce i nominativi completi degli alunni importati suddivisi nelle 4 fasce di livello.
+ */
+export function getStudentNamesByLevelBand(
+  plan: Programmazione
+): {
+  hasAnyImportedStudents: boolean;
+  bands: Record<'basso' | 'medio_basso' | 'medio' | 'alto', string[]>;
+} {
+  const bands: Record<'basso' | 'medio_basso' | 'medio' | 'alto', string[]> = {
+    basso: [],
+    medio_basso: [],
+    medio: [],
+    alto: [],
+  };
+  const list = plan.analisiPartenza.alunniAnonimiFasce ?? [];
+  let hasAny = false;
+  for (const entry of list) {
+    const name = (entry.nominativo ?? '').trim();
+    if (!name) continue;
+    hasAny = true;
+    const key: FasciaLivelloKey = entry.fasciaCorrente;
+    if (key === 'basso' || key === 'medio_basso' || key === 'medio' || key === 'alto') {
+      bands[key].push(name);
+    }
+  }
+  return { hasAnyImportedStudents: hasAny, bands };
+}
+
+/**
+ * Compone un'unica descrizione coerente della classe da mostrare sotto
+ * "ANALISI DELLA SITUAZIONE DI PARTENZA -> Situazione di partenza degli alunni in relazione alla disciplina",
+ * evitando duplicazioni tra caratteristiche della classe e descrizione disciplinare.
+ */
+export function buildUnifiedClassDescriptionText(
+  plan: Programmazione,
+  settings: SchoolSettings,
+  compositionIntro: string
+): string {
+  const desc = (plan.analisiPartenza.descrizioneDisciplinare ?? '').trim();
+  const seed = `${plan.id}|${plan.datiGenerali.classe}|${plan.datiGenerali.sezione}|${plan.datiGenerali.disciplina}`;
+  const activeChars = getActiveDimensionsForDocument(
+    plan.situazione.caratteristicheDimensioni,
+    settings.soglieQuoteCaratteristiche,
+    seed
+  );
+
+  // Controlla se le caratteristiche differiscono dal solo valore predefinito di Metodo di studio
+  const dims = plan.situazione.caratteristicheDimensioni ?? [];
+  const metodoDim = dims.find((d) => d.id === 'dim-metodo');
+  const isOnlyDefaultMetodo =
+    activeChars.length === 1 &&
+    activeChars[0].id === 'dim-metodo' &&
+    Boolean(
+      metodoDim &&
+        !metodoDim.isTestoManuale &&
+        metodoDim.segmenti.find((s) => s.etichetta === 'in consolidamento')?.quotaPercentuale === 100
+    );
+
+  if (desc) {
+    const descLower = desc.toLowerCase();
+    const extraChars = activeChars.filter(
+      (item) => !descLower.includes(item.testo.toLowerCase())
+    );
+    if (extraChars.length === 0 || (extraChars.length === 1 && isOnlyDefaultMetodo && descLower.includes('metodo'))) {
+      return desc;
+    }
+    const extraLines = extraChars.map((item) => `${item.nome}: ${item.testo}`);
+    return `${desc}\n${extraLines.join('\n')}`;
+  }
+
+  if (activeChars.length > 0 && !isOnlyDefaultMetodo) {
+    const charLines = activeChars.map((item) => `${item.nome}: ${item.testo}`);
+    return [compositionIntro.trim(), ...charLines].filter(Boolean).join('\n');
+  }
+
+  return '';
 }

@@ -21,7 +21,12 @@ interface GradebookImportPageProps {
     entries: AnonymousStudentBandEntry[],
     classeRilevata: string
   ) => Promise<void>;
-  onSyncComposizione?: (planId: string, totaleAlunni: number, totaleBes: number) => Promise<void>;
+  onSyncComposizione?: (
+    planId: string,
+    totaleAlunni: number,
+    totaleBes: number,
+    totaleDisabilita?: number
+  ) => Promise<void>;
   onOpenPlanEditor: (planId: string) => void;
   onOpenSettings: () => void;
 }
@@ -139,7 +144,7 @@ export function GradebookImportPage({
       >
         <Lock className="mt-0.5 h-5 w-5 shrink-0 text-amber-700 dark:text-amber-400" />
         <p>
-          <strong>Archivio riservato locale (zero cloud):</strong> proprio perché l’app opera interamente offline, in questo spazio puoi conservare i nominativi degli alunni, la classificazione BES/DSA/PEI/PDP e note sensibili utili al lavoro di classe. Nei documenti <strong>DOCX e PDF ufficiali</strong> vengono invece esportati esclusivamente i conteggi numerici aggregati.
+          <strong>Archivio riservato locale (zero cloud):</strong> l’app opera interamente offline; in questo spazio conservi le medie dei voti, la classificazione BES/DSA/PEI/PDP e le note riservate (mai esportate). Nei documenti <strong>DOCX e PDF ufficiali</strong> vengono inseriti i conteggi numerici per fascia e, se conservati, nome e cognome degli alunni nella riga dedicata della tabella <em>Livelli di partenza</em>.
         </p>
       </div>
 
@@ -176,7 +181,7 @@ export function GradebookImportPage({
               className="h-4 w-4 accent-[#1F3864]"
             />
             <span>
-              Conserva solo il <strong>cognome</strong> degli alunni nell’archivio locale offline (senza nome proprio; deseleziona per convertire subito in <em>Alunno 1, Alunno 2...</em>)
+              Conserva <strong>nome e cognome</strong> degli alunni nell’archivio locale e nella riga alunni della tabella <em>Livelli di partenza</em> (deseleziona per usare <em>Alunno 1, Alunno 2...</em>)
             </span>
           </label>
         </div>
@@ -258,10 +263,10 @@ export function GradebookImportPage({
         onChangeEntries={handleEntriesUpdate}
         onSyncComposizione={
           selectedPlanId && onSyncComposizione
-            ? async (totale, bes) => {
-                await onSyncComposizione(selectedPlanId, totale, bes);
+            ? async (totale, bes, disabilita = 0) => {
+                await onSyncComposizione(selectedPlanId, totale, bes, disabilita);
                 setStatusMsg(
-                  `Composizione della classe aggiornata: ${totale} alunni totali, ${bes} con BES/DSA/PEI.`
+                  `Composizione della classe aggiornata: ${totale} alunni totali, ${bes} BES, ${disabilita} con disabilità.`
                 );
               }
             : undefined

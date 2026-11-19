@@ -2,6 +2,7 @@ import {
   FONTI_RILEVAZIONE_OPTIONS,
   formatDocenteConTitolo,
   formatFirmaDocente,
+  getCurricoloIntroNoteText,
   LIVELLI_CLASSE_OPTIONS,
   METODI_OPTIONS,
   MEZZI_INDIVIDUAZIONE_OPTIONS,
@@ -18,11 +19,10 @@ import type {
   Programmazione,
   SchoolSettings,
 } from '../domain/types';
-import { getActiveDimensionsForDocument } from '../engine/classCharacteristicsEngine';
 import {
-  CURRICOLO_TYPE_LABELS,
-  CURRICOLO_TYPE_ORDER,
-} from '../engine/curricoloCatalogEngine';
+  buildUnifiedClassDescriptionText,
+  getStudentNamesByLevelBand,
+} from '../engine/classCharacteristicsEngine';
 import { buildClassCompositionIntro } from '../engine/questionnaireEngine';
 import { getSchoolBannerDataUrl } from '../export/schoolBannerAsset';
 
@@ -61,12 +61,25 @@ export function DocumentSheetPreview({
     ? '#000000'
     : `#${mapping.typography.headingColorHex.replace('#', '') || '1F3864'}`;
 
-  const activeCharacteristics = getActiveDimensionsForDocument(
-    plan.situazione.caratteristicheDimensioni,
-    settings.soglieQuoteCaratteristiche,
-    `${plan.id}|${plan.datiGenerali.classe}|${plan.datiGenerali.sezione}|${plan.datiGenerali.disciplina}`
-  );
   const compositionIntro = buildClassCompositionIntro(plan);
+  const unifiedClassDescription = buildUnifiedClassDescriptionText(
+    plan,
+    settings,
+    compositionIntro
+  );
+  const bandStudents = getStudentNamesByLevelBand(plan);
+  const disabilitaCount = plan.composizione.disabilita ?? 0;
+  const leftCurricoloHeader =
+    (plan.curricolo.indicazioniVersione ?? 'vecchie') === 'nuove' ? 'OBIETTIVI' : 'ABILITÀ';
+  const notaIntroCurricolo = getCurricoloIntroNoteText(
+    plan.curricolo.notaIntroduttiva,
+    plan.curricolo.indicazioniVersione
+  );
+  const resolvedCompetenze = plan.curricolo.competenzeAttese.length
+    ? plan.curricolo.competenzeAttese
+    : (plan.curricolo.vociCatalogoImportate ?? [])
+        .filter((v) => v.tipo === 'competenza' && v.testo.trim())
+        .map((v) => v.testo.trim());
 
   const renderCheck = (checked: boolean, label: string, bracketStyle = false) => {
     const marker = bracketStyle
@@ -253,24 +266,27 @@ export function DocumentSheetPreview({
                 COMPOSIZIONE DELLA CLASSE
               </span>
             </p>
-            <table className="w-full border-collapse border border-black text-left text-[13px] tabular-nums">
+            <table className="w-full border-collapse border border-black text-left text-[12px] tabular-nums">
               <tbody>
                 <tr>
-                  <td className="w-[16%] border border-black px-2 py-1.5">
+                  <td className="w-[14%] border border-black px-2 py-1.5">
                     Alunni: <strong>{plan.composizione.alunni}</strong>
                   </td>
-                  <td className="w-[16%] border border-black px-2 py-1.5">
+                  <td className="w-[14%] border border-black px-2 py-1.5">
                     Maschi: <strong>{plan.composizione.maschi}</strong>
                   </td>
-                  <td className="w-[16%] border border-black px-2 py-1.5">
+                  <td className="w-[14%] border border-black px-2 py-1.5">
                     Femmine: <strong>{plan.composizione.femmine}</strong>
                   </td>
-                  <td className="w-[17%] border border-black px-2 py-1.5">
+                  <td className="w-[15%] border border-black px-2 py-1.5">
                     Ripetenti: <strong>{plan.composizione.ripetenti}</strong>
                   </td>
-                  <td className="w-[35%] border border-black px-2 py-1.5">
+                  <td className="w-[27%] border border-black px-2 py-1.5">
                     Con Bisogni Educativi Speciali (BES):{' '}
                     <strong>{plan.composizione.bes}</strong>
+                  </td>
+                  <td className="w-[16%] border border-black px-2 py-1.5">
+                    Con disabilità: <strong>{disabilitaCount}</strong>
                   </td>
                 </tr>
               </tbody>
@@ -294,6 +310,7 @@ export function DocumentSheetPreview({
                   <th className={`${cellBorderClass} px-2 py-1`}>
                     Con Bisogni Educativi Speciali (BES)
                   </th>
+                  <th className={`${cellBorderClass} px-2 py-1`}>Con disabilità</th>
                 </tr>
               </thead>
               <tbody className="tabular-nums">
@@ -308,6 +325,9 @@ export function DocumentSheetPreview({
                   </td>
                   <td className={`${cellBorderClass} px-2 py-1.5 font-bold`}>
                     {plan.composizione.bes}
+                  </td>
+                  <td className={`${cellBorderClass} px-2 py-1.5 font-bold`}>
+                    {disabilitaCount}
                   </td>
                 </tr>
               </tbody>
@@ -454,20 +474,6 @@ export function DocumentSheetPreview({
             </table>
           </>
         )}
-
-        {(activeCharacteristics.length > 0 || !isOriginal) && (
-          <div className={`mt-3 space-y-1.5 px-3 py-2 text-sm ${cellBorderClass}`}>
-            <p className="text-xs font-bold uppercase" style={{ color: accentColor }}>
-              Presentazione e caratteristiche della classe:
-            </p>
-            <p className="leading-snug text-slate-900">{compositionIntro}</p>
-            {activeCharacteristics.map((item) => (
-              <p key={item.id} className="leading-snug text-slate-900">
-                <strong style={{ color: accentColor }}>{item.nome}:</strong> {item.testo}
-              </p>
-            ))}
-          </div>
-        )}
       </section>
 
       {/* Analisi della situazione di partenza */}
@@ -483,9 +489,9 @@ export function DocumentSheetPreview({
               </span>
               :
             </p>
-            {plan.analisiPartenza.descrizioneDisciplinare.trim() ? (
+            {unifiedClassDescription ? (
               <p className="mt-2 whitespace-pre-wrap text-justify text-[13px]">
-                1. {plan.analisiPartenza.descrizioneDisciplinare.trim()}
+                1. {unifiedClassDescription}
               </p>
             ) : (
               renderBlankRules(5)
@@ -494,34 +500,52 @@ export function DocumentSheetPreview({
             <table className="mt-2 w-[92%] border-collapse border border-black text-left text-[12px] tabular-nums">
               <tbody>
                 <tr>
-                  <td className="h-24 w-1/4 border border-black p-2 align-top">
+                  <td className="w-1/4 border border-black p-2 align-top">
                     <p className="font-bold">Livello basso</p>
                     <p className="text-[11px]">(voti inferiori alla sufficienza)</p>
                     <p className="mt-3 font-bold">
                       Alunni: {plan.analisiPartenza.livelli.bassoAlunni}
                     </p>
                   </td>
-                  <td className="h-24 w-1/4 border border-black p-2 align-top">
+                  <td className="w-1/4 border border-black p-2 align-top">
                     <p className="font-bold">Livello medio/basso</p>
                     <p className="text-[11px]">(voto 6)</p>
                     <p className="mt-3 font-bold">
                       Alunni: {plan.analisiPartenza.livelli.medioBassoAlunni}
                     </p>
                   </td>
-                  <td className="h-24 w-1/4 border border-black p-2 align-top">
+                  <td className="w-1/4 border border-black p-2 align-top">
                     <p className="font-bold">Livello medio</p>
                     <p className="text-[11px]">(voti 7/8)</p>
                     <p className="mt-3 font-bold">
                       Alunni: {plan.analisiPartenza.livelli.medioAlunni}
                     </p>
                   </td>
-                  <td className="h-24 w-1/4 border border-black p-2 align-top">
+                  <td className="w-1/4 border border-black p-2 align-top">
                     <p className="font-bold">Livello alto</p>
                     <p className="text-[11px]">(voti 9/ 10)</p>
                     <p className="mt-3 font-bold">
                       Alunni: {plan.analisiPartenza.livelli.altoAlunni}
                     </p>
                   </td>
+                </tr>
+                <tr>
+                  {(['basso', 'medio_basso', 'medio', 'alto'] as const).map((bandKey) => (
+                    <td
+                      key={bandKey}
+                      className="min-h-10 h-10 w-1/4 border border-black p-2 align-top text-[11px]"
+                    >
+                      {bandStudents.hasAnyImportedStudents && bandStudents.bands[bandKey].length > 0 ? (
+                        <ul className="space-y-0.5">
+                          {bandStudents.bands[bandKey].map((name, i) => (
+                            <li key={i}>{name}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <span>&nbsp;</span>
+                      )}
+                    </td>
+                  ))}
                 </tr>
               </tbody>
             </table>
@@ -538,7 +562,7 @@ export function DocumentSheetPreview({
               SITUAZIONE DI PARTENZA DEGLI ALUNNI IN RELAZIONE ALLA DISCIPLINA:
             </p>
             <p className="mt-1 whitespace-pre-wrap text-sm text-slate-900">
-              {plan.analisiPartenza.descrizioneDisciplinare.trim() ||
+              {unifiedClassDescription ||
                 `${compositionIntro}\nDescrizione sintetica della situazione di partenza non ancora compilata.`}
             </p>
             <table className={`mt-3 w-full border-collapse text-center text-xs sm:text-sm ${cellBorderClass}`}>
@@ -564,6 +588,24 @@ export function DocumentSheetPreview({
                   <td className={`${cellBorderClass} px-2 py-1.5`}>
                     Alunni: {plan.analisiPartenza.livelli.altoAlunni}
                   </td>
+                </tr>
+                <tr>
+                  {(['basso', 'medio_basso', 'medio', 'alto'] as const).map((bandKey) => (
+                    <td
+                      key={bandKey}
+                      className={`${cellBorderClass} h-9 px-2 py-1.5 text-left align-top text-xs`}
+                    >
+                      {bandStudents.hasAnyImportedStudents && bandStudents.bands[bandKey].length > 0 ? (
+                        <ul className="space-y-0.5">
+                          {bandStudents.bands[bandKey].map((name, i) => (
+                            <li key={i}>{name}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <span>&nbsp;</span>
+                      )}
+                    </td>
+                  ))}
                 </tr>
               </tbody>
             </table>
@@ -731,7 +773,7 @@ export function DocumentSheetPreview({
           <table className="w-full border-collapse border border-black text-xs sm:text-[13px]">
             <tbody>
               <tr>
-                <td colSpan={3} className="border border-black p-3 align-top">
+                <td colSpan={2} className="border border-black p-3 align-top">
                   <p className="font-bold uppercase">
                     <span className="bg-[#E6E6E6] px-1">
                       TRAGUARDI PER LO SVILUPPO DELLE COMPETENZE
@@ -739,17 +781,20 @@ export function DocumentSheetPreview({
                     IN RELAZIONE AL CURRICOLO VERTICALE DEL NOSTRO ISTITUTO
                   </p>
 
-                  {plan.curricolo.competenzeAttese.length > 0 && (
-                    <ul className="mt-2 list-disc pl-5">
-                      {plan.curricolo.competenzeAttese.map((c, idx) => (
-                        <li key={idx}>{c}</li>
-                      ))}
-                    </ul>
+                  {resolvedCompetenze.length > 0 && (
+                    <div className="mt-2">
+                      <p className="font-bold">Competenze:</p>
+                      <ul className="mt-0.5 list-disc pl-5">
+                        {resolvedCompetenze.map((c, idx) => (
+                          <li key={idx}>{c}</li>
+                        ))}
+                      </ul>
+                    </div>
                   )}
 
                   {plan.curricolo.competenzeDigitali.length > 0 && (
                     <div className="mt-2">
-                      <p className="font-bold">Competenze digitali (DigComp 2.2):</p>
+                      <p className="font-bold">Competenze digitali:</p>
                       <ul className="mt-0.5 list-disc pl-5">
                         {plan.curricolo.competenzeDigitali.map((c, idx) => (
                           <li key={idx}>{c}</li>
@@ -757,58 +802,20 @@ export function DocumentSheetPreview({
                       </ul>
                     </div>
                   )}
-
-                  {(plan.curricolo.vociCatalogoImportate?.length ?? 0) > 0 && (
-                    <div className="mt-2 space-y-1.5">
-                      {CURRICOLO_TYPE_ORDER.map((tipo) => {
-                        const items = (plan.curricolo.vociCatalogoImportate ?? []).filter(
-                          (v) => v.tipo === tipo && v.testo.trim()
-                        );
-                        if (items.length === 0) return null;
-                        return (
-                          <div key={tipo}>
-                            <p className="text-[11px] font-bold uppercase text-slate-800">
-                              {CURRICOLO_TYPE_LABELS[tipo]}
-                            </p>
-                            <ul className="list-disc pl-5">
-                              {items.map((item) => (
-                                <li key={item.id}>
-                                  {item.nucleoTematico ? (
-                                    <strong>[{item.nucleoTematico}] </strong>
-                                  ) : null}
-                                  {item.testo}
-                                  {item.classeOrigine !== plan.datiGenerali.classe && (
-                                    <span className="italic text-slate-600">
-                                      {' '}
-                                      (Provenienza: Classe {item.classeOrigine})
-                                    </span>
-                                  )}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
                 </td>
               </tr>
               <tr>
-                <td colSpan={3} className="border border-black p-2.5 text-justify italic">
-                  {plan.curricolo.notaIntroduttiva}
+                <td colSpan={2} className="border border-black p-2.5 text-justify italic">
+                  {notaIntroCurricolo}
                 </td>
               </tr>
               <tr className="bg-[#E6E6E6] text-center font-bold uppercase">
-                <td className="w-[30%] border border-black px-2.5 py-1.5">COMPETENZE</td>
-                <td className="w-[36%] border border-black px-2.5 py-1.5">ABILITÀ / OBIETTIVI</td>
-                <td className="w-[34%] border border-black px-2.5 py-1.5">CONOSCENZE</td>
+                <td className="w-1/2 border border-black px-2.5 py-1.5">{leftCurricoloHeader}</td>
+                <td className="w-1/2 border border-black px-2.5 py-1.5">CONOSCENZE</td>
               </tr>
               {plan.curricolo.righeAbilitaConoscenze.length > 0 ? (
                 plan.curricolo.righeAbilitaConoscenze.map((row) => (
                   <tr key={row.id}>
-                    <td className="border border-black px-2.5 py-2 align-top whitespace-pre-wrap">
-                      {row.competenze || row.traguardo || '—'}
-                    </td>
                     <td className="border border-black px-2.5 py-2 align-top whitespace-pre-wrap">
                       {row.abilita || '—'}
                     </td>
@@ -819,7 +826,6 @@ export function DocumentSheetPreview({
                 ))
               ) : (
                 <tr>
-                  <td className="h-24 border border-black px-2.5 py-2" />
                   <td className="h-24 border border-black px-2.5 py-2" />
                   <td className="h-24 border border-black px-2.5 py-2" />
                 </tr>
@@ -834,15 +840,14 @@ export function DocumentSheetPreview({
             >
               TRAGUARDI PER LO SVILUPPO DELLE COMPETENZE IN RELAZIONE AL CURRICOLO VERTICALE DEL NOSTRO ISTITUTO
             </h3>
-            <p className="mt-2 italic text-slate-800">{plan.curricolo.notaIntroduttiva}</p>
 
-            {plan.curricolo.competenzeAttese.length > 0 && (
+            {resolvedCompetenze.length > 0 && (
               <div className="mt-2">
                 <p className="font-bold" style={{ color: accentColor }}>
-                  Traguardi e competenze attese:
+                  Competenze:
                 </p>
                 <ul className="mt-1 list-disc pl-5">
-                  {plan.curricolo.competenzeAttese.map((c, idx) => (
+                  {resolvedCompetenze.map((c, idx) => (
                     <li key={idx}>{c}</li>
                   ))}
                 </ul>
@@ -852,7 +857,7 @@ export function DocumentSheetPreview({
             {plan.curricolo.competenzeDigitali.length > 0 && (
               <div className="mt-2">
                 <p className="font-bold" style={{ color: accentColor }}>
-                  Competenze digitali (DigComp 2.2) e trasversali:
+                  Competenze digitali:
                 </p>
                 <ul className="mt-1 list-disc pl-5">
                   {plan.curricolo.competenzeDigitali.map((c, idx) => (
@@ -862,52 +867,16 @@ export function DocumentSheetPreview({
               </div>
             )}
 
-            {(plan.curricolo.vociCatalogoImportate?.length ?? 0) > 0 && (
-              <div className="mt-3 space-y-2">
-                <p className="font-bold" style={{ color: accentColor }}>
-                  Voci importate dal Curricolo Verticale:
-                </p>
-                {CURRICOLO_TYPE_ORDER.map((tipo) => {
-                  const items = (plan.curricolo.vociCatalogoImportate ?? []).filter(
-                    (v) => v.tipo === tipo && v.testo.trim()
-                  );
-                  if (items.length === 0) return null;
-                  return (
-                    <div key={tipo} className="mt-1">
-                      <p className="text-xs font-bold uppercase text-slate-800">
-                        {CURRICOLO_TYPE_LABELS[tipo]}
-                      </p>
-                      <ul className="mt-0.5 list-disc pl-5">
-                        {items.map((item) => (
-                          <li key={item.id}>
-                            {item.nucleoTematico ? (
-                              <strong>[{item.nucleoTematico}] </strong>
-                            ) : null}
-                            {item.testo}
-                            {item.classeOrigine !== plan.datiGenerali.classe && (
-                              <span className="italic text-slate-600">
-                                {' '}
-                                (Provenienza: Classe {item.classeOrigine})
-                              </span>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <p className="mt-2 italic text-slate-800">{notaIntroCurricolo}</p>
 
             <table className={`mt-3 w-full border-collapse text-xs sm:text-sm ${cellBorderClass}`}>
               <thead>
                 <tr className="text-white" style={{ backgroundColor: accentColor }}>
-                  <th className={`w-1/3 ${cellBorderClass} px-2.5 py-1.5 text-left`}>COMPETENZE</th>
-                  <th className={`w-1/3 ${cellBorderClass} px-2.5 py-1.5 text-left`}>
-                    ABILITÀ / OBIETTIVI
+                  <th className={`w-1/2 ${cellBorderClass} px-2.5 py-1.5 text-left`}>
+                    {leftCurricoloHeader}
                   </th>
-                  <th className={`w-1/3 ${cellBorderClass} px-2.5 py-1.5 text-left`}>
-                    CONOSCENZE (CONTENUTI)
+                  <th className={`w-1/2 ${cellBorderClass} px-2.5 py-1.5 text-left`}>
+                    CONOSCENZE
                   </th>
                 </tr>
               </thead>
@@ -915,9 +884,6 @@ export function DocumentSheetPreview({
                 {plan.curricolo.righeAbilitaConoscenze.length > 0 ? (
                   plan.curricolo.righeAbilitaConoscenze.map((row) => (
                     <tr key={row.id}>
-                      <td className={`${cellBorderClass} px-2.5 py-2 align-top whitespace-pre-wrap`}>
-                        {row.competenze || row.traguardo || '—'}
-                      </td>
                       <td className={`${cellBorderClass} px-2.5 py-2 align-top whitespace-pre-wrap`}>
                         {row.abilita || '—'}
                       </td>
@@ -928,8 +894,8 @@ export function DocumentSheetPreview({
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={3} className={`${cellBorderClass} px-3 py-3 italic text-slate-500`}>
-                      Nessuna riga di competenze, abilità e conoscenze ancora inserita.
+                    <td colSpan={2} className={`${cellBorderClass} px-3 py-3 italic text-slate-500`}>
+                      Nessuna riga inserita nel programma disciplinare.
                     </td>
                   </tr>
                 )}

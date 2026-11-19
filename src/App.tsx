@@ -338,7 +338,8 @@ export default function App() {
   const handleSyncComposizioneFromRoster = async (
     planId: string,
     totaleAlunni: number,
-    totaleBes: number
+    totaleBes: number,
+    totaleDisabilita = 0
   ) => {
     const target = programmazioni.find((p) => p.id === planId);
     if (!target) return;
@@ -348,6 +349,7 @@ export default function App() {
         ...target.composizione,
         alunni: totaleAlunni,
         bes: totaleBes,
+        disabilita: totaleDisabilita,
       },
     };
     await repository.saveProgrammazione(updated);
