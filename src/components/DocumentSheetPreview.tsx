@@ -814,16 +814,42 @@ export function DocumentSheetPreview({
                 <td className="w-1/2 border border-black px-2.5 py-1.5">CONOSCENZE</td>
               </tr>
               {plan.curricolo.righeAbilitaConoscenze.length > 0 ? (
-                plan.curricolo.righeAbilitaConoscenze.map((row) => (
-                  <tr key={row.id}>
-                    <td className="border border-black px-2.5 py-2 align-top whitespace-pre-wrap">
-                      {row.abilita || '—'}
-                    </td>
-                    <td className="border border-black px-2.5 py-2 align-top whitespace-pre-wrap">
-                      {row.conoscenze || '—'}
-                    </td>
-                  </tr>
-                ))
+                plan.curricolo.righeAbilitaConoscenze.map((row) => {
+                  const renderCell = (text: string, hint?: string) => {
+                    const clean = (text ?? '').trim();
+                    if (!clean) return '—';
+                    const normHint = (hint ?? '').trim();
+                    const effective =
+                      normHint && !clean.toLowerCase().startsWith(normHint.toLowerCase())
+                        ? `${normHint}\n${clean}`
+                        : clean;
+                    const lines = effective.split('\n');
+                    return lines.map((line, idx) => {
+                      const t = line.trim();
+                      const isNucleo =
+                        idx === 0 &&
+                        !t.startsWith('•') &&
+                        !t.startsWith('-') &&
+                        ((normHint.length > 0 && t.toLowerCase() === normHint.toLowerCase()) ||
+                          lines.length > 1);
+                      return (
+                        <div key={idx} className={isNucleo ? 'font-bold' : undefined}>
+                          {line}
+                        </div>
+                      );
+                    });
+                  };
+                  return (
+                    <tr key={row.id}>
+                      <td className="border border-black px-2.5 py-2 align-top">
+                        {renderCell(row.abilita, row.traguardo)}
+                      </td>
+                      <td className="border border-black px-2.5 py-2 align-top">
+                        {renderCell(row.conoscenze, row.traguardo)}
+                      </td>
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
                   <td className="h-24 border border-black px-2.5 py-2" />
@@ -882,16 +908,42 @@ export function DocumentSheetPreview({
               </thead>
               <tbody>
                 {plan.curricolo.righeAbilitaConoscenze.length > 0 ? (
-                  plan.curricolo.righeAbilitaConoscenze.map((row) => (
-                    <tr key={row.id}>
-                      <td className={`${cellBorderClass} px-2.5 py-2 align-top whitespace-pre-wrap`}>
-                        {row.abilita || '—'}
-                      </td>
-                      <td className={`${cellBorderClass} px-2.5 py-2 align-top whitespace-pre-wrap`}>
-                        {row.conoscenze || '—'}
-                      </td>
-                    </tr>
-                  ))
+                  plan.curricolo.righeAbilitaConoscenze.map((row) => {
+                    const renderCell = (text: string, hint?: string) => {
+                      const clean = (text ?? '').trim();
+                      if (!clean) return '—';
+                      const normHint = (hint ?? '').trim();
+                      const effective =
+                        normHint && !clean.toLowerCase().startsWith(normHint.toLowerCase())
+                          ? `${normHint}\n${clean}`
+                          : clean;
+                      const lines = effective.split('\n');
+                      return lines.map((line, idx) => {
+                        const t = line.trim();
+                        const isNucleo =
+                          idx === 0 &&
+                          !t.startsWith('•') &&
+                          !t.startsWith('-') &&
+                          ((normHint.length > 0 && t.toLowerCase() === normHint.toLowerCase()) ||
+                            lines.length > 1);
+                        return (
+                          <div key={idx} className={isNucleo ? 'font-bold' : undefined}>
+                            {line}
+                          </div>
+                        );
+                      });
+                    };
+                    return (
+                      <tr key={row.id}>
+                        <td className={`${cellBorderClass} px-2.5 py-2 align-top`}>
+                          {renderCell(row.abilita, row.traguardo)}
+                        </td>
+                        <td className={`${cellBorderClass} px-2.5 py-2 align-top`}>
+                          {renderCell(row.conoscenze, row.traguardo)}
+                        </td>
+                      </tr>
+                    );
+                  })
                 ) : (
                   <tr>
                     <td colSpan={2} className={`${cellBorderClass} px-3 py-3 italic text-slate-500`}>

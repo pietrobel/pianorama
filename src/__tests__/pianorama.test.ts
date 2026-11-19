@@ -7,9 +7,12 @@ import defaultRulesRaw from '../data/defaultRules.json';
 import { CURRICOLO_VERTICALE_SEED } from '../data/curricoloCatalogSeed';
 import {
   DEFAULT_BES_INTERVENTI_TEXT,
+  DEFAULT_DDI_TEXT,
+  DEFAULT_PREMESSA_METODOLOGICA,
   DEFAULT_SCHOOL_SETTINGS,
   DEFAULT_SOGLIE_FASCE,
   DEFAULT_SOGLIE_QUOTE_CARATTERISTICHE,
+  DEFAULT_VALUTAZIONE_TEXT,
   DISCIPLINE_SECONDARIA,
   STRATEGIE_CONSOLIDAMENTO_OPTIONS,
   STRATEGIE_POTENZIAMENTO_OPTIONS,
@@ -55,6 +58,7 @@ import {
   buildProgramRowsFromCatalogVoices,
   computeCatalogDiff,
   computePreselectedCatalogIds,
+  extractCompetenzeFromCatalogVoices,
   filterCatalogEntries,
   getCatalogEntryIndicazioniVersion,
   getDefaultIndicazioniForClasseAndYear,
@@ -93,6 +97,10 @@ import {
 } from '../engine/questionnaireEngine';
 import { applySuggestionAction, evaluateSuggestionRules } from '../engine/suggestionEngine';
 import { generateProgrammazioneDocxBytes } from '../export/docxGenerator';
+import {
+  buildLivelliTableClipboardContent,
+  generateLivelliTableDocxBytes,
+} from '../export/livelliTableExport';
 import { generateProgrammazionePdfBytes } from '../export/pdfGenerator';
 
 const mapping = defaultMappingRaw as DocxMappingSchema;
@@ -125,7 +133,12 @@ describe('PIANORAMA — Privacy, Regole, Questionario, Clonazione, Registro XLSX
 
     expect(plan.analisiPartenza.alunniAnonimiFasce[0].nominativo).toBe('Mario Rossi');
     const sanitized = sanitizePlanForOfficialExport(plan);
-    expect(sanitized.analisiPartenza.alunniAnonimiFasce).toBeUndefined();
+    expect(sanitized.analisiPartenza.alunniAnonimiFasce).toHaveLength(1);
+    expect(sanitized.analisiPartenza.alunniAnonimiFasce?.[0].nominativo).toBe('Mario Rossi');
+    expect(sanitized.analisiPartenza.alunniAnonimiFasce?.[0].media).toBeNull();
+    expect(sanitized.analisiPartenza.alunniAnonimiFasce?.[0].categoriaInclusione).toBeUndefined();
+    expect(sanitized.analisiPartenza.alunniAnonimiFasce?.[0].riferimentoPiano).toBeUndefined();
+    expect(sanitized.analisiPartenza.alunniAnonimiFasce?.[0].notaSensibileDocente).toBeUndefined();
     expect(sanitized.analisiPartenza.livelli.bassoAlunni).toBe(1);
   });
 
@@ -281,7 +294,7 @@ describe('PIANORAMA — Privacy, Regole, Questionario, Clonazione, Registro XLSX
     expect(extractCognomeOnly('VERDI, Luca')).toBe('VERDI');
 
     const resultKeepNames = parseGradebookBuffer(out, DEFAULT_SOGLIE_FASCE, { keepNames: true });
-    expect(resultKeepNames.entries[0].nominativo).toBe('ROSSI');
+    expect(resultKeepNames.entries[0].nominativo).toBe('ROSSI MARIO');
 
     const result = parseGradebookBuffer(out, DEFAULT_SOGLIE_FASCE, { keepNames: false });
 
@@ -345,14 +358,16 @@ describe('PIANORAMA — Privacy, Regole, Questionario, Clonazione, Registro XLSX
     expect(restored[4].fasciaCorrente).toBe('da_verificare');
     expect(computeLivelliFromStudents(restored)).toEqual(result.livelli);
 
-    // Anche con elenco nominativo e note sensibili salvati offline, i DOCX/PDF ufficiali esportano solo i conteggi
+    // Con elenco nominativo e note sensibili salvati offline: i nominativi compaiono nella riga dedicata di Livelli di partenza, mentre medie, BES/DSA/PEI e note restano rigorosamente privati
     const plan = createEmptyProgrammazione(DEFAULT_SCHOOL_SETTINGS);
     plan.analisiPartenza.alunniAnonimiFasce = withNotes;
     plan.analisiPartenza.livelli = computeLivelliFromStudents(withNotes);
     const docxBytes = await generateProgrammazioneDocxBytes(plan, DEFAULT_SCHOOL_SETTINGS, mapping);
-    const docxText = new TextDecoder().decode(docxBytes);
-    expect(docxText).not.toContain('ROSSI');
-    expect(docxText).not.toContain('Nota riservata locale');
+    const docxZip = await JSZip.loadAsync(docxBytes.buffer as ArrayBuffer);
+    const docxXml = await docxZip.file('word/document.xml')!.async('string');
+    expect(docxXml).toContain('ROSSI MARIO');
+    expect(docxXml).not.toContain('Nota riservata locale');
+    expect(docxXml).not.toContain('5.49');
   });
 
   it('backup .pianorama cifrato AES-GCM può essere esportato e decifrato localmente', async () => {
@@ -695,11 +710,13 @@ describe('PIANORAMA — Privacy, Regole, Questionario, Clonazione, Registro XLSX
       DEFAULT_SCHOOL_SETTINGS,
       mapping
     );
-    const docxStr = new TextDecoder().decode(docxBytes);
+    const docxZipSci = await JSZip.loadAsync(docxBytes.buffer as ArrayBuffer);
+    const docxXmlSci = await docxZipSci.file('word/document.xml')!.async('string');
     expect(docxBytes.byteLength).toBeGreaterThan(2000);
     expect(pdfBytes.byteLength).toBeGreaterThan(1500);
-    expect(docxStr).not.toContain('ALUNNO SEGRETO TEST');
-    expect(docxStr).not.toContain('Autonomia digitale');
+    expect(docxXmlSci).toContain('ALUNNO SEGRETO TEST');
+    expect(docxXmlSci).not.toContain('Presentazione e caratteristiche della classe:');
+    expect(docxXmlSci).not.toContain('Autonomia digitale');
     expect(CURRICOLO_VERTICALE_SEED.length).toBeGreaterThanOrEqual(200);
   });
 
@@ -725,7 +742,7 @@ describe('PIANORAMA — Privacy, Regole, Questionario, Clonazione, Registro XLSX
       docenteGenere: 'F',
       layoutDocumento: 'originale',
     });
-    plan.composizione = { alunni: 22, maschi: 12, femmine: 10, ripetenti: 1, bes: 3 };
+    plan.composizione = { alunni: 22, maschi: 12, femmine: 10, ripetenti: 1, bes: 3, disabilita: 0 };
     const introText = generateClassDescription(plan, 'sintetica');
     expect(introText).toContain('22 alunni (12 maschi e 10 femmine)');
     const distinctIntros = new Set<string>();
@@ -734,12 +751,15 @@ describe('PIANORAMA — Privacy, Regole, Questionario, Clonazione, Registro XLSX
     }
     expect(distinctIntros.size).toBe(10);
 
-    // 3. Popolamento tabella a 3 colonne dalle voci del catalogo
-    const itaPrima = filterCatalogEntries(CURRICOLO_VERTICALE_SEED, 'Prima', 'Italiano').slice(0, 6);
+    // 3. Popolamento competenze dopo i Traguardi e tabella a 2 colonne dalle voci del catalogo
+    const itaPrima = filterCatalogEntries(CURRICOLO_VERTICALE_SEED, 'Prima', 'Italiano');
     const voices = importCatalogEntriesToVoices(itaPrima);
-    const programRows = buildProgramRowsFromCatalogVoices(voices);
+    const competenzeList = extractCompetenzeFromCatalogVoices(voices);
+    const programRows = buildProgramRowsFromCatalogVoices(voices, [], { indicazioniVersione: 'nuove' });
+    expect(competenzeList.length).toBeGreaterThan(0);
     expect(programRows.length).toBeGreaterThan(0);
-    expect(programRows[0].competenze || programRows[0].traguardo).toBeTruthy();
+    expect(programRows[0].competenze ?? '').toBe('');
+    plan.curricolo.competenzeAttese = competenzeList;
     plan.curricolo.righeAbilitaConoscenze = programRows;
 
     // 4. Generazione DOCX e PDF in entrambi gli stili (originale e moderno) e round-trip importazione offline
@@ -833,10 +853,9 @@ Utilizzare con sicurezza le tecniche di calcolo \\tab Eseguire espressioni con f
       expect(plan.metodiStrumenti.altreMetodologie.trim().length).toBeGreaterThan(10);
       expect(plan.metodiStrumenti.altriSussidi.trim().length).toBeGreaterThan(10);
       expect(plan.metodiStrumenti.ausiliDidattici.trim().length).toBeGreaterThan(10);
-      expect(plan.metodiStrumenti.premessaMetodologica).toBe(met.premessaMetodologica);
-      expect(plan.metodiStrumenti.didatticaDigitaleIntegrata).toBe(
-        met.didatticaDigitaleIntegrata
-      );
+      expect(plan.metodiStrumenti.premessaMetodologica).toBe(DEFAULT_PREMESSA_METODOLOGICA);
+      expect(plan.metodiStrumenti.didatticaDigitaleIntegrata).toBe(DEFAULT_DDI_TEXT);
+      expect(plan.verificheValutazione.criteriValutazione).toBe(DEFAULT_VALUTAZIONE_TEXT);
 
       expect(cur.competenzeDigitali.length).toBeGreaterThanOrEqual(2);
       expect(plan.curricolo.competenzeDigitali).toEqual(cur.competenzeDigitali);
@@ -849,7 +868,8 @@ Utilizzare con sicurezza le tecniche di calcolo \\tab Eseguire espressioni con f
       attivitaSet.add(plan.curricolo.attivitaProgrammate);
     }
 
-    expect(premessaSet.size).toBe(15);
+    // Premessa metodologica, DDI e Valutazione restano identiche al modello originale
+    expect(premessaSet.size).toBe(1);
     expect(attivitaSet.size).toBe(15);
   });
 
@@ -1057,7 +1077,7 @@ Utilizzare con sicurezza le tecniche di calcolo \\tab Eseguire espressioni con f
       docenteGenere: 'F',
       layoutDocumento: 'originale',
     });
-    fullPlan.composizione = { alunni: 24, maschi: 11, femmine: 13, ripetenti: 1, bes: 3 };
+    fullPlan.composizione = { alunni: 24, maschi: 11, femmine: 13, ripetenti: 1, bes: 3, disabilita: 2 };
     fullPlan.situazione.tipologie = ['tranquilla', 'collaborativa', 'motivata'];
     fullPlan.situazione.livello = 'medio-alto';
     fullPlan.situazione.mezziIndividuazione = [
@@ -1190,6 +1210,7 @@ Utilizzare con sicurezza le tecniche di calcolo \\tab Eseguire espressioni con f
       femmine: 9,
       ripetenti: 0,
       bes: 2,
+      disabilita: 0,
     });
     expect(htmlImport.plan.situazione.tipologie).toEqual(['tranquilla', 'motivata']);
     expect(htmlImport.plan.situazione.livello).toBe('medio');
@@ -1284,5 +1305,381 @@ Utilizzare con sicurezza le tecniche di calcolo \\tab Eseguire espressioni con f
       'frazioni equivalenti'
     );
   });
+
+  it('rispetta il modello fedele: descrizione unica dopo Analisi, Con disabilità, riga alunni nei Livelli, raggruppamento nuclei Matematica/Scienze con digitale in coda e import PDF/HTML avanzato', async () => {
+    // 1. Matematica e Scienze raggruppano i contenuti per nuclei autentici e mettono il digitale in coda
+    const matTerza = filterCatalogEntries(CURRICOLO_VERTICALE_SEED, 'Terza', 'Matematica', 'nuove');
+    const matVoices = [
+      ...importCatalogEntriesToVoices(matTerza),
+      {
+        id: 'dig-mat-test',
+        classeOrigine: 'Terza' as const,
+        disciplina: 'Matematica',
+        tipo: 'conoscenza' as const,
+        nucleoTematico: 'Digitale e STEAM',
+        testo: 'Foglio di calcolo per analisi dati e grafici.',
+        testoOriginale: 'Foglio di calcolo per analisi dati e grafici.',
+        documentoProvenienza: 'Curricolo verticale nuovo',
+      },
+    ];
+    const matRows = buildProgramRowsFromCatalogVoices(matVoices, [], {
+      indicazioniVersione: 'nuove',
+    });
+    const matNuclei = matRows.map((r) => r.traguardo);
+    expect(matNuclei[0]).toBe('Numeri');
+    expect(matNuclei).toContain('Spazio e figure');
+    expect(matNuclei).toContain('Relazioni e funzioni');
+    const lastMatRow = matRows[matRows.length - 1];
+    expect((lastMatRow.traguardo ?? '').toLowerCase()).toMatch(/digitale|steam|cittadinanza/);
+
+    const sciPrima = filterCatalogEntries(CURRICOLO_VERTICALE_SEED, 'Prima', 'Scienze', 'nuove');
+    const sciRows = buildProgramRowsFromCatalogVoices(importCatalogEntriesToVoices(sciPrima), [], {
+      indicazioniVersione: 'nuove',
+    });
+    expect(sciRows.some((r) => (r.traguardo ?? '').includes('Biologia'))).toBe(true);
+    expect(sciRows.some((r) => (r.traguardo ?? '').includes('Fisica'))).toBe(true);
+    expect((sciRows[sciRows.length - 1].traguardo ?? '').toLowerCase()).toMatch(/digitale|steam/);
+
+    // 2. Export DOCX/PDF con alunni nelle fasce di livello, Con disabilità e header OBIETTIVI vs ABILITÀ
+    const planNuove = createEmptyProgrammazione(DEFAULT_SCHOOL_SETTINGS, {
+      disciplina: 'Scienze',
+      classe: 'Prima',
+      sezione: 'A',
+      layoutDocumento: 'originale',
+    });
+    planNuove.composizione = { alunni: 20, maschi: 10, femmine: 10, ripetenti: 0, bes: 2, disabilita: 1 };
+    planNuove.analisiPartenza.descrizioneDisciplinare =
+      'Classe partecipe e collaborativa nelle attività laboratoriali.';
+    planNuove.analisiPartenza.alunniAnonimiFasce = [
+      createManualStudentEntry([], { nominativo: 'Bianchi Luca', media: 5.0 }, DEFAULT_SOGLIE_FASCE),
+      createManualStudentEntry([], { nominativo: 'Verdi Anna', media: 9.2 }, DEFAULT_SOGLIE_FASCE),
+    ];
+    planNuove.analisiPartenza.livelli = computeLivelliFromStudents(
+      planNuove.analisiPartenza.alunniAnonimiFasce
+    );
+    planNuove.curricolo.competenzeAttese = extractCompetenzeFromCatalogVoices(
+      importCatalogEntriesToVoices(sciPrima)
+    );
+    planNuove.curricolo.righeAbilitaConoscenze = sciRows;
+
+    const docxNuove = await generateProgrammazioneDocxBytes(planNuove, DEFAULT_SCHOOL_SETTINGS, mapping);
+    const zipNuove = await JSZip.loadAsync(docxNuove.buffer as ArrayBuffer);
+    const xmlNuove = await zipNuove.file('word/document.xml')!.async('string');
+    expect(xmlNuove).toContain('Con disabilit');
+    expect(xmlNuove).toContain('OBIETTIVI');
+    expect(xmlNuove).toContain('Competenze digitali:');
+    expect(xmlNuove).toContain('Bianchi Luca');
+    expect(xmlNuove).toContain('Verdi Anna');
+    expect(xmlNuove).not.toContain('Presentazione e caratteristiche della classe:');
+
+    // Round-trip PDF completo (inclusa ricostruzione tabella curricolo 2 colonne + 4 box livelli con nomi!)
+    const pdfNuove = generateProgrammazionePdfBytes(planNuove, DEFAULT_SCHOOL_SETTINGS, mapping);
+    const rtPdf = await importProgrammazioneFromBuffer(
+      pdfNuove.buffer as ArrayBuffer,
+      'scienze_1A_nuove.pdf',
+      DEFAULT_SCHOOL_SETTINGS
+    );
+    expect(rtPdf.plan.curricolo.indicazioniVersione).toBe('nuove');
+    expect(rtPdf.plan.composizione.disabilita).toBe(1);
+    expect(rtPdf.plan.analisiPartenza.livelli.bassoAlunni).toBe(1);
+    expect(rtPdf.plan.analisiPartenza.livelli.altoAlunni).toBe(1);
+    expect(rtPdf.plan.analisiPartenza.alunniAnonimiFasce?.map((s) => s.nominativo)).toEqual(
+      expect.arrayContaining(['Bianchi Luca', 'Verdi Anna'])
+    );
+    expect(rtPdf.plan.curricolo.righeAbilitaConoscenze.length).toBeGreaterThanOrEqual(2);
+
+    // 3. Import HTML modello con "H: 2", opzioni barrate <s>, "SEZ. D", grassetto/subset senza caselle, A.S. 25/26, righe nucleo e intestazione ABILITÀ ripetuta
+    const legacyModelHtml = `<!DOCTYPE html><html><body>
+      <p>PROGRAMMAZIONE DISCIPLINARE di Scienze</p>
+      <p>CLASSE Terza - Sez. D | A.S. 25/26 | PLESSO DI Villafrati</p>
+      <p>DOCENTE Prof.ssa Chiara Longo</p>
+      <p>COMPOSIZIONE DELLA CLASSE</p>
+      <table><tr>
+        <td>Alunni: 21</td><td>Maschi: 11</td><td>Femmine: 10</td><td>Ripetenti: 1</td><td>Con Bisogni Educativi Speciali (BES): 3</td><td>H: 2</td>
+      </tr></table>
+      <p>SITUAZIONE DELLA CLASSE</p>
+      <table>
+        <tr><td>TIPOLOGIA</td><td>LIVELLO</td></tr>
+        <tr><td><s>problematica</s> collaborativa</td><td>medio</td></tr>
+      </table>
+      <table>
+        <tr><td>ABILITA'</td><td>CONOSCENZE</td></tr>
+        <tr><td colspan="2">Biologia</td></tr>
+        <tr><td>Osservare fenomeni naturali.</td><td>La cellula e gli esseri viventi.</td></tr>
+        <tr><td>ABILITA'</td><td>CONOSCENZE</td></tr>
+        <tr><td>Classificare le rocce.</td><td>Litosfera e vulcani.</td></tr>
+      </table>
+      <p>CRITERI METODOLOGICI, STRATEGIE, STRUMENTI</p>
+      <p>Lavoro laboratoriale e didattica attiva centrata sull'esperienza diretta.</p>
+      <table>
+        <tr><td>METODI</td><td>MEZZI E STRUMENTI</td></tr>
+        <tr>
+          <td><ul><li><b>Metodo induttivo</b></li><li>Metodo deduttivo</li><li>Lezione frontale</li><li>Cooperative learning</li></ul></td>
+          <td><ul><li>Libri di testo</li><li><s>Cartelloni</s></li><li>Presentazioni multimediali</li></ul></td>
+        </tr>
+      </table>
+      <p>VERIFICHE IN ITINERE: MODALITÀ</p>
+      <table>
+        <tr><td>SCRITTA</td><td>ORALE</td></tr>
+        <tr><td><ul><li>Prove strutturate</li></ul></td><td><ul><li>Interrogazioni</li></ul></td></tr>
+      </table>
+      <p>CRITERI DI VALUTAZIONE:</p>
+      <p>La valutazione terrà conto del percorso formativo, dell'impegno e dei progressi individuali.</p>
+      <p>La docente Prof.ssa Chiara Longo</p>
+    </body></html>`;
+    const legacyImp = await importProgrammazioneFromBuffer(
+      new TextEncoder().encode(legacyModelHtml).buffer,
+      'scienze_3D.doc',
+      DEFAULT_SCHOOL_SETTINGS
+    );
+    expect(legacyImp.plan.datiGenerali.annoScolastico).toBe('2025/26');
+    expect(legacyImp.plan.datiGenerali.classe).toBe('Terza');
+    expect(legacyImp.plan.datiGenerali.sezione).toBe('D');
+    expect(legacyImp.plan.datiGenerali.plesso).toBe('Villafrati');
+    expect(legacyImp.plan.composizione.disabilita).toBe(2);
+    expect(legacyImp.plan.situazione.livello).toBe('medio');
+    expect(legacyImp.plan.curricolo.indicazioniVersione).toBe('vecchie');
+    expect(legacyImp.plan.curricolo.righeAbilitaConoscenze).toHaveLength(2);
+    expect(legacyImp.plan.curricolo.righeAbilitaConoscenze[0].traguardo).toBe('Biologia');
+    expect(legacyImp.plan.metodiStrumenti.metodi).toEqual(['Metodo induttivo']);
+    expect(legacyImp.plan.verificheValutazione.verificheScritte).toEqual(['Prove strutturate']);
+    expect(legacyImp.plan.verificheValutazione.verificheOrali).toEqual(['Interrogazioni']);
+    expect(legacyImp.plan.verificheValutazione.criteriValutazione).toContain('progressi individuali');
+  });
+
+  it('mantiene testi fissi di Metodologia/DDI/Valutazione, fonde nuclei con digitale in coda e normalizza tabelle a 3 colonne in 1+2 colonne', async () => {
+    // 1. Tutte le 15 discipline mantengono invariati i 3 testi istituzionali del modello
+    for (const disc of DISCIPLINE_SECONDARIA) {
+      const mDef = getDefaultMetodiStrumentiForDisciplina(disc);
+      const vDef = getDefaultVerificheValutazioneForDisciplina(disc);
+      expect(mDef.premessaMetodologica).toBe(DEFAULT_PREMESSA_METODOLOGICA);
+      expect(mDef.didatticaDigitaleIntegrata).toBe(DEFAULT_DDI_TEXT);
+      expect(vDef.criteriValutazione).toBe(DEFAULT_VALUTAZIONE_TEXT);
+    }
+
+    // 2. Importazione incrementale da catalogo fonde per nucleo e lascia sempre i contenuti digitali in coda
+    const itaSeconda = filterCatalogEntries(CURRICOLO_VERTICALE_SEED, 'Seconda', 'Italiano', 'nuove');
+    const firstBatch = buildProgramRowsFromCatalogVoices(
+      importCatalogEntriesToVoices(itaSeconda.filter((e) => e.nucleoTematico.includes('Digitale'))),
+      [],
+      { indicazioniVersione: 'nuove' }
+    );
+    const mergedIta = buildProgramRowsFromCatalogVoices(
+      importCatalogEntriesToVoices(itaSeconda.filter((e) => !e.nucleoTematico.includes('Digitale'))),
+      firstBatch,
+      { indicazioniVersione: 'nuove' }
+    );
+    expect(mergedIta[mergedIta.length - 1].traguardo?.toLowerCase()).toMatch(/digitale|rete/);
+
+    // 3. Importazione di una tabella esterna a 3 colonne promuove le competenze in competenzeAttese (dopo i Traguardi)
+    const legacyThreeColHtml = `<!DOCTYPE html><html><body>
+      <p>PROGRAMMAZIONE DISCIPLINARE di Scienze</p>
+      <p>CLASSE 2^ B | A.S. 2025/26</p>
+      <table>
+        <tr><td>COMPETENZE</td><td>ABILITA'</td><td>CONOSCENZE</td></tr>
+        <tr>
+          <td>Osserva, analizza e descrive fenomeni appartenenti alla realtà naturale</td>
+          <td>Descrivere la struttura della cellula e i principali tessuti</td>
+          <td>La cellula eucariote e procariote, i tessuti vegetali e animali</td>
+        </tr>
+      </table>
+    </body></html>`;
+    const imported3Col = await importProgrammazioneFromBuffer(
+      new TextEncoder().encode(legacyThreeColHtml).buffer,
+      'scienze_2B_3col.doc',
+      DEFAULT_SCHOOL_SETTINGS
+    );
+    expect(imported3Col.plan.curricolo.competenzeAttese.some((c) =>
+      c.includes('fenomeni appartenenti alla realtà naturale')
+    )).toBe(true);
+
+    // 4. Verifica PDF e DOCX: struttura a 1 colonna (Competenze + Competenze digitali) sopra tabella a 2 colonne
+    const planExport = createEmptyProgrammazione(DEFAULT_SCHOOL_SETTINGS, {
+      disciplina: 'Matematica',
+      classe: 'Seconda',
+      sezione: 'C',
+      annoScolastico: '2026/27',
+      indicazioniVersione: 'vecchie',
+    });
+    planExport.curricolo.competenzeAttese = [
+      'Utilizza con sicurezza le procedure di calcolo aritmetico e algebrico.',
+    ];
+    planExport.curricolo.competenzeDigitali = [
+      'Utilizza fogli di calcolo per rappresentare dati e formule.',
+    ];
+    planExport.curricolo.righeAbilitaConoscenze = buildProgramRowsFromCatalogVoices(
+      importCatalogEntriesToVoices(
+        filterCatalogEntries(CURRICOLO_VERTICALE_SEED, 'Seconda', 'Matematica')
+      ),
+      [],
+      { indicazioniVersione: 'vecchie' }
+    );
+
+    const docxVecchie = await generateProgrammazioneDocxBytes(
+      planExport,
+      DEFAULT_SCHOOL_SETTINGS,
+      mapping
+    );
+    const zipVecchie = await JSZip.loadAsync(docxVecchie.buffer as ArrayBuffer);
+    const xmlVecchie = await zipVecchie.file('word/document.xml')!.async('string');
+    const idxComp = xmlVecchie.indexOf('Competenze:');
+    const idxDig = xmlVecchie.indexOf('Competenze digitali:');
+    const idxNota = xmlVecchie.indexOf('Tenuto conto');
+    const idxAbil = xmlVecchie.indexOf('ABILITÀ');
+    const idxCon = xmlVecchie.indexOf('CONOSCENZE');
+    expect(idxComp).toBeGreaterThan(-1);
+    expect(idxDig).toBeGreaterThan(idxComp);
+    expect(idxNota).toBeGreaterThan(idxDig);
+    expect(idxAbil).toBeGreaterThan(idxNota);
+    expect(idxCon).toBeGreaterThan(idxAbil);
+
+    const pdfVecchie = generateProgrammazionePdfBytes(
+      planExport,
+      DEFAULT_SCHOOL_SETTINGS,
+      mapping
+    );
+    const pdfRt = await importProgrammazioneFromBuffer(
+      pdfVecchie.buffer as ArrayBuffer,
+      'matematica_2C_vecchie.pdf',
+      DEFAULT_SCHOOL_SETTINGS
+    );
+    expect(pdfRt.plan.curricolo.indicazioniVersione).toBe('vecchie');
+    expect(pdfRt.plan.curricolo.competenzeAttese.some((c) => c.includes('calcolo aritmetico'))).toBe(
+      true
+    );
+    expect(pdfRt.plan.curricolo.competenzeDigitali.some((c) => c.includes('fogli di calcolo'))).toBe(
+      true
+    );
+  });
+
+  it('importa registri .xls/.xlsx con intestazioni Cognome+Nome, Alunni, date, HTML .xls, esporta nominativi nel documento e genera solo tabella DOCX/Word-Writer', async () => {
+    // 1. Workbook multi-foglio con Cognome + Nome separati e sole colonne date
+    const wb = XLSX.utils.book_new();
+    const coverSheet = XLSX.utils.aoa_to_sheet([['Copertina Registro'], ['Anno 2025/2026']]);
+    const dataSheet = XLSX.utils.aoa_to_sheet([
+      ['1B ORDINARIO (ITALIANO)'],
+      ['N.', 'Cognome', 'Nome', '15/09', '22/09', 'Media'],
+      ['1', 'Esposito', 'Chiara', '9', '9+', ''],
+      ['2', 'De Luca', 'Matteo', '7½', '7', ''],
+      ['3', 'Conti', 'Elena', '6', '6-', ''],
+      ['4', 'Moretti', 'Luca', '5', '5-', ''],
+      ['Totale alunni', '4', '', '', '', ''],
+    ]);
+    XLSX.utils.book_append_sheet(wb, coverSheet, 'Copertina');
+    XLSX.utils.book_append_sheet(wb, dataSheet, 'Voti');
+    const xlsxBuf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+
+    const parsed = parseGradebookBuffer(xlsxBuf, DEFAULT_SOGLIE_FASCE, { keepNames: true });
+    expect(parsed.classeRilevata).toBe('1B ORDINARIO (ITALIANO)');
+    expect(parsed.entries).toHaveLength(4);
+    expect(parsed.entries.map((e) => e.nominativo)).toEqual([
+      'Esposito Chiara',
+      'De Luca Matteo',
+      'Conti Elena',
+      'Moretti Luca',
+    ]);
+    expect(parsed.livelli).toEqual({
+      bassoAlunni: 1,
+      medioBassoAlunni: 1,
+      medioAlunni: 1,
+      altoAlunni: 1,
+    });
+
+    // 2. HTML-disguised .xls con intestazione "Alunni" e accenti italiani
+    const htmlXls = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>
+      <table>
+        <tr><th>Alunni</th><th>Media voti</th></tr>
+        <tr><td>Niccolò Brambilla</td><td>8,5</td></tr>
+        <tr><td>Giulia Lòpez</td><td>6,0</td></tr>
+      </table>
+    </body></html>`;
+    const htmlBuf = new TextEncoder().encode(htmlXls).buffer;
+    const parsedHtml = parseGradebookBuffer(htmlBuf, DEFAULT_SOGLIE_FASCE, { keepNames: true });
+    expect(parsedHtml.entries.map((e) => e.nominativo)).toEqual([
+      'Niccolò Brambilla',
+      'Giulia Lòpez',
+    ]);
+    expect(parsedHtml.livelli.altoAlunni).toBe(1);
+    expect(parsedHtml.livelli.medioBassoAlunni).toBe(1);
+
+    // 3. Verifica che tutti i nominativi importati compaiano nel documento finale (originale + moderno + PDF)
+    const entriesWithSensitive = updateStudentDetails(
+      parsed.entries,
+      parsed.entries[3].id,
+      {
+        categoriaInclusione: 'bes',
+        riferimentoPiano: 'PDP',
+        notaSensibileDocente: 'OSSERVAZIONE_RISERVATA_DA_NON_ESPORTARE',
+      },
+      DEFAULT_SOGLIE_FASCE
+    );
+
+    const planOrig = createEmptyProgrammazione(DEFAULT_SCHOOL_SETTINGS, {
+      classe: 'Prima',
+      sezione: 'B',
+      disciplina: 'Italiano',
+      annoScolastico: '2025/2026',
+      layoutDocumento: 'originale',
+    });
+    planOrig.analisiPartenza.alunniAnonimiFasce = entriesWithSensitive;
+    planOrig.analisiPartenza.livelli = computeLivelliFromStudents(entriesWithSensitive);
+
+    const docxOrigBytes = await generateProgrammazioneDocxBytes(
+      planOrig,
+      DEFAULT_SCHOOL_SETTINGS,
+      mapping
+    );
+    const docxOrigZip = await JSZip.loadAsync(docxOrigBytes.buffer as ArrayBuffer);
+    const docxOrigXml = await docxOrigZip.file('word/document.xml')!.async('string');
+    for (const fullName of ['Esposito Chiara', 'De Luca Matteo', 'Conti Elena', 'Moretti Luca']) {
+      expect(docxOrigXml).toContain(fullName);
+    }
+    expect(docxOrigXml).not.toContain('OSSERVAZIONE_RISERVATA_DA_NON_ESPORTARE');
+
+    const planMod = {
+      ...planOrig,
+      datiGenerali: { ...planOrig.datiGenerali, layoutDocumento: 'moderno' as const },
+    };
+    const docxModBytes = await generateProgrammazioneDocxBytes(
+      planMod,
+      DEFAULT_SCHOOL_SETTINGS,
+      mapping
+    );
+    const docxModZip = await JSZip.loadAsync(docxModBytes.buffer as ArrayBuffer);
+    const docxModXml = await docxModZip.file('word/document.xml')!.async('string');
+    expect(docxModXml).toContain('Esposito Chiara');
+    expect(docxModXml).toContain('Moretti Luca');
+
+    // 4. Verifica esportazione standalone solo tabella (.docx)
+    const tableOnlyDocx = await generateLivelliTableDocxBytes({
+      livelli: planOrig.analisiPartenza.livelli,
+      entries: entriesWithSensitive,
+      classeLabel: 'Prima B · Italiano · 2025/2026',
+    });
+    const tableOnlyZip = await JSZip.loadAsync(tableOnlyDocx.buffer as ArrayBuffer);
+    const tableOnlyXml = await tableOnlyZip.file('word/document.xml')!.async('string');
+    expect(tableOnlyXml).toContain('Livelli di partenza rilevati');
+    expect(tableOnlyXml).toContain('Esposito Chiara');
+    expect(tableOnlyXml).toContain('De Luca Matteo');
+    expect(tableOnlyXml).toContain('Conti Elena');
+    expect(tableOnlyXml).toContain('Moretti Luca');
+    expect(tableOnlyXml).not.toContain('PROGRAMMAZIONE DIDATTICA DISCIPLINARE');
+    expect(tableOnlyXml).not.toContain('OSSERVAZIONE_RISERVATA_DA_NON_ESPORTARE');
+
+    // 5. Verifica copia appunti HTML + TSV per Word / LibreOffice Writer
+    const clip = buildLivelliTableClipboardContent({
+      livelli: planOrig.analisiPartenza.livelli,
+      entries: entriesWithSensitive,
+      classeLabel: 'Prima B · Italiano',
+    });
+    expect(clip.html).toContain('<table');
+    expect(clip.html).toContain('Esposito Chiara');
+    expect(clip.html).toContain('Moretti Luca');
+    expect(clip.html).toContain('Alunni: 1');
+    expect(clip.html).not.toContain('OSSERVAZIONE_RISERVATA_DA_NON_ESPORTARE');
+    expect(clip.plainText).toContain('Esposito Chiara');
+    expect(clip.plainText).toContain('Alunni: 1\tAlunni: 1\tAlunni: 1\tAlunni: 1');
+  });
 });
+
 

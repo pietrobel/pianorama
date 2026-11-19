@@ -101,16 +101,19 @@ export function CurricoloCatalogSelector({
       selectedDisciplina,
       selectedIndicazioni
     );
-    if (
-      selectedIndicazioni === 'vecchie' &&
-      !filtered.some((e) => e.tipo === 'competenza')
-    ) {
-      const compEntries = filterCatalogEntries(
-        catalog,
-        selectedClasse,
-        selectedDisciplina
-      ).filter((e) => e.tipo === 'competenza');
-      return [...compEntries, ...filtered];
+    if (selectedIndicazioni === 'vecchie') {
+      const allClassDisc = filterCatalogEntries(catalog, selectedClasse, selectedDisciplina);
+      const additions: CurricoloCatalogEntry[] = [];
+      if (!filtered.some((e) => e.tipo === 'competenza')) {
+        additions.push(...allClassDisc.filter((e) => e.tipo === 'competenza'));
+      }
+      if (!filtered.some((e) => e.tipo === 'conoscenza')) {
+        additions.push(...allClassDisc.filter((e) => e.tipo === 'conoscenza'));
+      }
+      if (!filtered.some((e) => e.tipo === 'abilita')) {
+        additions.push(...allClassDisc.filter((e) => e.tipo === 'abilita'));
+      }
+      return [...additions, ...filtered];
     }
     return filtered;
   }, [catalog, selectedClasse, selectedDisciplina, selectedIndicazioni]);

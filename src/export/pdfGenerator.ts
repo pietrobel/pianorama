@@ -310,30 +310,64 @@ export function generateProgrammazionePdfBytes(
     y += drawCheckboxAt(checked, label, xOffset, y, maxWidth);
   };
 
-  const drawThreeColRow = (
+  const drawTwoColRow = (
     c1: string,
     c2: string,
-    c3: string,
-    opts?: { isHeader?: boolean; repeatHeaderOnBreak?: boolean }
+    repeatLeftHeader: string,
+    opts?: { isHeader?: boolean; repeatHeaderOnBreak?: boolean; nucleoHint?: string }
   ) => {
-    const widths = isOriginal
-      ? [contentWidth * 0.3, contentWidth * 0.36, contentWidth * 0.34]
-      : [contentWidth / 3, contentWidth / 3, contentWidth / 3];
+    const widths = [contentWidth * 0.5, contentWidth * 0.5];
     const pad = 2;
-    doc.setFont(fontFamily, opts?.isHeader ? 'bold' : 'normal');
-    doc.setFontSize(opts?.isHeader ? 9.5 : 9);
-
-    const raw1 = opts?.isHeader ? c1 : c1 || '-';
-    const raw2 = opts?.isHeader ? c2 : c2 || '-';
-    const raw3 = opts?.isHeader ? c3 : c3 || '-';
-
-    const l1 = doc.splitTextToSize(pdfSafeText(raw1), widths[0] - pad * 2);
-    const l2 = doc.splitTextToSize(pdfSafeText(raw2), widths[1] - pad * 2);
-    const l3 = doc.splitTextToSize(pdfSafeText(raw3), widths[2] - pad * 2);
-
+    const isHeader = Boolean(opts?.isHeader);
+    const fontSize = isHeader ? 9.5 : 9;
     const lineH = 3.85;
+
+    type StyledLine = { text: string; bold: boolean };
+    const buildStyledLines = (raw: string): StyledLine[] => {
+      if (isHeader) {
+        doc.setFont(fontFamily, 'bold');
+        doc.setFontSize(fontSize);
+        const wrapped = doc.splitTextToSize(pdfSafeText(raw), widths[0] - pad * 2) as string[];
+        return wrapped.map((t) => ({ text: t, bold: true }));
+      }
+      const clean = (raw ?? '').trim();
+      const hint = (opts?.nucleoHint ?? '').trim();
+      const effectiveText =
+        clean && hint && !clean.toLowerCase().startsWith(hint.toLowerCase())
+          ? `${hint}\n${clean}`
+          : clean || '-';
+      const logicalLines = effectiveText.split('\n');
+      const out: StyledLine[] = [];
+      logicalLines.forEach((logical, idx) => {
+        const trimmed = logical.trim();
+        const isNucleoTitle =
+          idx === 0 &&
+          !trimmed.startsWith('•') &&
+          !trimmed.startsWith('-') &&
+          ((hint.length > 0 && trimmed.toLowerCase() === hint.toLowerCase()) ||
+            logicalLines.length > 1);
+        doc.setFont(fontFamily, isNucleoTitle ? 'bold' : 'normal');
+        doc.setFontSize(fontSize);
+        const wrapped = doc.splitTextToSize(
+          pdfSafeText(logical || ' '),
+          widths[0] - pad * 2
+        ) as string[];
+        if (wrapped.length === 0) {
+          out.push({ text: '', bold: isNucleoTitle });
+        } else {
+          for (const w of wrapped) {
+            out.push({ text: w, bold: isNucleoTitle });
+          }
+        }
+      });
+      return out.length ? out : [{ text: '-', bold: false }];
+    };
+
+    const l1 = buildStyledLines(c1);
+    const l2 = buildStyledLines(c2);
+
     let startLine = 0;
-    const totalLines = Math.max(l1.length, l2.length, l3.length, 1);
+    const totalLines = Math.max(l1.length, l2.length, 1);
 
     while (startLine < totalLines) {
       const remainingLines = totalLines - startLine;
@@ -343,7 +377,7 @@ export function generateProgrammazionePdfBytes(
         doc.addPage();
         y = isOriginal ? 15 : 16;
         if (opts?.repeatHeaderOnBreak) {
-          drawThreeColRow('COMPETENZE', 'ABILITA / OBIETTIVI', 'CONOSCENZE', {
+          drawTwoColRow(repeatLeftHeader, 'CONOSCENZE', repeatLeftHeader, {
             isHeader: true,
           });
         }
@@ -355,10 +389,9 @@ export function generateProgrammazionePdfBytes(
 
       const s1 = l1.slice(startLine, startLine + sliceCount);
       const s2 = l2.slice(startLine, startLine + sliceCount);
-      const s3 = l3.slice(startLine, startLine + sliceCount);
 
       const borderColor: [number, number, number] = isOriginal ? [0, 0, 0] : [180, 195, 210];
-      if (opts?.isHeader) {
+      if (isHeader) {
         if (isOriginal) {
           doc.setFillColor(230, 230, 230);
           doc.rect(marginX, y, contentWidth, rowH, 'F');
@@ -372,24 +405,35 @@ export function generateProgrammazionePdfBytes(
         doc.setTextColor(0, 0, 0);
       }
 
-      doc.setFont(fontFamily, opts?.isHeader ? 'bold' : 'normal');
-      doc.setFontSize(opts?.isHeader ? 9.5 : 9);
+      doc.setFontSize(fontSize);
       doc.setDrawColor(...borderColor);
       doc.setLineWidth(0.3);
       doc.rect(marginX, y, widths[0], rowH);
       doc.rect(marginX + widths[0], y, widths[1], rowH);
-      doc.rect(marginX + widths[0] + widths[1], y, widths[2], rowH);
 
-      if (opts?.isHeader && isOriginal) {
-        doc.text(s1, marginX + widths[0] / 2, y + 4.2, { align: 'center' });
-        doc.text(s2, marginX + widths[0] + widths[1] / 2, y + 4.2, { align: 'center' });
-        doc.text(s3, marginX + widths[0] + widths[1] + widths[2] / 2, y + 4.2, {
-          align: 'center',
-        });
+      if (isHeader) {
+        doc.setFont(fontFamily, 'bold');
+        doc.text(
+          s1.map((x) => x.text),
+          marginX + widths[0] / 2,
+          y + 4.2,
+          { align: 'center' }
+        );
+        doc.text(
+          s2.map((x) => x.text),
+          marginX + widths[0] + widths[1] / 2,
+          y + 4.2,
+          { align: 'center' }
+        );
       } else {
-        if (s1.length) doc.text(s1, marginX + pad, y + 4.2);
-        if (s2.length) doc.text(s2, marginX + widths[0] + pad, y + 4.2);
-        if (s3.length) doc.text(s3, marginX + widths[0] + widths[1] + pad, y + 4.2);
+        s1.forEach((item, idx) => {
+          doc.setFont(fontFamily, item.bold ? 'bold' : 'normal');
+          if (item.text) doc.text(item.text, marginX + pad, y + 4.2 + idx * lineH);
+        });
+        s2.forEach((item, idx) => {
+          doc.setFont(fontFamily, item.bold ? 'bold' : 'normal');
+          if (item.text) doc.text(item.text, marginX + widths[0] + pad, y + 4.2 + idx * lineH);
+        });
       }
 
       y += rowH;
@@ -1014,7 +1058,7 @@ export function generateProgrammazionePdfBytes(
         .filter((v) => v.tipo === 'competenza' && v.testo.trim())
         .map((v) => v.testo.trim());
   const leftCurricoloHeader =
-    (plan.curricolo.indicazioniVersione ?? 'vecchie') === 'nuove' ? 'OBIETTIVI' : 'ABILITA';
+    (plan.curricolo.indicazioniVersione ?? 'vecchie') === 'nuove' ? 'OBIETTIVI' : 'ABILITÀ';
   const notaIntroCurricolo = getCurricoloIntroNoteText(
     plan.curricolo.notaIntroduttiva,
     plan.curricolo.indicazioniVersione
@@ -1022,40 +1066,108 @@ export function generateProgrammazionePdfBytes(
 
   if (isOriginal) {
     ensureSpace(28);
-    // Cella introduttiva unificata del blocco Curricolo
-    const headerBoxTitle =
-      'TRAGUARDI PER LO SVILUPPO DELLE COMPETENZE IN RELAZIONE AL CURRICOLO VERTICALE DEL NOSTRO ISTITUTO';
-    doc.setFont(fontFamily, 'bold');
-    doc.setFontSize(9.8);
-    const titleLines = doc.splitTextToSize(headerBoxTitle, contentWidth - 4);
-    const topCellH = titleLines.length * 4.4 + 4;
-    doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(0.3);
-    doc.rect(marginX, y, contentWidth, topCellH);
-    doc.setFillColor(230, 230, 230);
-    doc.rect(marginX + 1.5, y + 1.5, contentWidth - 3, 4.4, 'F');
-    doc.setTextColor(0, 0, 0);
-    doc.text(titleLines, marginX + 2, y + 5);
-    y += topCellH;
+    type BoxLine = {
+      text: string;
+      bold: boolean;
+      size: number;
+      lineH: number;
+      highlightHeader?: boolean;
+      gapBefore?: number;
+    };
+    const boxLines: BoxLine[] = [];
+    const pushBoxText = (
+      raw: string,
+      opts?: { bold?: boolean; size?: number; highlightHeader?: boolean; gapBefore?: number }
+    ) => {
+      const size = opts?.size ?? 9.5;
+      const bold = Boolean(opts?.bold);
+      const lineH = size * 0.43;
+      doc.setFont(fontFamily, bold ? 'bold' : 'normal');
+      doc.setFontSize(size);
+      const wrapped = doc.splitTextToSize(pdfSafeText(raw), contentWidth - 5) as string[];
+      wrapped.forEach((line, idx) => {
+        boxLines.push({
+          text: line,
+          bold,
+          size,
+          lineH,
+          highlightHeader: opts?.highlightHeader && idx === 0,
+          gapBefore: idx === 0 ? opts?.gapBefore ?? 0 : 0,
+        });
+      });
+    };
 
+    pushBoxText(
+      'TRAGUARDI PER LO SVILUPPO DELLE COMPETENZE IN RELAZIONE AL CURRICOLO VERTICALE DEL NOSTRO ISTITUTO',
+      { bold: true, size: 9.8, highlightHeader: true }
+    );
     if (resolvedCompetenze.length) {
-      drawParagraph('Competenze:', { bold: true, size: 9.8, spaceAfter: 1 });
+      pushBoxText('Competenze:', { bold: true, size: 9.6, gapBefore: 2.0 });
       for (const c of resolvedCompetenze) {
-        drawParagraph(`- ${c}`, { size: 9.5, spaceAfter: 1 });
+        pushBoxText(`- ${c}`, { size: 9.3, gapBefore: 0.4 });
       }
     }
     if (plan.curricolo.competenzeDigitali.length) {
-      drawParagraph('Competenze digitali:', { bold: true, size: 9.8, spaceAfter: 1 });
+      pushBoxText('Competenze digitali:', { bold: true, size: 9.6, gapBefore: 2.0 });
       for (const c of plan.curricolo.competenzeDigitali) {
-        drawParagraph(`- ${c}`, { size: 9.5, spaceAfter: 1 });
+        pushBoxText(`- ${c}`, { size: 9.3, gapBefore: 0.4 });
+      }
+    }
+
+    let bIdx = 0;
+    while (bIdx < boxLines.length) {
+      if (y + 12 > bottomLimit) {
+        doc.addPage();
+        y = 15;
+      }
+      const padTop = 3.2;
+      const padBottom = 2.6;
+      let cursorRelY = padTop;
+      const slice: Array<BoxLine & { relY: number }> = [];
+      const maxBoxH = bottomLimit - y;
+
+      while (bIdx < boxLines.length) {
+        const item = boxLines[bIdx];
+        const nextGap = slice.length === 0 ? 0 : item.gapBefore ?? 0;
+        const needed = cursorRelY + nextGap + item.lineH + padBottom;
+        if (slice.length > 0 && needed > maxBoxH) break;
+        cursorRelY += nextGap;
+        slice.push({ ...item, relY: cursorRelY });
+        cursorRelY += item.lineH;
+        bIdx += 1;
+      }
+
+      const boxH = Math.max(10, cursorRelY + padBottom);
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.3);
+      doc.rect(marginX, y, contentWidth, boxH);
+
+      for (const line of slice) {
+        if (line.highlightHeader) {
+          doc.setFillColor(230, 230, 230);
+          doc.rect(marginX + 1.5, y + line.relY - 1.5, contentWidth - 3, line.lineH + 0.6, 'F');
+        }
+        doc.setFont(fontFamily, line.bold ? 'bold' : 'normal');
+        doc.setFontSize(line.size);
+        doc.setTextColor(0, 0, 0);
+        doc.text(line.text, marginX + 2.2, y + line.relY + 1.8);
+      }
+
+      y += boxH;
+      if (bIdx < boxLines.length) {
+        doc.addPage();
+        y = 15;
       }
     }
 
     doc.setFont(fontFamily, 'italic');
     doc.setFontSize(9.5);
+    doc.setTextColor(0, 0, 0);
     const notaLines = doc.splitTextToSize(pdfSafeText(notaIntroCurricolo), contentWidth - 4);
     const notaH = notaLines.length * 4.1 + 4;
     ensureSpace(notaH);
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.3);
     doc.rect(marginX, y, contentWidth, notaH);
     doc.text(notaLines, marginX + 2, y + 4.5);
     y += notaH;
@@ -1065,6 +1177,7 @@ export function generateProgrammazionePdfBytes(
       for (const row of plan.curricolo.righeAbilitaConoscenze) {
         drawTwoColRow(row.abilita, row.conoscenze, leftCurricoloHeader, {
           repeatHeaderOnBreak: true,
+          nucleoHint: row.traguardo,
         });
       }
     } else {
@@ -1095,6 +1208,7 @@ export function generateProgrammazionePdfBytes(
       for (const row of plan.curricolo.righeAbilitaConoscenze) {
         drawTwoColRow(row.abilita, row.conoscenze, leftCurricoloHeader, {
           repeatHeaderOnBreak: true,
+          nucleoHint: row.traguardo,
         });
       }
     } else {
@@ -1266,7 +1380,7 @@ export function generateProgrammazionePdfBytes(
     doc.setFont(fontFamily, 'bold');
     doc.setFontSize(9.8);
     doc.setTextColor(0, 0, 0);
-    doc.text('VERIFICHE IN ITINERE: MODALITA', marginX + contentWidth / 2, y + 5, {
+    doc.text('VERIFICHE IN ITINERE: MODALITÀ', marginX + contentWidth / 2, y + 5, {
       align: 'center',
     });
     y += 7.5;

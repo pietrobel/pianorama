@@ -1,10 +1,14 @@
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
+  Check,
   ChevronDown,
   ChevronUp,
+  Copy,
   Eye,
   EyeOff,
+  FileDown,
   GripVertical,
   Lock,
   Plus,
@@ -17,10 +21,16 @@ import { ConfirmModal } from './ConfirmModal';
 import type {
   AnonymousStudentBandEntry,
   CategoriaBisognoAlunno,
+  DocumentLayoutStyle,
   FasciaLivelloKey,
+  LivelliPartenza,
   RiferimentoPianoAlunno,
   SoglieFasce,
 } from '../domain/types';
+import {
+  copyLivelliTableToClipboard,
+  downloadLivelliTableDocx,
+} from '../export/livelliTableExport';
 import {
   computeLivelliFromStudents,
   createManualStudentEntry,
@@ -34,6 +44,11 @@ interface FasceLivelloBoardProps {
   entries: AnonymousStudentBandEntry[];
   soglie: SoglieFasce;
   classeRilevata?: string;
+  tableExportContext?: {
+    livelliOverride?: LivelliPartenza;
+    classeLabel?: string;
+    layoutDocumento?: DocumentLayoutStyle;
+  };
   onChangeEntries: (next: AnonymousStudentBandEntry[]) => void;
   onSyncComposizione?: (
     totaleAlunni: number,
@@ -113,6 +128,7 @@ export function FasceLivelloBoard({
   entries,
   soglie,
   classeRilevata,
+  tableExportContext,
   onChangeEntries,
   onSyncComposizione,
 }: FasceLivelloBoardProps) {
@@ -123,6 +139,10 @@ export function FasceLivelloBoard({
   const [dropTargetBand, setDropTargetBand] = useState<FasciaLivelloKey | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [confirmRestore, setConfirmRestore] = useState(false);
+  const [tableActionStatus, setTableActionStatus] = useState<string | null>(null);
+  const [tableActionError, setTableActionError] = useState<string | null>(null);
+  const [copiedRecently, setCopiedRecently] = useState(false);
+  const [exportingTableDocx, setExportingTableDocx] = useState(false);
 
   // Modulo aggiunta manuale alunno offline
   const [showAddForm, setShowAddForm] = useState(false);
@@ -133,7 +153,17 @@ export function FasceLivelloBoard({
   const [newPiano, setNewPiano] = useState<RiferimentoPianoAlunno>('');
   const [newNota, setNewNota] = useState('');
 
-  const livelli = computeLivelliFromStudents(entries);
+  const computedLivelli = computeLivelliFromStudents(entries);
+  const exportLivelli =
+    entries.length > 0
+      ? computedLivelli
+      : (tableExportContext?.livelliOverride ?? computedLivelli);
+  const totalInFourBands =
+    exportLivelli.bassoAlunni +
+    exportLivelli.medioBassoAlunni +
+    exportLivelli.medioAlunni +
+    exportLivelli.altoAlunni;
+  const livelli = computedLivelli;
   const daVerificareCount = entries.filter((e) => e.fasciaCorrente === 'da_verificare').length;
   const movedCount = entries.filter((e) => e.spostatoDalDocente).length;
   const disabilitaCount = entries.filter(
@@ -193,6 +223,53 @@ export function FasceLivelloBoard({
     if (expandedId === studentId) setExpandedId(null);
   };
 
+  const resolvedClasseLabel = tableExportContext?.classeLabel || classeRilevata || '';
+
+  const handleCopyTable = async () => {
+    setTableActionError(null);
+    setTableActionStatus(null);
+    try {
+      const mode = await copyLivelliTableToClipboard({
+        livelli: exportLivelli,
+        entries,
+        classeLabel: resolvedClasseLabel,
+        layoutDocumento: tableExportContext?.layoutDocumento,
+      });
+      setCopiedRecently(true);
+      setTimeout(() => setCopiedRecently(false), 2500);
+      setTableActionStatus(
+        mode === 'rich'
+          ? 'Tabella copiata negli appunti: puoi incollarla direttamente in Word o LibreOffice Writer.'
+          : 'Tabella copiata in formato testo tabulato negli appunti.'
+      );
+    } catch (err) {
+      setTableActionError(
+        err instanceof Error ? err.message : 'Impossibile copiare la tabella negli appunti.'
+      );
+    }
+  };
+
+  const handleExportTableOnlyDocx = async () => {
+    setTableActionError(null);
+    setTableActionStatus(null);
+    setExportingTableDocx(true);
+    try {
+      const filename = await downloadLivelliTableDocx({
+        livelli: exportLivelli,
+        entries,
+        classeLabel: resolvedClasseLabel,
+        layoutDocumento: tableExportContext?.layoutDocumento,
+      });
+      setTableActionStatus(`Tabella fasce di livello esportata in DOCX: ${filename}`);
+    } catch (err) {
+      setTableActionError(
+        err instanceof Error ? err.message : 'Errore durante la generazione del file DOCX della tabella.'
+      );
+    } finally {
+      setExportingTableDocx(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-800/40">
@@ -215,6 +292,33 @@ export function FasceLivelloBoard({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {(entries.length > 0 || totalInFourBands > 0) && (
+            <>
+              <button
+                type="button"
+                onClick={() => void handleCopyTable()}
+                className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border border-emerald-700 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-50 dark:border-emerald-500 dark:bg-slate-900 dark:text-emerald-300 dark:hover:bg-slate-800"
+              >
+                {copiedRecently ? (
+                  <Check className="h-3.5 w-3.5" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
+                )}
+                {copiedRecently ? 'Tabella copiata!' : 'Copia tabella (Word / Writer)'}
+              </button>
+
+              <button
+                type="button"
+                disabled={exportingTableDocx}
+                onClick={() => void handleExportTableOnlyDocx()}
+                className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg bg-[#1F3864] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#172b4d] disabled:opacity-60"
+              >
+                <FileDown className="h-3.5 w-3.5" />
+                {exportingTableDocx ? 'Esportazione...' : 'Esporta solo tabella (.docx)'}
+              </button>
+            </>
+          )}
+
           {hasAnyRealName && (
             <button
               type="button"
@@ -257,6 +361,37 @@ export function FasceLivelloBoard({
           </button>
         </div>
       </div>
+
+      {tableActionStatus && (
+        <div
+          role="status"
+          className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200"
+        >
+          <Check className="h-4 w-4 shrink-0" />
+          <span>{tableActionStatus}</span>
+        </div>
+      )}
+
+      {tableActionError && (
+        <div
+          role="alert"
+          className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-900 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200"
+        >
+          {tableActionError}
+        </div>
+      )}
+
+      {daVerificareCount > 0 && (
+        <div
+          role="note"
+          className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" />
+          <span>
+            <strong>{daVerificareCount} alunni</strong> sono nella colonna <em>Da verificare</em> (voto mancante o sotto soglia minima): spostali in una delle 4 fasce (<strong>Basso, Medio/basso, Medio, Alto</strong>) affinché i loro nominativi vengano inclusi nella tabella esportata o copiata.
+          </span>
+        </div>
+      )}
 
       {showAddForm && (
         <form

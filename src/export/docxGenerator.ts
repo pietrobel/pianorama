@@ -849,7 +849,6 @@ export function createProgrammazioneDocument(
             ],
           }),
           new TableRow({
-            cantSplit: true,
             children: [
               cell(buildBandNamesCell(bandStudents.bands.basso), { widthPct: 25 }),
               cell(buildBandNamesCell(bandStudents.bands.medio_basso), { widthPct: 25 }),
@@ -882,7 +881,6 @@ export function createProgrammazioneDocument(
             ],
           }),
           new TableRow({
-            cantSplit: true,
             children: [
               cell(buildBandNamesCell(bandStudents.bands.basso), { widthPct: 25 }),
               cell(buildBandNamesCell(bandStudents.bands.medio_basso), { widthPct: 25 }),
@@ -929,14 +927,17 @@ export function createProgrammazioneDocument(
   const renderCurricoloCellParagraphs = (text: string, nucleoHint?: string) => {
     const clean = (text ?? '').trim();
     if (!clean) return [pText('—')];
-    const lines = clean.split('\n');
+    const hint = (nucleoHint ?? '').trim();
+    const effective =
+      hint && !clean.toLowerCase().startsWith(hint.toLowerCase()) ? `${hint}\n${clean}` : clean;
+    const lines = effective.split('\n');
     return lines.map((line, idx) => {
       const trimmed = line.trim();
       const isNucleoTitle =
         idx === 0 &&
         !trimmed.startsWith('•') &&
         !trimmed.startsWith('-') &&
-        ((nucleoHint && trimmed.toLowerCase() === nucleoHint.trim().toLowerCase()) ||
+        ((hint.length > 0 && trimmed.toLowerCase() === hint.toLowerCase()) ||
           lines.length > 1);
       return pText(line, { bold: isNucleoTitle, spaceAfter: isNucleoTitle ? 25 : 20 });
     });

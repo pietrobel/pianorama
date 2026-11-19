@@ -118,12 +118,15 @@ export function groupCatalogEntries(
       nucleoMap.set(nucleo, list);
     }
 
-    const nuclei: CurricoloNucleoGroup[] = Array.from(nucleoMap.entries()).map(
-      ([nucleoTematico, groupEntries]) => ({
+    const nuclei: CurricoloNucleoGroup[] = Array.from(nucleoMap.entries())
+      .map(([nucleoTematico, groupEntries]) => ({
         nucleoTematico,
         entries: groupEntries,
-      })
-    );
+      }))
+      .sort((a, b) => {
+        const disc = a.entries[0]?.disciplina ?? b.entries[0]?.disciplina ?? '';
+        return getNucleoSortRank(disc, a.nucleoTematico) - getNucleoSortRank(disc, b.nucleoTematico);
+      });
 
     result.push({
       tipo,
@@ -434,33 +437,187 @@ const CANONICAL_NUCLEO_ORDER: Record<string, string[]> = {
   ],
   italiano: [
     'oralità',
-    'ascolto e parlato',
+    'ascolto',
+    'ascoltar',
     'lettura',
+    'leggere',
     'scrittura',
+    'scrivere',
+    'comprensione, produzione',
     'lessico',
+    'la frase',
+    'analisi logica',
     'riflessione sulla lingua',
     'letteratura',
+    'studiare',
+    'discernere',
+    'rete',
+    'digitale',
+  ],
+  storia: [
+    'strumenti concettuali',
+    'uso delle fonti',
+    'organizzazione delle informazioni',
+    'riconoscere le tracce',
+    'esporre i fatti',
+    'produzione scritta',
+    'feudalesimo',
+    'motore del cambiamento',
+    'tre italie',
+    'tre rivoluzioni',
+    'regno d’italia',
+    'digitale',
+  ],
+  geografia: [
+    'orientamento',
+    'paesaggio',
+    'regioni',
+    'approfondimento dell’italia',
+    'approfondimento dell’europa',
+    'approfondimento degli altri continenti',
+    'grandi sfide',
+    'digitale',
+  ],
+  inglese: [
+    'ascolto',
+    'parlato',
+    'lettura',
+    'scrittura',
+    'funzioni comunicative',
+    'riflessione sulla lingua',
+    'digitale',
+  ],
+  francese: [
+    'ascolto',
+    'parlato',
+    'lettura',
+    'scrittura',
+    'descrivere',
+    'riflessione sulla lingua',
+    'digitale',
+  ],
+  'arte e immagine': [
+    'osserva',
+    'analizzare',
+    'comprendere',
+    'esprimersi',
+    'espressivit',
+    'comunicazione',
+    'tecniche artistiche',
+    'superficie',
     'digitale',
   ],
   tecnologia: [
     'vedere, osservare',
-    'disegno tecnico',
     'materiali',
+    'disegno tecnico',
     'progettazione',
+    'sistema operativo',
     'informatica',
   ],
+  'educazione fisica': [
+    'il corpo',
+    'linguaggio del corpo',
+    'gioco, lo sport',
+    'salute, benessere',
+    'digitale',
+  ],
+  'latino (lel)': [
+    'alfabeto',
+    'morfologia',
+    'cultura latina',
+    'digitale',
+  ],
+  religione: [
+    'dio e l’uomo',
+    'dio di gesù',
+    'bibbia',
+    'linguaggio religioso',
+    'valori etici',
+  ],
+  musica: [
+    'ascolto',
+    'analizzare',
+    'teoria e notazione',
+    'leggere la notazione',
+    'pratica vocale',
+    'eseguire',
+    'interpretare',
+    'improvvisare',
+    'partecipare ad ensemble',
+    'storia e cultura',
+    'conoscere la storia',
+    'medioevo',
+    'rinascimento',
+    'barocco',
+    'classicismo',
+    'romanticismo',
+    'novecento',
+    'digitale',
+  ],
+  'educazione civica': [
+    'costituzione',
+    'cultura',
+    'partecipazione',
+    'legalità',
+    'etica',
+    'società',
+    'innovazione sociale',
+    'sviluppo sostenibile',
+    'ecologia',
+    'territorio',
+    'salute',
+    'cittadinanza digitale',
+  ],
+  'strumento musicale': [
+    'percezione',
+    'teoria e lettura',
+    'tecnica e prassi',
+    'respirazione',
+    'prassi esecutiva',
+    'interpretazione',
+    'digitale',
+  ],
 };
+
+function isDigitalNucleoName(nucleo: string): boolean {
+  const nLower = nucleo.trim().toLowerCase();
+  return (
+    nLower.includes('digital') ||
+    nLower.includes('steam') ||
+    nLower.includes('usare bene la rete') ||
+    nLower.includes('altro')
+  );
+}
 
 function getNucleoSortRank(disciplina: string, nucleo: string): number {
   const nLower = nucleo.trim().toLowerCase();
   // Contenuti digitali o STEAM sempre in fondo alla tabella dopo i nuclei disciplinari
-  if (nLower.includes('digital') || nLower.includes('steam') || nLower.includes('altro')) {
+  if (isDigitalNucleoName(nLower)) {
     return 900;
   }
   const order = CANONICAL_NUCLEO_ORDER[disciplina.trim().toLowerCase()];
   if (!order) return 100;
   const idx = order.findIndex((prefix) => nLower.includes(prefix));
   return idx === -1 ? 200 : idx;
+}
+
+function extractNucleoBullets(cellText: string, nucleo: string): string[] {
+  const lines = (cellText || '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return [];
+  const normNucleo = nucleo.trim().toLowerCase();
+  return lines
+    .filter((l, idx) => !(idx === 0 && l.toLowerCase() === normNucleo))
+    .map((l) => l.replace(/^[•\-\*]\s*/, '').trim())
+    .filter(Boolean);
+}
+
+function formatNucleoCell(nucleo: string, items: string[]): string {
+  if (items.length === 0) return '';
+  return `${nucleo}\n${items.map((t) => `• ${t}`).join('\n')}`;
 }
 
 /**
@@ -509,7 +666,7 @@ export function buildProgramRowsFromCatalogVoices(
     }
 
     const nucleo = v.nucleoTematico.trim() || 'Contenuti disciplinari';
-    const key = `${nucleo.toLowerCase()}`;
+    const key = nucleo.toLowerCase();
     let bucket = buckets.get(key);
     if (!bucket) {
       bucket = {
@@ -533,29 +690,53 @@ export function buildProgramRowsFromCatalogVoices(
       getNucleoSortRank(a.disciplina, a.nucleo) - getNucleoSortRank(b.disciplina, b.nucleo)
   );
 
-  const normalizeKey = (t: string, a: string, k: string) =>
-    `${t.trim().toLowerCase()}||${a.trim().toLowerCase()}||${k.trim().toLowerCase()}`;
+  const primaryDisciplina =
+    orderedBuckets.find((b) => b.disciplina)?.disciplina ?? voices[0]?.disciplina ?? '';
 
-  const existingKeys = new Set(
-    existingRows.map((r) => normalizeKey(r.traguardo || '', r.abilita, r.conoscenze))
-  );
+  const nextRows: AbilitaConoscenzaRow[] = existingRows.map((r) => ({ ...r }));
+  const byNucleoKey = new Map<string, number>();
+  nextRows.forEach((row, idx) => {
+    const key = (row.traguardo ?? '').trim().toLowerCase();
+    if (key && !byNucleoKey.has(key)) {
+      byNucleoKey.set(key, idx);
+    }
+  });
 
-  const nextRows: AbilitaConoscenzaRow[] = [...existingRows];
   for (const bucket of orderedBuckets) {
-    const abText =
-      bucket.abilita.length > 0
-        ? `${bucket.nucleo}\n${bucket.abilita.map((t) => `• ${t}`).join('\n')}`
-        : '';
-    const conText =
-      bucket.conoscenze.length > 0
-        ? `${bucket.nucleo}\n${bucket.conoscenze.map((t) => `• ${t}`).join('\n')}`
-        : '';
+    const key = bucket.nucleo.toLowerCase();
+    const existingIdx = byNucleoKey.get(key);
 
+    if (existingIdx !== undefined) {
+      const current = nextRows[existingIdx];
+      const mergedAb = extractNucleoBullets(current.abilita, bucket.nucleo);
+      for (const item of bucket.abilita) {
+        if (!mergedAb.some((x) => x.toLowerCase() === item.toLowerCase())) {
+          mergedAb.push(item);
+        }
+      }
+      const mergedCon = extractNucleoBullets(current.conoscenze, bucket.nucleo);
+      for (const item of bucket.conoscenze) {
+        if (!mergedCon.some((x) => x.toLowerCase() === item.toLowerCase())) {
+          mergedCon.push(item);
+        }
+      }
+      nextRows[existingIdx] = {
+        ...current,
+        competenze: '',
+        traguardo: bucket.nucleo,
+        abilita: mergedAb.length ? formatNucleoCell(bucket.nucleo, mergedAb) : current.abilita,
+        conoscenze: mergedCon.length
+          ? formatNucleoCell(bucket.nucleo, mergedCon)
+          : current.conoscenze,
+      };
+      continue;
+    }
+
+    const abText = formatNucleoCell(bucket.nucleo, bucket.abilita);
+    const conText = formatNucleoCell(bucket.nucleo, bucket.conoscenze);
     if (!abText && !conText) continue;
-    const sig = normalizeKey(bucket.nucleo, abText, conText);
-    if (existingKeys.has(sig)) continue;
-    existingKeys.add(sig);
 
+    byNucleoKey.set(key, nextRows.length);
     nextRows.push({
       id:
         typeof crypto !== 'undefined' && crypto.randomUUID
@@ -568,7 +749,20 @@ export function buildProgramRowsFromCatalogVoices(
     });
   }
 
-  return nextRows;
+  // Mantiene l'ordine canonico dei nuclei con gli eventuali contenuti digitali sempre in coda
+  return nextRows.sort((a, b) => {
+    const rankA = a.traguardo
+      ? getNucleoSortRank(primaryDisciplina, a.traguardo)
+      : isDigitalNucleoName(a.conoscenze)
+      ? 900
+      : 500;
+    const rankB = b.traguardo
+      ? getNucleoSortRank(primaryDisciplina, b.traguardo)
+      : isDigitalNucleoName(b.conoscenze)
+      ? 900
+      : 500;
+    return rankA - rankB;
+  });
 }
 
 export function getOriginalTextForVoice(

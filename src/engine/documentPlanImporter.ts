@@ -79,6 +79,7 @@ interface ExtractedDocumentContent {
   lines: string[];
   tables: string[][][];
   fullText: string;
+  emphasizedLines?: string[];
 }
 
 function makeId(prefix: string): string {
@@ -157,8 +158,60 @@ function normalizeOoxmlControls(pXml: string): string {
   return normalized;
 }
 
+function extractEmphasizedRunsFromParagraph(pXml: string): string[] {
+  const results: string[] = [];
+  const runRegex = /<w:r\b[\s\S]*?<\/w:r>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = runRegex.exec(pXml)) !== null) {
+    const runXml = m[0];
+    const rPrMatch = runXml.match(/<w:rPr\b[\s\S]*?<\/w:rPr>/i);
+    if (!rPrMatch) continue;
+    const rPr = rPrMatch[0];
+    if (
+      /<w:(?:d)?strike(?:\s+w:val="(?:1|true)")?\s*\/?>/i.test(rPr) &&
+      !/<w:(?:d)?strike\s+w:val="(?:0|false)"/i.test(rPr)
+    ) {
+      continue;
+    }
+    const isBold =
+      /<w:b(?:\s+w:val="(?:1|true)")?\s*\/?>/i.test(rPr) &&
+      !/<w:b\s+w:val="(?:0|false)"/i.test(rPr);
+    const isHighlight =
+      /<w:highlight\b[^>]*w:val="(?!none)[^"]+"/i.test(rPr) ||
+      /<w:shd\b[^>]*w:fill="(?!auto|FFFFFF|ffffff|000000)[^"]+"/i.test(rPr);
+    const isUnderlined =
+      /<w:u\b[^>]*w:val="(?!none)[^"]+"/i.test(rPr);
+    if (!isBold && !isHighlight && !isUnderlined) continue;
+
+    const textParts: string[] = [];
+    const tRegex = /<w:t(?:\s+[^>]*)?>([\s\S]*?)<\/w:t>/g;
+    let tM: RegExpExecArray | null;
+    while ((tM = tRegex.exec(runXml)) !== null) {
+      textParts.push(decodeXmlEntities(tM[1]));
+    }
+    const combined = cleanText(textParts.join(''));
+    if (combined && combined.length >= 3) {
+      results.push(combined);
+    }
+  }
+  return results;
+}
+
 function stripXmlParagraphToText(pXml: string): string {
-  const normalized = normalizeOoxmlControls(pXml);
+  // Rimuovi eventuali run barrati (<w:strike/> o <w:dstrike/> attivi) usati nei moduli Word per escludere opzioni
+  const withoutStruckRuns = pXml.replace(/<w:r\b[\s\S]*?<\/w:r>/gi, (runXml) => {
+    const rPrMatch = runXml.match(/<w:rPr\b[\s\S]*?<\/w:rPr>/i);
+    if (
+      rPrMatch &&
+      /<w:(?:d)?strike(?:\s+w:val="(?:1|true)")?\s*\/?>/i.test(rPrMatch[0]) &&
+      !/<w:(?:d)?strike\s+w:val="(?:0|false)"/i.test(rPrMatch[0])
+    ) {
+      return '';
+    }
+    return runXml;
+  });
+
+  const normalized = normalizeOoxmlControls(withoutStruckRuns);
   const textRuns: string[] = [];
   const tRegex = /<w:t(?:\s+[^>]*)?>([\s\S]*?)<\/w:t>/g;
   let match: RegExpExecArray | null;
@@ -177,6 +230,22 @@ async function extractFromDocx(buffer: ArrayBuffer): Promise<ExtractedDocumentCo
   const xml = await docFile.async('string');
   const tables: string[][][] = [];
   const allLines: string[] = [];
+  const emphasizedLines: string[] = [];
+
+  // Includi eventuali righe da header*.xml (es. intestazione scuola o anno scolastico nell'header di Word)
+  const headerNames = Object.keys(zip.files)
+    .filter((name) => /^word\/header\d*\.xml$/i.test(name))
+    .sort();
+  for (const hName of headerNames) {
+    const hXml = await zip.file(hName)?.async('string');
+    if (!hXml) continue;
+    const hPRegex = /<w:p\b[^>]*>([\s\S]*?)<\/w:p>/g;
+    let hMatch: RegExpExecArray | null;
+    while ((hMatch = hPRegex.exec(hXml)) !== null) {
+      const t = stripXmlParagraphToText(hMatch[1]);
+      if (t) allLines.push(t);
+    }
+  }
 
   const tblRegex = /<w:tbl\b[^>]*>([\s\S]*?)<\/w:tbl>/g;
   let tblMatch: RegExpExecArray | null;
@@ -213,12 +282,17 @@ async function extractFromDocx(buffer: ArrayBuffer): Promise<ExtractedDocumentCo
   while ((pMatch = allPRegex.exec(xml)) !== null) {
     const line = stripXmlParagraphToText(pMatch[1]);
     if (line) allLines.push(line);
+    const em = extractEmphasizedRunsFromParagraph(pMatch[1]);
+    if (em.length > 0) {
+      emphasizedLines.push(...em);
+    }
   }
 
   return {
     lines: allLines,
     tables,
     fullText: allLines.join('\n'),
+    emphasizedLines,
   };
 }
 
@@ -227,6 +301,274 @@ interface PdfTextToken {
   x: number;
   y: number;
   width: number;
+}
+
+interface PdfTokenCluster {
+  text: string;
+  startX: number;
+  endX: number;
+  centerX: number;
+}
+
+function buildRowClusters(row: PdfTextToken[]): PdfTokenCluster[] {
+  const sorted = [...row].sort((a, b) => a.x - b.x);
+  const clusters: PdfTokenCluster[] = [];
+  for (const tok of sorted) {
+    const last = clusters[clusters.length - 1];
+    if (last && tok.x - last.endX <= 14) {
+      const sep = tok.x - last.endX > 1.8 && !last.text.endsWith(' ') && !tok.str.startsWith(' ') ? ' ' : '';
+      last.text = `${last.text}${sep}${tok.str}`.trim();
+      last.endX = Math.max(last.endX, tok.x + tok.width);
+      last.centerX = (last.startX + last.endX) / 2;
+    } else {
+      const startX = tok.x;
+      const endX = tok.x + tok.width;
+      clusters.push({
+        text: tok.str.trim(),
+        startX,
+        endX,
+        centerX: (startX + endX) / 2,
+      });
+    }
+  }
+  return clusters.filter((c) => c.text.length > 0);
+}
+
+function computePdfColumnCutoffs(clusters: PdfTokenCluster[]): number[] {
+  const cutoffs: number[] = [];
+  const leftAligned = clusters[0].startX < 95 && clusters.length >= 2 && clusters[1].startX > 165;
+  for (let i = 0; i < clusters.length - 1; i++) {
+    if (leftAligned) {
+      cutoffs.push(clusters[i + 1].startX - 12);
+    } else {
+      cutoffs.push((clusters[i].centerX + clusters[i + 1].centerX) / 2);
+    }
+  }
+  return cutoffs;
+}
+
+function assignRowTokensToColumns(row: PdfTextToken[], cutoffs: number[]): string[] {
+  const numCols = cutoffs.length + 1;
+  const colTokens: PdfTextToken[][] = Array.from({ length: numCols }, () => []);
+  for (const tok of row) {
+    let colIdx = 0;
+    while (colIdx < cutoffs.length && tok.x >= cutoffs[colIdx]) {
+      colIdx += 1;
+    }
+    colTokens[colIdx].push(tok);
+  }
+  return colTokens.map((toks) => {
+    if (toks.length === 0) return '';
+    toks.sort((a, b) => a.x - b.x);
+    let s = '';
+    let prevEnd = toks[0].x;
+    for (let i = 0; i < toks.length; i++) {
+      const t = toks[i];
+      if (i > 0 && t.x - prevEnd > 1.8 && !s.endsWith(' ') && !t.str.startsWith(' ')) {
+        s += ' ';
+      }
+      s += t.str;
+      prevEnd = t.x + t.width;
+    }
+    return s.trim();
+  });
+}
+
+function extractTablesFromPdfRowGroups(pageRowGroups: PdfTextToken[][][]): string[][][] {
+  const tables: string[][][] = [];
+
+  // Flat list con indice pagina e Y medio della riga
+  const flatRows: { page: number; y: number; tokens: PdfTextToken[]; clusters: PdfTokenCluster[]; joined: string }[] = [];
+  pageRowGroups.forEach((rows, pageIdx) => {
+    for (const row of rows) {
+      const clusters = buildRowClusters(row);
+      const joined = clusters.map((c) => c.text).join(' | ');
+      if (!joined) continue;
+      flatRows.push({
+        page: pageIdx,
+        y: row[0].y,
+        tokens: row,
+        clusters,
+        joined,
+      });
+    }
+  });
+
+  // 1. Ricostruisci tabella Livelli di partenza (4 colonne: counts + eventuali nomi alunni)
+  for (let i = 0; i < flatRows.length; i++) {
+    const r = flatRows[i];
+    const isOrigHeader =
+      r.clusters.length >= 4 &&
+      r.clusters.some((c) => /livello basso/i.test(c.text)) &&
+      r.clusters.some((c) => /livello alto/i.test(c.text));
+    const isModernHeader =
+      r.clusters.length >= 4 &&
+      r.clusters.some((c) => /\bbasso\s*:\s*\d+/i.test(c.text)) &&
+      r.clusters.some((c) => /\balto\s*:\s*\d+/i.test(c.text));
+
+    if (!isOrigHeader && !isModernHeader) continue;
+
+    const headerClusters = r.clusters.slice(0, 4);
+    const cutoffs = computePdfColumnCutoffs(headerClusters);
+    const headerRow = assignRowTokensToColumns(r.tokens, cutoffs);
+    const countsBuf: string[][] = [[headerRow[0]], [headerRow[1]], [headerRow[2]], [headerRow[3]]];
+    const namesBuf: string[][] = [[], [], [], []];
+    let seenCounts = isModernHeader;
+
+    let j = i + 1;
+    while (j < flatRows.length && flatRows[j].page === r.page) {
+      const cur = flatRows[j];
+      const lowerJoined = cur.joined.toLowerCase();
+      if (
+        /^fonti di rilevazione\b/.test(lowerJoined) ||
+        /^strategie ed interventi\b/.test(lowerJoined) ||
+        /^alunni con bes\b/.test(lowerJoined) ||
+        /^traguardi per lo sviluppo\b/.test(lowerJoined)
+      ) {
+        break;
+      }
+      const cols = assignRowTokensToColumns(cur.tokens, cutoffs);
+      if (cols.some((c) => /\balunni\s*[:\-]?\s*\d+/i.test(c))) {
+        seenCounts = true;
+        for (let k = 0; k < 4; k++) {
+          if (cols[k]) countsBuf[k].push(cols[k]);
+        }
+      } else if (!seenCounts) {
+        for (let k = 0; k < 4; k++) {
+          if (cols[k]) countsBuf[k].push(cols[k]);
+        }
+      } else {
+        // Nomi alunni sotto i conteggi (fermati se l'ultima riga aveva gap ampio verso il basso e sembra una nuova sezione)
+        for (let k = 0; k < 4; k++) {
+          if (cols[k]) namesBuf[k].push(cols[k]);
+        }
+      }
+      j += 1;
+    }
+
+    const combinedCountsRow = countsBuf.map((col) => col.join('\n').trim());
+    const livelliTbl: string[][] = [combinedCountsRow];
+    if (namesBuf.some((col) => col.length > 0)) {
+      livelliTbl.push(namesBuf.map((col) => col.join('\n').trim()));
+    }
+    tables.push(livelliTbl);
+    break;
+  }
+
+  // 2. Ricostruisci tabella Curricolo (2 o 3 colonne) seguendo le coordinate X delle colonne
+  for (let i = 0; i < flatRows.length; i++) {
+    const r = flatRows[i];
+    if (r.clusters.length < 2 || r.clusters.length > 4) continue;
+    const clsLower = r.clusters.map((c) => c.text.toLowerCase());
+    const hasAb = clsLower.some((t) => /^(?:abilit(?:à|a['’]?)|obiettivi(?:\s+specifici)?)$/.test(t));
+    const hasCon = clsLower.some((t) => /^(?:conoscenze(?:\s*\(contenuti\))?|contenuti|argomenti)$/.test(t));
+    if (!hasAb || !hasCon) continue;
+
+    const cutoffs = computePdfColumnCutoffs(r.clusters);
+    const numCols = cutoffs.length + 1;
+    const headerCells = assignRowTokensToColumns(r.tokens, cutoffs);
+    const currRows: string[][] = [headerCells];
+    let colBuffers: string[][] = Array.from({ length: numCols }, () => []);
+    let prevY = r.y;
+    let prevPage = r.page;
+    const yDiffs: number[] = [];
+
+    const flushRow = () => {
+      if (colBuffers.some((b) => b.length > 0)) {
+        currRows.push(colBuffers.map((b) => b.join('\n').trim()));
+        colBuffers = Array.from({ length: numCols }, () => []);
+      }
+    };
+
+    let j = i + 1;
+    while (j < flatRows.length) {
+      const cur = flatRows[j];
+      const lowerJoined = cur.joined.toLowerCase();
+      if (
+        /^attivit[àa]['’]?\s+programmate\b/.test(lowerJoined) ||
+        /^criteri metodologici\b/.test(lowerJoined) ||
+        /^metodi\s*\|/.test(lowerJoined) ||
+        /^ausili didattici\b/.test(lowerJoined) ||
+        /^didattica digitale\b/.test(lowerJoined) ||
+        /^verifiche in itinere\b/.test(lowerJoined) ||
+        /^valutazione\b/.test(lowerJoined) ||
+        /^(?:il|la|il\/la)\s+docente\b/.test(lowerJoined)
+      ) {
+        break;
+      }
+
+      const cells = assignRowTokensToColumns(cur.tokens, cutoffs);
+      // Salta eventuale intestazione ripetuta al cambio pagina
+      const isRepeatedHdr =
+        cells.length >= 2 &&
+        cells.some((c) => /^(?:abilit(?:à|a['’]?)|obiettivi(?:\s+specifici)?)$/i.test(c.trim())) &&
+        cells.some((c) => /^(?:conoscenze(?:\s*\(contenuti\))?|contenuti|argomenti)$/i.test(c.trim()));
+      if (isRepeatedHdr) {
+        // Se la riga precedente aveva concluso un blocco o un periodo, chiudila prima del nuovo blocco di pagina
+        const lastCol0 = colBuffers[0][colBuffers[0].length - 1] ?? '';
+        if (colBuffers.some((b) => b.length > 0) && /[.!?;:]$/.test(lastCol0)) {
+          flushRow();
+        }
+        prevY = cur.y;
+        prevPage = cur.page;
+        j += 1;
+        continue;
+      }
+
+      const gap = cur.page === prevPage ? prevY - cur.y : 0;
+      if (gap > 4 && gap < 22) {
+        yDiffs.push(gap);
+      }
+      const sortedGaps = [...yDiffs].sort((a, b) => a - b);
+      const typicalGap = sortedGaps.length > 0 ? sortedGaps[Math.floor(sortedGaps.length / 2)] : 10.5;
+
+      const hasExistingContent = colBuffers.some((b) => b.length > 0);
+      const nonEmptyColsCount = cells.filter((c) => c.length > 0).length;
+      const col0EndsSentence =
+        colBuffers[0].length > 0 &&
+        /[.!?;:]$/.test(colBuffers[0][colBuffers[0].length - 1]);
+      const startsNewItem =
+        cells[0].length > 0 && /^[A-ZÀ-Ö0-9•\-]/.test(cells[0]);
+      const startsNewNucleoGroup =
+        numCols >= 2 &&
+        colBuffers[0].some((line) => line.startsWith('•')) &&
+        cells[0].length > 2 &&
+        cells[1].length > 2 &&
+        cells[0].length < 55 &&
+        !cells[0].startsWith('•') &&
+        cells[0].toLowerCase() === cells[1].toLowerCase();
+
+      const shouldSplitRow =
+        hasExistingContent &&
+        (startsNewNucleoGroup ||
+          (cur.page !== prevPage && col0EndsSentence && startsNewItem) ||
+          (cur.page === prevPage &&
+            (gap > typicalGap * 1.45 ||
+              (nonEmptyColsCount >= 2 && col0EndsSentence && startsNewItem))));
+
+      if (shouldSplitRow) {
+        flushRow();
+      }
+
+      for (let k = 0; k < numCols; k++) {
+        if (cells[k]) {
+          colBuffers[k].push(cells[k]);
+        }
+      }
+
+      prevY = cur.y;
+      prevPage = cur.page;
+      j += 1;
+    }
+
+    flushRow();
+    if (currRows.length > 1) {
+      tables.push(currRows);
+    }
+    break;
+  }
+
+  return tables;
 }
 
 async function extractFromPdf(buffer: ArrayBuffer): Promise<ExtractedDocumentContent> {
@@ -249,6 +591,7 @@ async function extractFromPdf(buffer: ArrayBuffer): Promise<ExtractedDocumentCon
 
   const pdfDoc = await loadingTask.promise;
   const lines: string[] = [];
+  const allPageRowGroups: PdfTextToken[][][] = [];
 
   for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
     const page = await pdfDoc.getPage(pageNum);
@@ -283,6 +626,8 @@ async function extractFromPdf(buffer: ArrayBuffer): Promise<ExtractedDocumentCon
       }
     }
 
+    allPageRowGroups.push(rowGroups);
+
     for (const row of rowGroups) {
       row.sort((a, b) => a.x - b.x);
       let rowStr = '';
@@ -305,9 +650,11 @@ async function extractFromPdf(buffer: ArrayBuffer): Promise<ExtractedDocumentCon
     }
   }
 
+  const tables = extractTablesFromPdfRowGroups(allPageRowGroups);
+
   return {
     lines,
-    tables: [],
+    tables,
     fullText: lines.join('\n'),
   };
 }
@@ -336,11 +683,31 @@ function extractHtmlTablesAndText(html: string): ExtractedDocumentContent {
   const cleanedHtml = html
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<(s|del|strike)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ')
     .replace(
       /<input\b[^>]*type=["']?checkbox["']?[^>]*\bchecked\b[^>]*>/gi,
       ' ☒ '
     )
     .replace(/<input\b[^>]*type=["']?checkbox["']?[^>]*>/gi, ' ☐ ');
+
+  const emphasizedLines: string[] = [];
+  const emphTagRegex = /<(b|strong|mark|u)\b[^>]*>([\s\S]*?)<\/\1>/gi;
+  let emphM: RegExpExecArray | null;
+  while ((emphM = emphTagRegex.exec(cleanedHtml)) !== null) {
+    const innerText = cleanText(decodeXmlEntities(emphM[2].replace(/<[^>]+>/g, ' ')));
+    if (innerText && innerText.length >= 3 && innerText.length < 120) {
+      emphasizedLines.push(innerText);
+    }
+  }
+  const styledSpanRegex =
+    /<(?:span|font|p)\b[^>]*style=["'][^"']*(?:font-weight\s*:\s*(?:bold|[6-9]00)|background(?:-color)?\s*:\s*(?!transparent|none|#fff(?:fff)?\b|white\b)[^;"']+|text-decoration\s*:\s*underline)[^"']*["'][^>]*>([\s\S]*?)<\/(?:span|font|p)>/gi;
+  let stM: RegExpExecArray | null;
+  while ((stM = styledSpanRegex.exec(cleanedHtml)) !== null) {
+    const innerText = cleanText(decodeXmlEntities(stM[1].replace(/<[^>]+>/g, ' ')));
+    if (innerText && innerText.length >= 3 && innerText.length < 120) {
+      emphasizedLines.push(innerText);
+    }
+  }
 
   const stripCellHtml = (fragment: string): string =>
     cleanText(
@@ -396,6 +763,7 @@ function extractHtmlTablesAndText(html: string): ExtractedDocumentContent {
     lines,
     tables,
     fullText: lines.join('\n'),
+    emphasizedLines,
   };
 }
 
@@ -490,7 +858,7 @@ function matchCheckedOption(scopeText: string, option: string): boolean {
 
   // 1. Marker subito DOPO l'opzione sulla stessa riga ("opzione [X]", "opzione ☒", "opzione - x")
   const rxAfterChecked = new RegExp(
-    `(?:^|[\\s|☒☑✔✓✕✖✗✘■●☐\\[\\]()•\\-])${boundaryBefore}${escaped}${boundaryAfter}[ \\t:_-]{0,40}(?:${checkedMarker}|(?<=[ \\t\\-:])[xX](?=[ \\t]*(?:$|\\||,|;)))`,
+    `(?:^|[\\s|☒☑✔✓✕✖✗✘■●☐\\[\\]()•\\-])${boundaryBefore}${escaped}${boundaryAfter}[ \\t:_-]{0,40}(?:${checkedMarker}|(?<=[ \\t\\-:])[xX](?=[ \\t]*(?:$|\\||,|;|☐|☒|☑|\\[|\\(|\\w)))`,
     'im'
   );
   if (rxAfterChecked.test(scopeText)) return true;
@@ -535,6 +903,46 @@ function matchCheckedOption(scopeText: string, option: string): boolean {
   return rxSingleLineX.test(scopeText);
 }
 
+function hasAnyCheckboxGlyph(scopeText: string): boolean {
+  return /[☒☑✔✓✕✖✗✘■●☐]|\[\s*[xX]?\s*\]|\(\s*[xX]?\s*\)/.test(scopeText);
+}
+
+function resolveMultiSelectWithFallbacks<T extends string>(
+  actualSlice: string,
+  fallbackScope: string,
+  options: readonly T[],
+  emphasizedLines: string[]
+): T[] {
+  const scope = actualSlice || fallbackScope;
+  const direct = options.filter((o) => matchCheckedOption(scope, o));
+  if (direct.length > 0) return direct;
+
+  if (!actualSlice || hasAnyCheckboxGlyph(actualSlice)) {
+    return [];
+  }
+
+  // Se l'opzione è stata evidenziata in grassetto/sottolineato/sfondo nel modello senza caselle
+  if (emphasizedLines.length > 0) {
+    const emMatches = options.filter((o) => {
+      const rx = new RegExp(`(?<![A-Za-zÀ-ÿ\\-])${escapeRegex(o)}(?![A-Za-zÀ-ÿ\\-])`, 'i');
+      return emphasizedLines.some((em) => rx.test(em) && rx.test(actualSlice));
+    });
+    if (emMatches.length > 0 && emMatches.length < options.length) {
+      return emMatches;
+    }
+  }
+
+  // Se il docente ha mantenuto solo le voci scelte (rimuovendo o barrando le altre) in una sezione senza caselle
+  const presentSubset = options.filter((o) =>
+    new RegExp(`(?<![A-Za-zÀ-ÿ\\-])${escapeRegex(o)}(?![A-Za-zÀ-ÿ\\-])`, 'i').test(actualSlice)
+  );
+  if (presentSubset.length > 0 && presentSubset.length < options.length) {
+    return presentSubset;
+  }
+
+  return [];
+}
+
 function extractSectionSlice(
   fullText: string,
   startRegex: RegExp,
@@ -555,7 +963,9 @@ function extractSectionSlice(
 }
 
 function detectDisciplina(fullText: string, fallback: string): string {
-  const titleMatch = fullText.match(/PROGRAMMAZIONE\s+DISCIPLINARE\s+di\s+([^\n|]+)/i);
+  const titleMatch = fullText.match(
+    /(?:PROGRAMMAZIONE\s+(?:DISCIPLINARE|DIDATTICA)|PIANO\s+DI\s+LAVORO)\s+(?:di|per)\s+([^\n|]+)/i
+  );
   const discFieldMatch = fullText.match(/(?:^|\n|\|)\s*DISCIPLINA\s*[:\-]?\s+([^\n|]+)/im);
   const candidates = [discFieldMatch?.[1], titleMatch?.[1]].filter(Boolean) as string[];
   for (const raw of candidates) {
@@ -580,43 +990,80 @@ function detectClasseAndSezione(fullText: string): {
   sezione?: string;
 } {
   const m = fullText.match(
-    /(?:^|\n|\|)\s*CLASSE\s*[:\-]?\s+(Prima|Seconda|Terza|I{1,3}[°ª^a]?|1\s*[°ª^a]?|2\s*[°ª^a]?|3\s*[°ª^a]?)(?:\s*(?:SEZ(?:IONE)?\.?\s*[:\-]?\s*)?([A-Za-z])\b)?/im
+    /(?:^|\n|\|)\s*CLASSE\s*[:\-]?\s+(Prima|Seconda|Terza|I{1,3}[°ª^a]?|1\s*[°ª^a]?|2\s*[°ª^a]?|3\s*[°ª^a]?)(?:[\s\-–\/]*(?:SEZ(?:IONE)?\.?\s*[:\-]?\s*)?([A-Za-z])\b)?/im
   );
   if (!m) return {};
-  const rawClasse = m[1].toUpperCase().replace(/[°ª^A\s]/g, '');
+  const token = m[1].trim().replace(/[°ª^\s]/g, '').toUpperCase();
   let classe: ClasseSecondaria | undefined;
-  if (rawClasse === 'PRIM' || rawClasse === 'PRIMA' || rawClasse === 'I' || rawClasse === '1') {
+  if (token === 'PRIMA' || token === 'PRIM' || token === 'I' || token === '1' || token === '1A') {
     classe = 'Prima';
   } else if (
-    rawClasse === 'SECOND' ||
-    rawClasse === 'SECONDA' ||
-    rawClasse === 'II' ||
-    rawClasse === '2'
+    token === 'SECONDA' ||
+    token === 'SECOND' ||
+    token === 'II' ||
+    token === '2' ||
+    token === '2A'
   ) {
     classe = 'Seconda';
   } else if (
-    rawClasse === 'TERZ' ||
-    rawClasse === 'TERZA' ||
-    rawClasse === 'III' ||
-    rawClasse === '3'
+    token === 'TERZA' ||
+    token === 'TERZ' ||
+    token === 'III' ||
+    token === '3' ||
+    token === '3A'
   ) {
     classe = 'Terza';
   }
-  const sezione = m[2] ? m[2].toUpperCase() : undefined;
+  let sezione = m[2] ? m[2].toUpperCase() : undefined;
+  if (!sezione) {
+    const headArea = fullText.slice(0, 1200);
+    const sezM = headArea.match(/(?:^|\n|\||\s)SEZ(?:IONE)?\.?\s*[:\-]?\s*([A-Za-z])\b/im);
+    if (sezM?.[1]) sezione = sezM[1].toUpperCase();
+  }
   return { classe, sezione };
 }
 
 function isNonCurriculumTable(table: string[][]): boolean {
-  const headText = table
+  // Controlla solo celle brevi di intestazione nelle prime righe per evitare falsi positivi
+  // quando la cella superiore TRAGUARDI contiene parole come "scritta", "orale" o "tipologia"
+  const shortCells = table
     .slice(0, 2)
     .flat()
-    .join(' ')
-    .toLowerCase();
-  return (
-    /\bmetodi\b|\bmezzi e strumenti\b|\bscritta\b|\borale\b|\bpotenziamento\b|\bconsolidamento\b|\brecupero\b|\blivello basso\b|\btipologia\b/.test(
-      headText
-    )
-  );
+    .map((c) => c.trim().toLowerCase())
+    .filter((c) => c.length > 0 && c.length < 70);
+
+  if (shortCells.length === 0) return false;
+  const joined = shortCells.join(' | ');
+  if (shortCells.some((c) => /\bmetodi\b/.test(c)) && shortCells.some((c) => /\bmezzi e strumenti\b/.test(c))) {
+    return true;
+  }
+  if (shortCells.some((c) => /\bscritta\b/.test(c)) && shortCells.some((c) => /\borale\b/.test(c))) {
+    return true;
+  }
+  if (shortCells.some((c) => /\btipologia\b/.test(c)) && shortCells.some((c) => /\blivello\b/.test(c))) {
+    return true;
+  }
+  if (
+    shortCells.some((c) => /\blivello basso\b/.test(c)) &&
+    shortCells.some((c) => /\blivello alto\b/.test(c))
+  ) {
+    return true;
+  }
+  if (shortCells.some((c) => /\balunni\b/.test(c)) && shortCells.some((c) => /\bmaschi\b/.test(c))) {
+    return true;
+  }
+  if (/\bgruppi di livello\b/.test(joined) || (/\bpotenziamento\b/.test(joined) && /\brecupero\b/.test(joined))) {
+    return true;
+  }
+  return false;
+}
+
+function isRepeatedCurriculumHeaderRow(cells: string[]): boolean {
+  if (cells.length < 2 || cells.some((c) => c.length > 65)) return false;
+  const lower = cells.map((c) => c.toLowerCase().trim());
+  const hasLeft = lower.some((h) => /^(?:competenze|nucle[oi]|abilit(?:à|a['’]?)|obiettivi(?:\s+specifici)?)$/.test(h));
+  const hasRight = lower.some((h) => /^(?:abilit(?:à|a['’]?)|obiettivi(?:\s+specifici)?|conoscenze(?:\s*\(contenuti\))?|contenuti|argomenti)$/.test(h));
+  return hasLeft && hasRight;
 }
 
 function detectCurriculumRowsFromTables(tables: string[][][]): {
@@ -644,7 +1091,7 @@ function detectCurriculumRowsFromTables(tables: string[][][]): {
     let abCol = -1;
     let conCol = -1;
 
-    for (let i = 0; i < Math.min(table.length, 10); i++) {
+    for (let i = 0; i < Math.min(table.length, 20); i++) {
       const cellsLower = table[i].map((c) => c.toLowerCase().trim());
       if (cellsLower.length < 2) continue;
       const nIdx = cellsLower.findIndex((h) =>
@@ -706,31 +1153,45 @@ function detectCurriculumRowsFromTables(tables: string[][][]): {
       };
     }
 
+    let pendingNucleo = '';
     for (let r = startDataIdx; r < table.length; r++) {
       const cells = table[r];
       if (cells.length === 0) continue;
+      if (isRepeatedCurriculumHeaderRow(cells)) continue;
 
       let rawNucleo = nucleoCol !== -1 ? (cells[nucleoCol] ?? '').trim() : '';
       let rawComp = compCol !== -1 ? (cells[compCol] ?? '').trim() : '';
       let rawAb = abCol !== -1 ? (cells[abCol] ?? '').trim() : '';
       let rawCon = conCol !== -1 ? (cells[conCol] ?? '').trim() : '';
 
-      // Gestione celle ridotte/fuse su riga dati (es. tabella 3 col ma riga con 2 celle)
+      // Gestione celle ridotte/fuse su riga dati (es. tabella 3 col ma riga con 2 celle, o riga banner Nucleo)
       if (cells.length === 2 && abCol >= 1 && conCol >= 2) {
         rawAb = (cells[0] ?? '').trim();
         rawCon = (cells[1] ?? '').trim();
         rawComp = '';
-      } else if (cells.length === 1 && !isPlaceholderValue(cells[0]) && rows.length > 0) {
+      } else if (cells.length === 1 && !isPlaceholderValue(cells[0])) {
         const single = cells[0].trim();
         if (
-          !/^tenuto conto della/i.test(single) &&
-          !/^traguardi per lo sviluppo/i.test(single) &&
-          !/^\(clicca sul link/i.test(single)
+          /^tenuto conto della/i.test(single) ||
+          /^traguardi per lo sviluppo/i.test(single) ||
+          /^\(clicca sul link/i.test(single)
         ) {
+          continue;
+        }
+        if (single.length < 70 && !/[.!?]$/.test(single)) {
+          pendingNucleo = single;
+          continue;
+        }
+        if (rows.length > 0) {
           const prev = rows[rows.length - 1];
           prev.conoscenze = prev.conoscenze ? `${prev.conoscenze}\n${single}` : single;
         }
         continue;
+      }
+
+      if (!rawNucleo && pendingNucleo) {
+        rawNucleo = pendingNucleo;
+        pendingNucleo = '';
       }
 
       if (rawNucleo && !isPlaceholderValue(rawNucleo)) {
@@ -745,6 +1206,7 @@ function detectCurriculumRowsFromTables(tables: string[][][]): {
       rows.push({
         id: makeId('imp-row'),
         competenze: competenze || undefined,
+        traguardo: rawNucleo && !isPlaceholderValue(rawNucleo) ? rawNucleo : undefined,
         abilita,
         conoscenze,
       });
@@ -905,14 +1367,14 @@ function detectCurriculumRowsFromLines(
       if (rest && !isPlaceholderValue(rest)) competenzeBuf.push(rest);
       continue;
     }
-    if (/^(?:abilit[àa']|obiettivi(?:\s+specifici)?)/.test(lower)) {
+    if (/^(?:abilit(?:à|a['’]?)|obiettivi(?:\s+specifici)?)/.test(lower)) {
       activeCol = 'ab';
       if (!detectedIndicazioni) {
         if (/^obiettivi/.test(lower)) detectedIndicazioni = 'nuove';
         else if (/^abilit/.test(lower)) detectedIndicazioni = 'vecchie';
       }
       const rest = line
-        .replace(/^(?:abilit[àa']|obiettivi(?:\s+specifici)?)\s*[:\-]?\s*/i, '')
+        .replace(/^(?:abilit(?:à|a['’]?)|obiettivi(?:\s+specifici)?)\s*[:\-]?\s*/i, '')
         .trim();
       if (rest && !isPlaceholderValue(rest)) abilitaBuf.push(rest);
       continue;
@@ -975,7 +1437,7 @@ export async function importProgrammazioneFromBuffer(
     extracted = await extractFromLegacyDoc(buffer);
   }
 
-  const { fullText, lines, tables } = extracted;
+  const { fullText, lines, tables, emphasizedLines = [] } = extracted;
   const warnings: string[] = [];
   const recognizedFields: RecognizedImportField[] = [];
   const unrecognizedBlocks: UnrecognizedImportBlock[] = [];
@@ -1018,9 +1480,11 @@ export async function importProgrammazioneFromBuffer(
   const disciplina = detectDisciplina(fullText, basePlan.datiGenerali.disciplina);
   const { classe, sezione } = detectClasseAndSezione(fullText);
   const asMatch = fullText.match(
-    /(?:ANNO\s+SCOLASTICO|A\.?\s*S\.?)\s*[:\-]?\s+(\d{4}\s*[\/\-]\s*\d{2,4})/i
+    /(?:ANNO\s+SCOLASTICO|A\.?\s*S\.?)(?:\s*[:\-]\s*|\s+)(\d{2,4}\s*[\/\-]\s*\d{2,4})/i
   );
-  const plessoMatch = fullText.match(/PLESSO\s+(?:DI\s*)?[:\-]?\s*([A-Za-zÀ-ÿ' ]{3,35})/i);
+  const plessoMatch = fullText.match(
+    /PLESSO(?:\s+DI\s*[:\-]?)?(?:\s*[:\-]\s*|\s+)([A-Za-zÀ-ÿ' ]{3,35}?)(?=\s*(?:\n|\||ANNO\b|CLASSE\b|DISCIPLINA\b|DOCENTE\b|$))/im
+  );
   const scuolaMatch = fullText.match(/(?:^|\n|\|)\s*SCUOLA\s*[:\-]?\s+([^\n|]+)/im);
   const docenteFieldMatch = fullText.match(/(?:^|\n|\|)\s*DOCENTE\s*[:\-]?\s+([^\n|]+)/im);
   const signatureMatch = fullText.match(
@@ -1068,10 +1532,14 @@ export async function importProgrammazioneFromBuffer(
   if (sezione) basePlan.datiGenerali.sezione = sezione;
   if (asMatch?.[1]) {
     const rawAs = asMatch[1].replace(/\s+/g, '');
-    const mAs = rawAs.match(/^(\d{4})[\/\-](\d{2,4})$/);
-    basePlan.datiGenerali.annoScolastico = mAs
-      ? `${mAs[1]}/${mAs[2].length === 4 ? mAs[2].slice(2) : mAs[2]}`
-      : rawAs;
+    const mAs = rawAs.match(/^(\d{2,4})[\/\-](\d{2,4})$/);
+    if (mAs) {
+      const startYr = mAs[1].length === 2 ? `20${mAs[1]}` : mAs[1];
+      const endYr = mAs[2].length === 4 ? mAs[2].slice(2) : mAs[2];
+      basePlan.datiGenerali.annoScolastico = `${startYr}/${endYr}`;
+    } else {
+      basePlan.datiGenerali.annoScolastico = rawAs;
+    }
     recordRecognized(
       'annoScolastico',
       'Anno scolastico',
@@ -1109,20 +1577,38 @@ export async function importProgrammazioneFromBuffer(
   );
   if (compTable) {
     const firstRowHasNums = compTable[0].filter((c) => /\d+/.test(c)).length >= 3;
+    const headerRow = compTable[0];
     const targetRow = firstRowHasNums ? compTable[0] : compTable[1];
-    if (targetRow && targetRow.length >= 5) {
+    if (targetRow && targetRow.length >= 4) {
       const extractInt = (cell: string) => {
         const m = cell.match(/\d+/);
         return m ? parseInt(m[0], 10) : NaN;
       };
-      const nums = targetRow.map(extractInt);
-      if (!Number.isNaN(nums[0])) basePlan.composizione.alunni = nums[0];
-      if (!Number.isNaN(nums[1])) basePlan.composizione.maschi = nums[1];
-      if (!Number.isNaN(nums[2])) basePlan.composizione.femmine = nums[2];
-      if (!Number.isNaN(nums[3])) basePlan.composizione.ripetenti = nums[3];
-      if (!Number.isNaN(nums[4])) basePlan.composizione.bes = nums[4];
-      if (targetRow.length >= 6 && !Number.isNaN(nums[5])) {
-        basePlan.composizione.disabilita = nums[5];
+      const matchCellByLabel = (rx: RegExp, fallbackIdx: number): number => {
+        for (let idx = 0; idx < targetRow.length; idx++) {
+          const labelSource = firstRowHasNums ? targetRow[idx] : headerRow[idx] ?? '';
+          if (rx.test(labelSource)) {
+            const val = extractInt(targetRow[idx]);
+            if (!Number.isNaN(val)) return val;
+          }
+        }
+        return fallbackIdx < targetRow.length ? extractInt(targetRow[fallbackIdx]) : NaN;
+      };
+
+      const vAlunni = matchCellByLabel(/\balunni\b/i, 0);
+      const vMaschi = matchCellByLabel(/\bmaschi\b/i, 1);
+      const vFemmine = matchCellByLabel(/\bfemmine\b/i, 2);
+      const vRip = matchCellByLabel(/\bripetent/i, 3);
+      const vBes = matchCellByLabel(/\bbes\b|bisogni educativi/i, 4);
+      const vDis = matchCellByLabel(/disabilit|^h\b|alunni\s+h/i, 5);
+
+      if (!Number.isNaN(vAlunni)) basePlan.composizione.alunni = vAlunni;
+      if (!Number.isNaN(vMaschi)) basePlan.composizione.maschi = vMaschi;
+      if (!Number.isNaN(vFemmine)) basePlan.composizione.femmine = vFemmine;
+      if (!Number.isNaN(vRip)) basePlan.composizione.ripetenti = vRip;
+      if (!Number.isNaN(vBes)) basePlan.composizione.bes = vBes;
+      if (!Number.isNaN(vDis)) {
+        basePlan.composizione.disabilita = vDis;
       } else {
         basePlan.composizione.disabilita = basePlan.composizione.disabilita ?? 0;
       }
@@ -1165,7 +1651,9 @@ export async function importProgrammazioneFromBuffer(
       const besM = fullText.match(
         /(?:Con Bisogni Educativi Speciali\s*\(BES\)|BES)\s*[:\-]\s*(\d{1,2})\b/i
       );
-      const disM = fullText.match(/(?:Con\s+disabilit[àa]|Alunni\s+H|^H)\s*[:\-]\s*(\d{1,2})\b/im);
+      const disM = fullText.match(
+        /(?:^|\n|\||\s)(?:Con\s+disabilit[àa]|Alunni(?:\s+con)?\s+H|H)\s*[:\-]\s*(\d{1,2})\b/im
+      );
       if (alunniM || maschiM || femmineM || besM || disM) {
         if (alunniM) basePlan.composizione.alunni = Number(alunniM[1]);
         if (maschiM) basePlan.composizione.maschi = Number(maschiM[1]);
@@ -1184,42 +1672,43 @@ export async function importProgrammazioneFromBuffer(
     }
   }
 
-  // 3. Checkbox per sezione (scoped dove possibile per evitare falsi positivi tra sezioni diverse)
-  const situazioneSlice =
-    extractSectionSlice(fullText, /SITUAZIONE DELLA CLASSE[^\n]*/i, [
-      /(?:^|\n)\s*ANALISI DELLA SITUAZIONE DI PARTENZA/i,
-    ]) || fullText;
-  const fontiSlice =
-    extractSectionSlice(fullText, /FONTI DI RILEVAZIONE DEI\s+DATI[^\n]*/i, [
-      /(?:^|\n)\s*STRATEGIE ED INTERVENTI/i,
-    ]) || fullText;
-  const interventiSlice =
-    extractSectionSlice(fullText, /STRATEGIE ED INTERVENTI[^\n]*/i, [
-      /Alunni con BES/i,
-      /TRAGUARDI PER LO SVILUPPO/i,
-    ]) || fullText;
-  const potSlice =
-    extractSectionSlice(interventiSlice, /(?:^|\n)\s*POTENZIAMENTO\b/i, [
-      /(?:^|\n)\s*CONSOLIDAMENTO\b/i,
-      /(?:^|\n)\s*RECUPERO\b/i,
-    ]) || interventiSlice;
-  const consSlice =
-    extractSectionSlice(interventiSlice, /(?:^|\n)\s*CONSOLIDAMENTO\b/i, [
-      /(?:^|\n)\s*RECUPERO\b/i,
-    ]) || interventiSlice;
-  const recSlice =
-    extractSectionSlice(interventiSlice, /(?:^|\n)\s*RECUPERO\b/i, [/Alunni con BES/i]) ||
-    interventiSlice;
-  const metodiSlice =
-    extractSectionSlice(fullText, /(?:^|\n)\s*CRITERI METODOLOGICI[^\n]*/i, [
-      /(?:^|\n)\s*AUSILI DIDATTICI\b/i,
-      /(?:^|\n)\s*DIDATTICA DIGITALE INTEGRATA\b/i,
-      /(?:^|\n)\s*VERIFICHE IN ITINERE\b/i,
-    ]) || fullText;
-  const verificheSlice =
-    extractSectionSlice(fullText, /(?:^|\n)\s*VERIFICHE IN ITINERE[^\n]*/i, [
-      /\n\s*VALUTAZIONE\s*(?:\n|$)/i,
-    ]) || fullText;
+  // 3. Checkbox / elenchi per sezione (scoped per evitare falsi positivi tra sezioni diverse)
+  const rawSituazioneSlice = extractSectionSlice(fullText, /SITUAZIONE DELLA CLASSE[^\n]*/i, [
+    /(?:^|\n)\s*ANALISI DELLA SITUAZIONE DI PARTENZA/i,
+  ]);
+  const rawFontiSlice = extractSectionSlice(fullText, /FONTI DI RILEVAZIONE DEI\s+DATI[^\n]*/i, [
+    /(?:^|\n)\s*STRATEGIE ED INTERVENTI/i,
+  ]);
+  const rawInterventiSlice = extractSectionSlice(fullText, /STRATEGIE ED INTERVENTI[^\n]*/i, [
+    /Alunni con BES/i,
+    /TRAGUARDI PER LO SVILUPPO/i,
+  ]);
+  const rawPotSlice = extractSectionSlice(rawInterventiSlice, /(?:^|\n)\s*POTENZIAMENTO\b/i, [
+    /(?:^|\n)\s*CONSOLIDAMENTO\b/i,
+    /(?:^|\n)\s*RECUPERO\b/i,
+  ]);
+  const rawConsSlice = extractSectionSlice(rawInterventiSlice, /(?:^|\n)\s*CONSOLIDAMENTO\b/i, [
+    /(?:^|\n)\s*RECUPERO\b/i,
+  ]);
+  const rawRecSlice = extractSectionSlice(rawInterventiSlice, /(?:^|\n)\s*RECUPERO\b/i, [
+    /Alunni con BES/i,
+  ]);
+  const rawMetodiSlice = extractSectionSlice(fullText, /(?:^|\n)\s*CRITERI METODOLOGICI[^\n]*/i, [
+    /(?:^|\n)\s*AUSILI DIDATTICI\b/i,
+    /(?:^|\n)\s*DIDATTICA DIGITALE INTEGRATA\b/i,
+    /(?:^|\n)\s*VERIFICHE IN ITINERE\b/i,
+  ]);
+  const rawVerificheSlice = extractSectionSlice(fullText, /(?:^|\n)\s*VERIFICHE IN ITINERE[^\n]*/i, [
+    /\n\s*(?:CRITERI\s+DI\s+)?VALUTAZIONE(?:\s+DEGLI\s+APPRENDIMENTI)?\s*:?\s*(?:\n|$)/i,
+  ]);
+
+  const situazioneSlice = rawSituazioneSlice || fullText;
+  const fontiSlice = rawFontiSlice || fullText;
+  const potSlice = rawPotSlice || rawInterventiSlice || fullText;
+  const consSlice = rawConsSlice || rawInterventiSlice || fullText;
+  const recSlice = rawRecSlice || rawInterventiSlice || fullText;
+  const metodiSlice = rawMetodiSlice || fullText;
+  const verificheSlice = rawVerificheSlice || fullText;
 
   const checkedTipologie = TIPOLOGIE_CLASSE_OPTIONS.filter((o) =>
     matchCheckedOption(situazioneSlice, o)
@@ -1229,16 +1718,38 @@ export async function importProgrammazioneFromBuffer(
     recordRecognized('tipologia', 'Tipologia classe', 'Situazione', checkedTipologie.join(', '));
   }
 
-  const checkedLivello = LIVELLI_CLASSE_OPTIONS.find((o) =>
+  let checkedLivello = LIVELLI_CLASSE_OPTIONS.find((o) =>
     matchCheckedOption(situazioneSlice, o.label)
   );
+  if (!checkedLivello && rawSituazioneSlice && !hasAnyCheckboxGlyph(rawSituazioneSlice)) {
+    if (emphasizedLines.length > 0) {
+      const emLevels = LIVELLI_CLASSE_OPTIONS.filter((o) => {
+        const rx = new RegExp(`(?<![A-Za-zÀ-ÿ\\-])${escapeRegex(o.label)}(?![A-Za-zÀ-ÿ\\-])`, 'i');
+        return emphasizedLines.some((em) => rx.test(em) && rx.test(rawSituazioneSlice));
+      });
+      if (emLevels.length === 1) checkedLivello = emLevels[0];
+    }
+    if (!checkedLivello) {
+      const presentLevels = LIVELLI_CLASSE_OPTIONS.filter((o) =>
+        new RegExp(`(?<![A-Za-zÀ-ÿ\\-])${escapeRegex(o.label)}(?![A-Za-zÀ-ÿ\\-])`, 'i').test(
+          rawSituazioneSlice
+        )
+      );
+      if (presentLevels.length === 1) {
+        checkedLivello = presentLevels[0];
+      }
+    }
+  }
   if (checkedLivello) {
     basePlan.situazione.livello = checkedLivello.value;
     recordRecognized('livello', 'Livello classe', 'Situazione', checkedLivello.label);
   }
 
-  const checkedMezzi = MEZZI_INDIVIDUAZIONE_OPTIONS.filter((o) =>
-    matchCheckedOption(situazioneSlice, o)
+  const checkedMezzi = resolveMultiSelectWithFallbacks(
+    rawSituazioneSlice,
+    situazioneSlice,
+    MEZZI_INDIVIDUAZIONE_OPTIONS,
+    emphasizedLines
   );
   if (checkedMezzi.length > 0) {
     basePlan.situazione.mezziIndividuazione = checkedMezzi;
@@ -1250,8 +1761,11 @@ export async function importProgrammazioneFromBuffer(
     );
   }
 
-  const checkedFonti = FONTI_RILEVAZIONE_OPTIONS.filter((o) =>
-    matchCheckedOption(fontiSlice, o)
+  const checkedFonti = resolveMultiSelectWithFallbacks(
+    rawFontiSlice,
+    fontiSlice,
+    FONTI_RILEVAZIONE_OPTIONS,
+    emphasizedLines
   );
   if (checkedFonti.length > 0) {
     basePlan.analisiPartenza.fontiRilevazione = checkedFonti;
@@ -1266,7 +1780,12 @@ export async function importProgrammazioneFromBuffer(
     }
   }
 
-  const checkedPot = STRATEGIE_POTENZIAMENTO_OPTIONS.filter((o) => matchCheckedOption(potSlice, o));
+  const checkedPot = resolveMultiSelectWithFallbacks(
+    rawPotSlice,
+    potSlice,
+    STRATEGIE_POTENZIAMENTO_OPTIONS,
+    emphasizedLines
+  );
   if (checkedPot.length > 0) {
     basePlan.interventi.potenziamento = checkedPot;
     recordRecognized('potenziamento', 'Strategie potenziamento', 'Interventi', checkedPot.join('; '));
@@ -1280,8 +1799,11 @@ export async function importProgrammazioneFromBuffer(
     }
   }
 
-  const checkedCons = STRATEGIE_CONSOLIDAMENTO_OPTIONS.filter((o) =>
-    matchCheckedOption(consSlice, o)
+  const checkedCons = resolveMultiSelectWithFallbacks(
+    rawConsSlice,
+    consSlice,
+    STRATEGIE_CONSOLIDAMENTO_OPTIONS,
+    emphasizedLines
   );
   if (checkedCons.length > 0) {
     basePlan.interventi.consolidamento = checkedCons;
@@ -1296,7 +1818,12 @@ export async function importProgrammazioneFromBuffer(
     }
   }
 
-  const checkedRec = STRATEGIE_RECUPERO_OPTIONS.filter((o) => matchCheckedOption(recSlice, o));
+  const checkedRec = resolveMultiSelectWithFallbacks(
+    rawRecSlice,
+    recSlice,
+    STRATEGIE_RECUPERO_OPTIONS,
+    emphasizedLines
+  );
   if (checkedRec.length > 0) {
     basePlan.interventi.recupero = checkedRec;
     recordRecognized('recupero', 'Strategie recupero', 'Interventi', checkedRec.join('; '));
@@ -1310,7 +1837,12 @@ export async function importProgrammazioneFromBuffer(
     }
   }
 
-  const checkedMetodi = METODI_OPTIONS.filter((o) => matchCheckedOption(metodiSlice, o));
+  const checkedMetodi = resolveMultiSelectWithFallbacks(
+    rawMetodiSlice,
+    metodiSlice,
+    METODI_OPTIONS,
+    emphasizedLines
+  );
   if (checkedMetodi.length > 0) {
     basePlan.metodiStrumenti.metodi = checkedMetodi;
     recordRecognized('metodi', 'Metodi didattici', 'Metodi e strumenti', checkedMetodi.join('; '));
@@ -1324,8 +1856,11 @@ export async function importProgrammazioneFromBuffer(
     }
   }
 
-  const checkedStrumenti = MEZZI_STRUMENTI_OPTIONS.filter((o) =>
-    matchCheckedOption(metodiSlice, o)
+  const checkedStrumenti = resolveMultiSelectWithFallbacks(
+    rawMetodiSlice,
+    metodiSlice,
+    MEZZI_STRUMENTI_OPTIONS,
+    emphasizedLines
   );
   if (checkedStrumenti.length > 0) {
     basePlan.metodiStrumenti.mezziEStrumenti = checkedStrumenti;
@@ -1345,16 +1880,22 @@ export async function importProgrammazioneFromBuffer(
     }
   }
 
-  const checkedScritte = VERIFICHE_SCRITTE_OPTIONS.filter((o) =>
-    matchCheckedOption(verificheSlice, o)
+  const checkedScritte = resolveMultiSelectWithFallbacks(
+    rawVerificheSlice,
+    verificheSlice,
+    VERIFICHE_SCRITTE_OPTIONS,
+    emphasizedLines
   );
   if (checkedScritte.length > 0) {
     basePlan.verificheValutazione.verificheScritte = checkedScritte;
     recordRecognized('verScritte', 'Verifiche scritte', 'Verifiche', checkedScritte.join('; '));
   }
 
-  const checkedOrali = VERIFICHE_ORALI_OPTIONS.filter((o) =>
-    matchCheckedOption(verificheSlice, o)
+  const checkedOrali = resolveMultiSelectWithFallbacks(
+    rawVerificheSlice,
+    verificheSlice,
+    VERIFICHE_ORALI_OPTIONS,
+    emphasizedLines
   );
   if (checkedOrali.length > 0) {
     basePlan.verificheValutazione.verificheOrali = checkedOrali;
@@ -1389,9 +1930,15 @@ export async function importProgrammazioneFromBuffer(
       /(?:^|\n)\s*FONTI DI RILEVAZIONE/i,
     ]);
   if (analisiSlice) {
-    const normalizedAnalisi = analisiSlice
-      .replace(/^SITU[A-Z\s']+DISCIPLINA\s*:?\s*/i, '')
-      .replace(/^1\.\s*/, '')
+    const normalizedAnalisi = stripLeadingUnderscores(
+      analisiSlice
+        .replace(/^SITU[A-Z\s']+DISCIPLINA\s*:?\s*/i, '')
+        .replace(/^1\.\s*/, '')
+    )
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0 && !/^[_\.\-…\s]+$/.test(l))
+      .join('\n')
       .trim();
     if (!isPlaceholderValue(normalizedAnalisi)) {
       basePlan.analisiPartenza.descrizioneDisciplinare = normalizedAnalisi;
@@ -1403,16 +1950,18 @@ export async function importProgrammazioneFromBuffer(
   // 4a. Livelli di partenza rilevati (tabella a 4 colonne, eventuale riga nomi sotto, o riga riassuntiva)
   const livelliTable = tables.find(
     (t) =>
-      t[0]?.some((c) => /livello basso/i.test(c)) &&
-      t[0]?.some((c) => /livello alto/i.test(c))
+      t[0]?.some((c) => /livello basso|\bbasso\s*:\s*\d+/i.test(c)) &&
+      t[0]?.some((c) => /livello alto|\balto\s*:\s*\d+/i.test(c))
   );
   if (livelliTable) {
     const row0 = livelliTable[0];
+    const hasInlineCounts = (row: string[]) =>
+      row.filter((c) => /\b(?:alunni|basso|medio\/basso|medio|alto)\s*[:\-]?\s*\d+/i.test(c)).length >= 3;
     const rowDataIdx =
-      livelliTable.length >= 2 && row0.every((c) => !/alunni\s*:\s*\d+/i.test(c)) ? 1 : 0;
+      livelliTable.length >= 2 && !hasInlineCounts(row0) ? 1 : 0;
     const rowData = livelliTable[rowDataIdx];
     const extractAlunni = (cell: string) => {
-      const m = cell.match(/alunni\s*[:\-]?\s*(\d+)/i);
+      const m = cell.match(/\b(?:alunni|basso|medio\/basso|medio|alto)\s*[:\-]?\s*(\d+)/i);
       return m ? parseInt(m[1], 10) : NaN;
     };
     if (rowData.length >= 4) {
@@ -1449,6 +1998,7 @@ export async function importProgrammazioneFromBuffer(
           .map((n) => n.trim())
           .filter((n) => n.length > 1 && !isPlaceholderValue(n));
         for (const nom of names) {
+          consumedSubstrings.push(nom);
           importedStudents.push({
             id: makeId('imp-stud'),
             ordine: order,
@@ -1501,7 +2051,7 @@ export async function importProgrammazioneFromBuffer(
   // 5. Traguardi, Competenze attese/digitali & Tabella / Programma Curricolo
   const traguardiBlock = extractSectionSlice(
     fullText,
-    /TRAGUARDI PER LO SVILUPPO DELLE COMPETENZE[^\n]*/i,
+    /TRAGUARDI PER LO SVILUPPO DELLE COMPETENZE(?:\s+IN\s+RELAZIONE[^\n]*)?(?:\s*\(clicca sul link[^)]*\))?/i,
     [
       /Voci dal Curricolo Verticale/i,
       /Tenuto conto della eterogeneit/i,
@@ -1538,7 +2088,8 @@ export async function importProgrammazioneFromBuffer(
         (l) =>
           l.length > 3 &&
           !isPlaceholderValue(l) &&
-          !/^nessuna competenza/i.test(l)
+          !/^nessuna competenza/i.test(l) &&
+          !/^(?:in relazione al|curricolo verticale del nostro istituto|\(clicca sul link)/i.test(l)
       );
     if (extractedComp.length > 0) {
       basePlan.curricolo.competenzeAttese = extractedComp;
@@ -1615,6 +2166,33 @@ export async function importProgrammazioneFromBuffer(
     basePlan.curricolo.righeAbilitaConoscenze = existingPlan
       ? [...existingPlan.curricolo.righeAbilitaConoscenze, ...extractedRows]
       : extractedRows;
+
+    // Se una tabella importata a 3 colonne conteneva competenze vere e proprie (non semplici etichette di nucleo),
+    // le rende disponibili in competenzeAttese subito dopo i Traguardi per l'esportazione a 1 colonna + 2 colonne.
+    const existingCompSet = new Set(
+      basePlan.curricolo.competenzeAttese.map((c) => c.trim().toLowerCase()).filter(Boolean)
+    );
+    const promotedCompetenze: string[] = [];
+    for (const r of extractedRows) {
+      const rawComp = (r.competenze ?? '').replace(/^\[[^\]]+\]\s*/, '').trim();
+      const rawTrag = (r.traguardo ?? '').trim();
+      if (
+        rawComp &&
+        rawComp.toLowerCase() !== rawTrag.toLowerCase() &&
+        rawComp.length > 24 &&
+        !existingCompSet.has(rawComp.toLowerCase())
+      ) {
+        existingCompSet.add(rawComp.toLowerCase());
+        promotedCompetenze.push(rawComp);
+      }
+    }
+    if (promotedCompetenze.length > 0) {
+      basePlan.curricolo.competenzeAttese = [
+        ...basePlan.curricolo.competenzeAttese,
+        ...promotedCompetenze,
+      ];
+    }
+
     sectionsMatched.push(`Programma (${extractedRows.length} righe)`);
     recordRecognized(
       'curricoloRighe',
@@ -1641,8 +2219,8 @@ export async function importProgrammazioneFromBuffer(
   // 6. Testi liberi Metodi, Ausili, DDI e Valutazione (senza riscrittura o riassunto)
   const premessaSlice = extractSectionSlice(
     fullText,
-    /CRITERI METODOLOGICI,\s*STRATEGIE,\s*STRUMENTI\s*:/i,
-    [/\n\s*METODI(?:\s*\||\n|$)/i]
+    /CRITERI METODOLOGICI(?:,\s*STRATEGIE[,\s]+(?:E\s+)?STRUMENTI)?\s*:?/i,
+    [/\n\s*(?:METODI|MEZZI E STRUMENTI|AUSILI DIDATTICI)(?:\s*\||\n|$)/i]
   );
   if (premessaSlice && !isPlaceholderValue(premessaSlice) && premessaSlice.length > 20) {
     basePlan.metodiStrumenti.premessaMetodologica = premessaSlice;
@@ -1675,9 +2253,11 @@ export async function importProgrammazioneFromBuffer(
     recordRecognized('ddi', 'Didattica digitale integrata', 'Metodi e strumenti', ddiSlice);
   }
 
-  const valSlice = extractSectionSlice(fullText, /(?:^|\n)\s*VALUTAZIONE\s*(?:\n|$)/i, [
-    /(?:^|\n)\s*(?:Il\s+docente|La\s+docente|Il\/La\s+Docente)\b/i,
-  ]);
+  const valSlice = extractSectionSlice(
+    fullText,
+    /(?:^|\n)\s*(?:CRITERI\s+DI\s+)?VALUTAZIONE(?:\s+DEGLI\s+APPRENDIMENTI)?\s*:?\s*(?:\n|$)/i,
+    [/(?:^|\n)\s*(?:Il\s+docente|La\s+docente|Il\/La\s+Docente)\b/i]
+  );
   if (valSlice && !isPlaceholderValue(valSlice) && valSlice.length > 20) {
     basePlan.verificheValutazione.criteriValutazione = valSlice;
     sectionsMatched.push('Valutazione');
@@ -1690,25 +2270,26 @@ export async function importProgrammazioneFromBuffer(
     /^istituto comprensivo/i,
     /^corso san marco/i,
     /^tel\.|pec\.|distretto \d|codice fiscale/i,
-    /^programmazione disciplinare\b/i,
+    /^programmazione disciplinare\b|^programmazione didattica\b/i,
     /^scuola\b|^plesso\b|^anno scolastico\b|^classe\b|^disciplina\b|^docente\b/i,
     /^composizione della classe/i,
     /^alunni\b|^maschi\b|^femmine\b|^ripetenti\b|^con bisogni|^con disabilit/i,
     /^situazione della classe/i,
     /^presentazione e caratteristiche/i,
-    /^tipologia\b|^livello\b|^mezzi utilizzati/i,
+    /^tipologia\b|^livello\b|^mezzi utilizzati|^ed i bisogni degli alunni/i,
     /^analisi della situazione/i,
-    /^situazione di partenza degli alunni/i,
+    /^situazione di partenza degli alunni|^relazione alla disciplina/i,
     /^livelli di partenza|^livello basso|^livello medio|^livello alto|^alunni:\s*\d+/i,
+    /^\(voti inferiori|^(\(voto 6\)|\(voti 7\/8\)|\(voti 9)/i,
     /^fonti di rilevazione/i,
-    /^strategie ed interventi/i,
+    /^strategie ed interventi|^strategie da utilizzare/i,
     /^gruppi di livello|^potenziamento|^consolidamento|^recupero/i,
     /^alunni con bes/i,
-    /^traguardi per lo sviluppo|^tenuto conto|^nessuna competenza|^\(clicca sul link/i,
-    /^competenze(?:\s+digitali)?\s*:?$|^abilit[àa']\b|^obiettivi\b|^conoscenze\b|^attivit[àa'] programmate/i,
-    /^criteri metodologici|^metodi\b|^mezzi e strumenti|^ausili didattici|^\(libri di testo|^didattica digitale/i,
+    /^traguardi per lo sviluppo|^in relazione al curricolo verticale|^curricolo verticale del nostro istituto|^tenuto conto|^nessuna competenza|^\(clicca sul link/i,
+    /^competenze(?:\s+digitali)?\s*:?$|^abilit(?:à|a['’]?)\b|^obiettivi\b|^conoscenze\b|^attivit(?:à|a['’]?)\s+programmate/i,
+    /^criteri metodologici|^metodi\b|^mezzi e strumenti|^ausili didattici|^\(libri di testo|^didattica digitale|^altre metodologie|^altri sussidi/i,
     /^verifiche in itinere|^scritta\b|^orale\b|^altri tipi di prove/i,
-    /^valutazione$|^il\/la docente$|^il docente\b|^la docente\b/i,
+    /^(?:criteri di\s+)?valutazione(?:\s+degli apprendimenti)?\s*:?$|^il\/la docente$|^il docente\b|^la docente\b/i,
   ];
   const allOptionStrings = [
     ...TIPOLOGIE_CLASSE_OPTIONS,

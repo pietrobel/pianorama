@@ -1668,6 +1668,20 @@ export function PlanEditorPage({
                     entries={draft.analisiPartenza.alunniAnonimiFasce ?? []}
                     soglie={settings.soglieFasce}
                     classeRilevata={draft.analisiPartenza.registroClasseRilevata}
+                    tableExportContext={{
+                      livelliOverride: draft.analisiPartenza.livelli,
+                      classeLabel: [
+                        `${draft.datiGenerali.classe}${draft.datiGenerali.sezione}`.trim(),
+                        draft.datiGenerali.disciplina,
+                        draft.datiGenerali.annoScolastico,
+                      ]
+                        .filter(Boolean)
+                        .join(' · '),
+                      layoutDocumento:
+                        draft.datiGenerali.layoutDocumento ??
+                        settings.defaultLayoutDocumento ??
+                        'originale',
+                    }}
                     onChangeEntries={(nextEntries: AnonymousStudentBandEntry[]) => {
                       const nextLivelli = computeLivelliFromStudents(nextEntries);
                       setDraft((prev) => ({

@@ -512,6 +512,14 @@ export function DocumentImportReviewModal({
                 </label>
               ))}
             </div>
+
+            {(draftPlan.analisiPartenza.alunniAnonimiFasce?.length ?? 0) > 0 && (
+              <p className="rounded-md bg-emerald-50 px-3 py-1.5 text-xs text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200">
+                Riconosciuti{' '}
+                <strong>{draftPlan.analisiPartenza.alunniAnonimiFasce?.length} nominativi</strong>{' '}
+                nella riga alunni della tabella Livelli di partenza.
+              </p>
+            )}
           </section>
 
           {/* Riepilogo caselle e campi estratti */}
@@ -542,21 +550,45 @@ export function DocumentImportReviewModal({
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-wide text-[#1F3864] dark:text-blue-300">
                   Tabella Curricolo estratta ({draftPlan.curricolo.righeAbilitaConoscenze.length}{' '}
-                  righe)
+                  righe · {draftPlan.curricolo.indicazioniVersione === 'nuove' ? 'Obiettivi / Conoscenze' : 'Abilità / Conoscenze'})
                 </h3>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">
                   Se una riga proveniente da PDF o tabella è stata spezzata o ha colonne invertite,
                   usa «Unisci sopra» o «Scambia Abilità/Conoscenze».
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={addCurriculumRow}
-                className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Aggiungi riga
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  aria-label="Versione Indicazioni curricolo importato"
+                  value={draftPlan.curricolo.indicazioniVersione ?? 'vecchie'}
+                  onChange={(e) => {
+                    const nextVer = e.target.value as 'nuove' | 'vecchie';
+                    setDraftPlan((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            curricolo: {
+                              ...prev.curricolo,
+                              indicazioniVersione: nextVer,
+                            },
+                          }
+                        : prev
+                    );
+                  }}
+                  className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-950"
+                >
+                  <option value="vecchie">Vecchie Indicazioni (Abilità)</option>
+                  <option value="nuove">Nuove Indicazioni (Obiettivi)</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={addCurriculumRow}
+                  className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Aggiungi riga
+                </button>
+              </div>
             </div>
 
             {draftPlan.curricolo.righeAbilitaConoscenze.length === 0 ? (
@@ -607,29 +639,25 @@ export function DocumentImportReviewModal({
                         </button>
                       </div>
                     </div>
-                    <div
-                      className={`grid gap-2 ${
-                        row.competenze?.trim() ? 'sm:grid-cols-3' : 'sm:grid-cols-2'
-                      }`}
-                    >
-                      {row.competenze?.trim() && (
-                        <label className="block text-[11px]">
-                          <span className="font-medium text-slate-600 dark:text-slate-400">
-                            Competenze / Nucleo
-                          </span>
-                          <textarea
-                            rows={2}
-                            value={row.competenze ?? ''}
-                            onChange={(e) => updateRowField(idx, 'competenze', e.target.value)}
-                            className="mt-0.5 w-full rounded border border-slate-300 bg-white p-1.5 text-xs dark:border-slate-700 dark:bg-slate-900"
-                          />
-                        </label>
-                      )}
+                    {row.competenze?.trim() && (
+                      <label className="mb-2 block text-[11px]">
+                        <span className="font-medium text-slate-600 dark:text-slate-400">
+                          Competenza / Nucleo associato (riportato sopra la tabella o come intestazione di nucleo)
+                        </span>
+                        <input
+                          type="text"
+                          value={row.competenze ?? ''}
+                          onChange={(e) => updateRowField(idx, 'competenze', e.target.value)}
+                          className="mt-0.5 w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
+                        />
+                      </label>
+                    )}
+                    <div className="grid gap-2 sm:grid-cols-2">
                       <label className="block text-[11px]">
                         <span className="font-medium text-slate-600 dark:text-slate-400">
                           {draftPlan.curricolo.indicazioniVersione === 'nuove'
                             ? 'Obiettivi'
-                            : 'Abilità / Obiettivi'}
+                            : 'Abilità'}
                         </span>
                         <textarea
                           rows={2}
@@ -640,7 +668,7 @@ export function DocumentImportReviewModal({
                       </label>
                       <label className="block text-[11px]">
                         <span className="font-medium text-slate-600 dark:text-slate-400">
-                          Conoscenze / Contenuti
+                          Conoscenze
                         </span>
                         <textarea
                           rows={2}

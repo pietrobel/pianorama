@@ -260,6 +260,22 @@ export function GradebookImportPage({
         entries={entries}
         soglie={settings.soglieFasce}
         classeRilevata={classeRilevata}
+        tableExportContext={{
+          livelliOverride: selectedPlan?.analisiPartenza.livelli,
+          classeLabel: selectedPlan
+            ? [
+                `${selectedPlan.datiGenerali.classe}${selectedPlan.datiGenerali.sezione}`.trim(),
+                selectedPlan.datiGenerali.disciplina,
+                selectedPlan.datiGenerali.annoScolastico,
+              ]
+                .filter(Boolean)
+                .join(' · ')
+            : classeRilevata,
+          layoutDocumento:
+            selectedPlan?.datiGenerali.layoutDocumento ??
+            settings.defaultLayoutDocumento ??
+            'originale',
+        }}
         onChangeEntries={handleEntriesUpdate}
         onSyncComposizione={
           selectedPlanId && onSyncComposizione

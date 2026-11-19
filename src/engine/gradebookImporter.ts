@@ -137,6 +137,42 @@ export function parseItalianDecimal(raw: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+/**
+ * Converte voti espressi nei registri scolastici italiani, inclusi "+" / "-" / "½" / "1/2" o frazioni tipo "6/7".
+ */
+function parseRegisterVoteValue(raw: unknown): number | null {
+  const plain = parseItalianDecimal(raw);
+  if (plain !== null) return plain;
+  if (typeof raw !== 'string') return null;
+  const s = raw.trim().replace(/\s+/g, ' ');
+  if (!s) return null;
+
+  const halfMatch = s.match(/^(\d{1,2})\s*(?:½|1\/2)$/);
+  if (halfMatch) {
+    const base = Number(halfMatch[1]);
+    return Number.isFinite(base) ? base + 0.5 : null;
+  }
+
+  const plusMinusMatch = s.match(/^(\d{1,2}(?:[.,]\d+)?)\s*([+-])$/);
+  if (plusMinusMatch) {
+    const base = Number(plusMinusMatch[1].replace(',', '.'));
+    if (Number.isFinite(base)) {
+      return plusMinusMatch[2] === '+' ? base + 0.25 : base - 0.25;
+    }
+  }
+
+  const slashMatch = s.match(/^(\d{1,2})\s*\/\s*(\d{1,2})$/);
+  if (slashMatch) {
+    const a = Number(slashMatch[1]);
+    const b = Number(slashMatch[2]);
+    if (Number.isFinite(a) && Number.isFinite(b) && a >= 1 && a <= 10 && b >= 1 && b <= 10) {
+      return (a + b) / 2;
+    }
+  }
+
+  return null;
+}
+
 export function classifyMediaToFascia(
   media: number | null,
   soglie: SoglieFasce = DEFAULT_SOGLIE_FASCE
@@ -318,36 +354,128 @@ function resolveSheetCell(
 function normStr(val: unknown): string {
   return String(val ?? '')
     .trim()
-    .toLowerCase();
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
 }
 
-export function parseGradebookBuffer(
-  buffer: ArrayBuffer,
-  soglie: SoglieFasce = DEFAULT_SOGLIE_FASCE,
-  options: GradebookImportOptions = {}
-): GradebookImportResult {
-  const keepNames = options.keepNames ?? true;
-  const workbook = XLSX.read(buffer, { type: 'array' });
-  const firstSheetName = workbook.SheetNames[0];
-  if (!firstSheetName) {
-    throw new Error('Il file Excel non contiene alcun foglio di lavoro.');
+function isFullNameHeader(text: string): boolean {
+  if (!text) return false;
+  if (
+    text === 'alunno' ||
+    text === 'alunni' ||
+    text === 'alunno/a' ||
+    text === 'studente' ||
+    text === 'studenti' ||
+    text === 'allievo' ||
+    text === 'allievi' ||
+    text === 'nominativo' ||
+    text === 'nominativi' ||
+    text === 'elenco alunni' ||
+    text === 'cognome e nome' ||
+    text === 'nome e cognome' ||
+    text === 'cognome/nome' ||
+    text === 'cognome nome' ||
+    text === 'nome cognome'
+  ) {
+    return true;
   }
-  const sheet = workbook.Sheets[firstSheetName];
+  return (
+    text.startsWith('alunno') ||
+    text.startsWith('alunni') ||
+    text.startsWith('studente') ||
+    text.startsWith('nominativo')
+  );
+}
+
+function isMediaHeader(text: string): 'priority' | 'secondary' | false {
+  if (!text) return false;
+  if (
+    text === 'media' ||
+    text === 'media voti' ||
+    text === 'media_voti' ||
+    text === 'media finale' ||
+    text === 'media generale' ||
+    text === 'media aritmetica' ||
+    text === 'media totale' ||
+    text === 'voto medio'
+  ) {
+    return 'priority';
+  }
+  if (text.startsWith('media ') || text.startsWith('media_') || text.includes('voto medio')) {
+    return 'secondary';
+  }
+  return false;
+}
+
+function isNonGradeColumnHeader(text: string): boolean {
+  return (
+    text.includes('assenze') ||
+    text.includes('note') ||
+    text.includes('giudizio') ||
+    text.includes('n.') ||
+    text === 'nr' ||
+    text === 'n' ||
+    text === 'prog' ||
+    text === 'progressivo' ||
+    text === 'classe' ||
+    text === 'sezione' ||
+    text.includes('data di nascita')
+  );
+}
+
+function readWorkbookSmart(buffer: ArrayBuffer): XLSX.WorkBook {
+  const bytes = new Uint8Array(buffer);
+  const headText = new TextDecoder('utf-8', { fatal: false })
+    .decode(bytes.slice(0, Math.min(bytes.length, 512)))
+    .replace(/^\uFEFF/, '')
+    .trimStart()
+    .toLowerCase();
+
+  // Alcuni registri elettronici (es. Argo/Axios) esportano tabelle HTML con estensione .xls
+  if (
+    headText.startsWith('<html') ||
+    headText.startsWith('<!doctype') ||
+    headText.startsWith('<table') ||
+    headText.startsWith('<meta') ||
+    (headText.startsWith('<?xml') && headText.includes('<html'))
+  ) {
+    let decoded = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+    if (/charset=(?:windows-1252|iso-8859-1|latin1)/i.test(headText) || decoded.includes('\uFFFD')) {
+      try {
+        decoded = new TextDecoder('windows-1252').decode(bytes);
+      } catch {
+        // mantieni decodifica UTF-8
+      }
+    }
+    return XLSX.read(decoded, { type: 'string', raw: true });
+  }
+
+  return XLSX.read(buffer, { type: 'array', codepage: 65001 });
+}
+
+function parseSingleWorksheet(
+  sheet: XLSX.WorkSheet,
+  soglie: SoglieFasce,
+  keepNames: boolean
+): GradebookImportResult | null {
   const ref = sheet['!ref'];
-  if (!ref) {
-    throw new Error('Il primo foglio del file Excel è vuoto.');
-  }
+  if (!ref) return null;
 
   const range = XLSX.utils.decode_range(ref);
 
   let headerRowIndex = -1;
   let alunnoCol = -1;
+  let cognomeCol = -1;
+  let nomeCol = -1;
   let mediaCol = -1;
   let gradeCols: number[] = [];
 
   for (let r = range.s.r; r <= range.e.r; r++) {
     let foundAlunno = -1;
+    let foundCognome = -1;
+    let foundNome = -1;
     let foundMedia = -1;
+    let foundMediaPriority = false;
     const candidateGradeCols: number[] = [];
 
     for (let c = range.s.c; c <= range.e.c; c++) {
@@ -356,56 +484,81 @@ export function parseGradebookBuffer(
       const text = normStr(value);
       if (!text) continue;
 
-      if (foundAlunno === -1 && (text === 'alunno' || text.startsWith('alunno') || text === 'studente')) {
+      if (foundAlunno === -1 && isFullNameHeader(text)) {
         foundAlunno = c;
-      } else if (foundMedia === -1 && (text === 'media' || text.startsWith('media '))) {
-        foundMedia = c;
-      } else if (
-        KNOWN_GRADE_HEADER_KEYWORDS.some((kw) => text.includes(kw))
-      ) {
-        candidateGradeCols.push(c);
+      } else if (foundCognome === -1 && (text === 'cognome' || text.startsWith('cognome '))) {
+        foundCognome = c;
+      } else if (foundNome === -1 && (text === 'nome' || text.startsWith('nome '))) {
+        foundNome = c;
+      } else {
+        const mediaMatch = isMediaHeader(text);
+        if (mediaMatch === 'priority' && !foundMediaPriority) {
+          foundMedia = c;
+          foundMediaPriority = true;
+        } else if (mediaMatch === 'secondary' && foundMedia === -1) {
+          foundMedia = c;
+        } else if (KNOWN_GRADE_HEADER_KEYWORDS.some((kw) => text.includes(kw))) {
+          candidateGradeCols.push(c);
+        }
       }
     }
 
-    if (foundAlunno !== -1 && (foundMedia !== -1 || candidateGradeCols.length > 0)) {
+    const primaryStudentCol = foundAlunno !== -1 ? foundAlunno : foundCognome;
+    if (primaryStudentCol === -1) continue;
+
+    // Se non ci sono colonne esplicite Media o keyword voti, verifica se le righe sotto contengono voti numerici
+    let hasNumericGradesBelow = false;
+    if (foundMedia === -1 && candidateGradeCols.length === 0) {
+      const maxStudentCol = Math.max(primaryStudentCol, foundNome);
+      const sampleLimit = Math.min(range.e.r, r + 8);
+      for (let sr = r + 1; sr <= sampleLimit && !hasNumericGradesBelow; sr++) {
+        for (let sc = maxStudentCol + 1; sc <= range.e.c; sc++) {
+          const { value, isHorizontalContinuation } = resolveSheetCell(sheet, sr, sc);
+          if (isHorizontalContinuation) continue;
+          const v = parseRegisterVoteValue(value);
+          if (v !== null && v >= 1 && v <= 10) {
+            hasNumericGradesBelow = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (foundMedia !== -1 || candidateGradeCols.length > 0 || hasNumericGradesBelow) {
       headerRowIndex = r;
-      alunnoCol = foundAlunno;
+      alunnoCol = foundAlunno !== -1 ? foundAlunno : foundCognome;
+      cognomeCol = foundCognome;
+      nomeCol = foundNome;
       mediaCol = foundMedia;
 
-      // Tutte le colonne non-Alunno, non-Media, non note/conteggi dopo alunnoCol possono contenere voti
+      const excludedCols = new Set(
+        [alunnoCol, cognomeCol, nomeCol, mediaCol].filter((idx) => idx !== -1)
+      );
+      const minGradeStartCol = Math.max(alunnoCol, cognomeCol, nomeCol);
+
+      // Tutte le colonne non-studente, non-Media e non note/conteggi dopo la colonna nominativo possono contenere voti
       for (let c = range.s.c; c <= range.e.c; c++) {
-        if (c === alunnoCol || c === mediaCol) continue;
+        if (excludedCols.has(c)) continue;
         const { value, isHorizontalContinuation } = resolveSheetCell(sheet, r, c);
         if (isHorizontalContinuation) continue;
         const text = normStr(value);
-        if (!text) continue;
-        if (
-          text.includes('assenze') ||
-          text.includes('note') ||
-          text.includes('giudizio') ||
-          text.includes('n.') ||
-          text === 'nr'
-        ) {
-          continue;
-        }
-        if (c > alunnoCol) {
+        if (!text || isNonGradeColumnHeader(text)) continue;
+        if (c > minGradeStartCol) {
           gradeCols.push(c);
         }
       }
       if (gradeCols.length === 0) {
-        gradeCols = candidateGradeCols;
+        gradeCols = candidateGradeCols.filter((c) => !excludedCols.has(c));
       }
       break;
     }
   }
 
   if (headerRowIndex === -1 || alunnoCol === -1) {
-    throw new Error(
-      'Intestazione del registro non riconosciuta: assicurarsi che il foglio contenga la colonna "Alunno" e la colonna "Media" (o colonne dei voti).'
-    );
+    return null;
   }
 
-  // Rileva eventuale titolo classe sopra la riga di intestazione (solo testo generico classe/disciplina, mai nomi)
+  // Rileva eventuale titolo classe sopra la riga di intestazione
   let classeRilevata = '';
   for (let r = range.s.r; r < headerRowIndex; r++) {
     for (let c = range.s.c; c <= range.e.c; c++) {
@@ -425,23 +578,41 @@ export function parseGradebookBuffer(
   let counter = 0;
 
   for (let r = headerRowIndex + 1; r <= range.e.r; r++) {
-    const alunnoCell = resolveSheetCell(sheet, r, alunnoCol);
-    const alunnoRaw = String(alunnoCell.value ?? '').trim();
+    const primaryRaw = String(resolveSheetCell(sheet, r, alunnoCol).value ?? '').trim();
+    const extraNomeRaw =
+      cognomeCol !== -1 && nomeCol !== -1 && alunnoCol === cognomeCol
+        ? String(resolveSheetCell(sheet, r, nomeCol).value ?? '').trim()
+        : '';
+    const alunnoRaw = [primaryRaw, extraNomeRaw].filter(Boolean).join(' ').trim();
     if (!alunnoRaw) continue;
+    if (/^\d+(?:[.,]\d+)?$/.test(alunnoRaw)) continue;
 
-    const alunnoLower = alunnoRaw.toLowerCase();
-    // Ignora righe di riepilogo e piè di pagina di stampa
-    if (IGNORED_ROW_PREFIXES.some((prefix) => alunnoLower.startsWith(prefix) || alunnoLower.includes('stampato il'))) {
+    // Ignora righe di riepilogo e piè di pagina di stampa (controlla anche le colonne precedenti a alunnoCol)
+    let isIgnoredRow = false;
+    for (let checkCol = range.s.c; checkCol <= alunnoCol; checkCol++) {
+      const checkVal = String(resolveSheetCell(sheet, r, checkCol).value ?? '')
+        .trim()
+        .toLowerCase();
+      if (
+        checkVal &&
+        IGNORED_ROW_PREFIXES.some(
+          (prefix) => checkVal.startsWith(prefix) || checkVal.includes('stampato il')
+        )
+      ) {
+        isIgnoredRow = true;
+        break;
+      }
+    }
+    if (isIgnoredRow) {
       continue;
     }
 
-    // Il nome/cognome letto in alunnoRaw viene immediatamente scartato e sostituito da "Alunno N"
     counter += 1;
 
     let media: number | null = null;
     if (mediaCol !== -1) {
       const mediaCell = resolveSheetCell(sheet, r, mediaCol);
-      const parsedMedia = parseItalianDecimal(mediaCell.value);
+      const parsedMedia = parseRegisterVoteValue(mediaCell.value);
       if (parsedMedia !== null && parsedMedia >= 0 && parsedMedia <= 10) {
         media = parsedMedia;
       }
@@ -453,7 +624,7 @@ export function parseGradebookBuffer(
       for (const gc of gradeCols) {
         const voteCell = resolveSheetCell(sheet, r, gc);
         if (voteCell.isHorizontalContinuation) continue;
-        const parsedVote = parseItalianDecimal(voteCell.value);
+        const parsedVote = parseRegisterVoteValue(voteCell.value);
         if (parsedVote !== null && parsedVote >= 1 && parsedVote <= 10) {
           validVotes.push(parsedVote);
         }
@@ -482,7 +653,7 @@ export function parseGradebookBuffer(
   }
 
   if (entries.length === 0) {
-    throw new Error('Nessuna riga alunno valida trovata sotto la riga delle intestazioni.');
+    return null;
   }
 
   const livelli = computeLivelliFromStudents(entries);
@@ -495,4 +666,35 @@ export function parseGradebookBuffer(
     daVerificareCount,
     headerRowIndex,
   };
+}
+
+export function parseGradebookBuffer(
+  buffer: ArrayBuffer,
+  soglie: SoglieFasce = DEFAULT_SOGLIE_FASCE,
+  options: GradebookImportOptions = {}
+): GradebookImportResult {
+  const keepNames = options.keepNames ?? true;
+  const workbook = readWorkbookSmart(buffer);
+  if (workbook.SheetNames.length === 0) {
+    throw new Error('Il file Excel non contiene alcun foglio di lavoro.');
+  }
+
+  let hasAnyNonEmptySheet = false;
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet || !sheet['!ref']) continue;
+    hasAnyNonEmptySheet = true;
+    const parsed = parseSingleWorksheet(sheet, soglie, keepNames);
+    if (parsed) {
+      return parsed;
+    }
+  }
+
+  if (!hasAnyNonEmptySheet) {
+    throw new Error('Il file Excel è vuoto.');
+  }
+
+  throw new Error(
+    'Intestazione del registro non riconosciuta: assicurarsi che il foglio contenga la colonna "Alunno" / "Alunni" / "Cognome" (e "Nome") e la colonna "Media" o le colonne dei voti.'
+  );
 }
