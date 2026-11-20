@@ -16,6 +16,11 @@ export function usePWAInstall() {
     );
   });
 
+  const [isIOS] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+  });
+
   useEffect(() => {
     const onBeforeInstall = (e: Event) => {
       e.preventDefault();
@@ -49,6 +54,7 @@ export function usePWAInstall() {
   return {
     canInstall: Boolean(deferredPrompt) && !isInstalled,
     isInstalled,
+    isIOS,
     triggerInstall,
   };
 }

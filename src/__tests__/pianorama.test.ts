@@ -2197,6 +2197,82 @@ Utilizzare con sicurezza le tecniche di calcolo \\tab Eseguire espressioni con f
       altoAlunni: 0,
     });
   });
+
+  it('gestisce controllo aggiornamenti PWA (offline, aggiornata, nuova versione) e applica aggiornamento senza perdere dati locali', async () => {
+    const {
+      OFFICIAL_PWA_URL,
+      applyAppUpdate,
+      checkForAppUpdates,
+      getPWAUpdateSnapshot,
+      resetPWAUpdateManagerForTests,
+    } = await import('../pwa/pwaUpdateManager');
+
+    expect(OFFICIAL_PWA_URL).toBe('https://pianorama.vercel.app');
+
+    // 1. Offline -> stato offline esplicito
+    resetPWAUpdateManagerForTests({ currentBuildId: 'build-100' });
+    const offlineStatus = await checkForAppUpdates({ isOnline: false });
+    expect(offlineStatus).toBe('offline');
+    expect(getPWAUpdateSnapshot().status).toBe('offline');
+
+    // 2. Versione già aggiornata su server -> up_to_date
+    resetPWAUpdateManagerForTests({ currentBuildId: 'build-100' });
+    const sameRes = new Response(JSON.stringify({ buildId: 'build-100', builtAt: '2026-11-20T10:00:00Z' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const upToDateStatus = await checkForAppUpdates({
+      isOnline: true,
+      origin: OFFICIAL_PWA_URL,
+      fetchImpl: async () => sameRes,
+    });
+    expect(upToDateStatus).toBe('up_to_date');
+    expect(getPWAUpdateSnapshot().needRefresh).toBe(false);
+
+    // 3. Nuova versione disponibile su pianorama.vercel.app -> needRefresh = true
+    const newerRes = new Response(JSON.stringify({ buildId: 'build-101', builtAt: '2026-11-20T11:00:00Z' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const foundStatus = await checkForAppUpdates({
+      isOnline: true,
+      origin: OFFICIAL_PWA_URL,
+      fetchImpl: async () => newerRes,
+    });
+    expect(foundStatus).toBe('update_available');
+    expect(getPWAUpdateSnapshot().needRefresh).toBe(true);
+    expect(getPWAUpdateSnapshot().remoteBuildId).toBe('build-101');
+
+    // 4. Service Worker waiting -> applyAppUpdate invoca updateSW(true)
+    let swActivated = false;
+    let swUpdateCalled = false;
+    const fakeRegistration = {
+      waiting: { state: 'installed' } as ServiceWorker,
+      installing: null,
+      update: async () => {
+        swUpdateCalled = true;
+      },
+    } as unknown as ServiceWorkerRegistration;
+
+    resetPWAUpdateManagerForTests({
+      currentBuildId: 'build-100',
+      registration: fakeRegistration,
+      updateSW: async (reload) => {
+        swActivated = Boolean(reload);
+      },
+    });
+
+    const swCheck = await checkForAppUpdates({ isOnline: true });
+    expect(swUpdateCalled).toBe(true);
+    expect(swCheck).toBe('update_available');
+    expect(getPWAUpdateSnapshot().needRefresh).toBe(true);
+
+    let reloaded = false;
+    const applyRes = await applyAppUpdate({ reloadPage: () => { reloaded = true; } });
+    expect(applyRes).toBe('updating');
+    expect(swActivated).toBe(true);
+    expect(reloaded).toBe(false);
+  });
 });
 
 

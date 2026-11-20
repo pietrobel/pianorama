@@ -1,14 +1,18 @@
 import {
   CheckCircle2,
   Download,
+  ExternalLink,
   Monitor,
   Moon,
+  RefreshCw,
   RotateCcw,
   Save,
   ShieldCheck,
   Smartphone,
   Sun,
 } from 'lucide-react';
+import type { UpdateCheckStatus } from '../pwa/pwaUpdateManager';
+import { OFFICIAL_PWA_URL } from '../pwa/pwaUpdateManager';
 import { useState } from 'react';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { PlessoSelect } from '../components/PlessoSelect';
@@ -33,8 +37,17 @@ interface SettingsPageProps {
   mapping: DocxMappingSchema;
   canInstallPWA: boolean;
   isPWAInstalled: boolean;
+  isIOS?: boolean;
+  pwaUpdateStatus?: UpdateCheckStatus;
+  pwaUpdateMessage?: string | null;
+  pwaNeedRefresh?: boolean;
+  pwaBuildId?: string;
+  pwaBuiltAt?: string;
+  pwaLastCheckedAt?: string | null;
   existingPlansCount?: number;
   onInstallPWA: () => Promise<boolean>;
+  onCheckPWAUpdates?: () => Promise<UpdateCheckStatus>;
+  onApplyPWAUpdate?: () => Promise<unknown>;
   onSaveSettings: (next: SchoolSettings) => Promise<void>;
   onApplyDocenteGenereToAllPlans?: (genere: DocenteGenere) => Promise<number>;
   onSaveMapping: (next: DocxMappingSchema) => Promise<void>;
@@ -47,8 +60,17 @@ export function SettingsPage({
   mapping,
   canInstallPWA,
   isPWAInstalled,
+  isIOS = false,
+  pwaUpdateStatus = 'idle',
+  pwaUpdateMessage = null,
+  pwaNeedRefresh = false,
+  pwaBuildId = 'locale',
+  pwaBuiltAt = '',
+  pwaLastCheckedAt = null,
   existingPlansCount = 0,
   onInstallPWA,
+  onCheckPWAUpdates,
+  onApplyPWAUpdate,
   onSaveSettings,
   onApplyDocenteGenereToAllPlans,
   onSaveMapping,
@@ -176,34 +198,123 @@ export function SettingsPage({
         </div>
       )}
 
-      {/* Installazione offline PWA */}
-      <section className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {/* Installazione offline PWA & Aggiornamenti */}
+      <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-3">
             <Smartphone className="mt-0.5 h-5 w-5 shrink-0 text-[#1F3864] dark:text-blue-400" />
-            <div>
+            <div className="space-y-1">
               <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                App installabile e funzionamento offline (PWA)
+                App installabile, aggiornamenti e funzionamento offline (PWA)
               </h2>
-              <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">
+              <p className="text-xs text-slate-600 dark:text-slate-400">
                 {isPWAInstalled
-                  ? 'PIANORAMA è già installata come applicazione autonoma su questo dispositivo.'
+                  ? 'PIANORAMA è installata come app autonoma su questo dispositivo.'
                   : canInstallPWA
                   ? 'Puoi installare PIANORAMA sul desktop o sul tablet per aprirla anche senza connessione Internet.'
+                  : isIOS
+                  ? 'Su iPhone o iPad apri pianorama.vercel.app in Safari, tocca Condividi e poi "Aggiungi alla schermata Home".'
                   : 'Il service worker è attivo: dopo il primo caricamento tutti i moduli e i font restano memorizzati offline nel browser.'}
+              </p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Versione installata: <span className="font-mono-num font-semibold">{pwaBuildId}</span>
+                {pwaBuiltAt
+                  ? ` (${new Date(pwaBuiltAt).toLocaleDateString('it-IT')})`
+                  : ''}
+                {pwaLastCheckedAt
+                  ? ` · Ultimo controllo: ${new Date(pwaLastCheckedAt).toLocaleTimeString('it-IT', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}`
+                  : ''}
               </p>
             </div>
           </div>
-          {canInstallPWA && !isPWAInstalled && (
-            <button
-              type="button"
-              onClick={onInstallPWA}
-              className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg bg-[#1F3864] px-4 py-2 text-xs font-semibold text-white hover:bg-[#172b4d]"
-            >
-              <Download className="h-3.5 w-3.5" />
-              Installa PIANORAMA
-            </button>
-          )}
+
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {onCheckPWAUpdates && (
+              <button
+                type="button"
+                disabled={pwaUpdateStatus === 'checking' || pwaUpdateStatus === 'updating'}
+                onClick={() => void onCheckPWAUpdates()}
+                className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <RefreshCw
+                  className={`h-3.5 w-3.5 ${pwaUpdateStatus === 'checking' ? 'animate-spin' : ''}`}
+                />
+                {pwaUpdateStatus === 'checking' ? 'Controllo...' : 'Controlla aggiornamenti'}
+              </button>
+            )}
+
+            {onApplyPWAUpdate && (
+              <button
+                type="button"
+                disabled={pwaUpdateStatus === 'checking' || pwaUpdateStatus === 'updating'}
+                onClick={() => void onApplyPWAUpdate()}
+                className={`inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg px-3.5 py-2 text-xs font-semibold text-white disabled:opacity-60 ${
+                  pwaNeedRefresh
+                    ? 'bg-emerald-700 hover:bg-emerald-800'
+                    : 'bg-[#1F3864] hover:bg-[#172b4d]'
+                }`}
+              >
+                <RefreshCw
+                  className={`h-3.5 w-3.5 ${pwaUpdateStatus === 'updating' ? 'animate-spin' : ''}`}
+                />
+                {pwaUpdateStatus === 'updating'
+                  ? 'Aggiornamento...'
+                  : pwaNeedRefresh
+                  ? 'Aggiorna app ora'
+                  : 'Aggiorna app'}
+              </button>
+            )}
+
+            {canInstallPWA && !isPWAInstalled && (
+              <button
+                type="button"
+                onClick={onInstallPWA}
+                className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border border-[#1F3864] bg-white px-3 py-2 text-xs font-semibold text-[#1F3864] hover:bg-blue-50 dark:border-blue-400 dark:bg-slate-900 dark:text-blue-300"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Installa PIANORAMA
+              </button>
+            )}
+          </div>
+        </div>
+
+        {pwaUpdateMessage && (
+          <div
+            role="status"
+            className={`rounded-lg border px-3 py-2 text-xs font-medium ${
+              pwaNeedRefresh || pwaUpdateStatus === 'update_available'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200'
+                : pwaUpdateStatus === 'offline' || pwaUpdateStatus === 'error'
+                ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200'
+                : 'border-slate-200 bg-slate-50 text-slate-800 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-200'
+            }`}
+          >
+            {pwaUpdateMessage}
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2 text-[11px] text-slate-600 dark:border-slate-800 dark:bg-slate-800/30 dark:text-slate-400">
+          <span>
+            Aggiornando dall’app o reinstallando da{' '}
+            <strong className="text-slate-800 dark:text-slate-200">pianorama.vercel.app</strong>, la
+            versione precedente viene sostituita sul posto{' '}
+            <strong className="text-slate-800 dark:text-slate-200">
+              mantenendo tutti i curricoli, le programmazioni e gli alunni salvati
+            </strong>
+            .
+          </span>
+          <a
+            href={OFFICIAL_PWA_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 whitespace-nowrap font-semibold text-[#1F3864] hover:underline dark:text-blue-400"
+          >
+            pianorama.vercel.app
+            <ExternalLink className="h-3 w-3" />
+          </a>
         </div>
       </section>
 
