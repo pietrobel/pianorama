@@ -27,6 +27,7 @@ import type {
   Programmazione,
   SchoolSettings,
 } from '../domain/types';
+import { normalizeDocumentText } from '../domain/textSanitizer';
 import { extractRegisterOrderAndCleanName } from './gradebookImporter';
 
 export interface ImportedDocumentSummary {
@@ -90,15 +91,17 @@ function makeId(prefix: string): string {
 }
 
 function cleanText(raw: string): string {
-  return raw
-    .replace(/\u00A0/g, ' ')
-    .replace(/[\uF0FE\uF0FD\uF052\uF0FC\uF078\u2611\u2612]/g, '☒')
-    .replace(/[\uF0A8\uF06F\uF0A3\uF071\u25A1\u2610\u25FB\u25A2\u274F-\u2752]/g, '☐')
-    .replace(/[\uF0B7\uF0A7]/g, '•')
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n')
-    .replace(/[ \t]+/g, ' ')
-    .trim();
+  return normalizeDocumentText(
+    raw
+      .replace(/\u00A0/g, ' ')
+      .replace(/[\uF0FE\uF0FD\uF052\uF0FC\uF078\u2611\u2612]/g, '☒')
+      .replace(/[\uF0A8\uF06F\uF0A3\uF071\u25A1\u2610\u25FB\u25A2\u274F-\u2752]/g, '☐')
+      .replace(/[\uF0B7\uF0A7]/g, '•')
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+      .replace(/[ \t]+/g, ' ')
+      .trim()
+  );
 }
 
 function isPlaceholderValue(val: string): boolean {
@@ -1241,7 +1244,7 @@ function normalizeImportedCurricoloCellText(raw: string, nucleoHint?: string): s
       idx === 0 &&
       content.length <= 55 &&
       !/[.!?;,:]$/.test(content) &&
-      (matchesHint || !/^[a-zàèéìòù]/.test(content));
+      (matchesHint || (hasExplicitMarkers && !/^[a-zàèéìòù]/.test(content)));
 
     if (matchesHint || looksLikeShortHeading) {
       entries.push({ text: content, isNucleo: true });

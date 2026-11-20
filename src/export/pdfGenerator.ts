@@ -23,6 +23,11 @@ import {
   type SchoolSettings,
 } from '../domain/types';
 import {
+  extractNormalizedBulletEntries,
+  formatCurricoloCellLines,
+  normalizeDocumentText,
+} from '../domain/textSanitizer';
+import {
   buildUnifiedClassDescriptionText,
   getStudentNamesByLevelBand,
 } from '../engine/classCharacteristicsEngine';
@@ -43,14 +48,24 @@ function hexToRgb(hex: string): [number, number, number] {
 }
 
 function pdfSafeText(text: string): string {
-  return text
+  return normalizeDocumentText(text)
     .replace(/[’‘]/g, "'")
     .replace(/[“”]/g, '"')
-    .replace(/[–—]/g, '-')
-    .replace(/•/g, '-')
+    .replace(/[–—‐‑‒―−]/g, '-')
+    .replace(/[•●○▪▫◦■□▢]/g, '-')
     .replace(/…/g, '...')
-    .replace(/[☒☑]/g, '[X]')
-    .replace(/☐/g, '[ ]');
+    .replace(/[☒☑✓✔]/g, '[X]')
+    .replace(/☐/g, '[ ]')
+    .replace(/[✕✖✗✘]/g, 'X')
+    .replace(/π/g, 'pi')
+    .replace(/≥/g, '>=')
+    .replace(/≤/g, '<=')
+    .replace(/≠/g, '!=')
+    .replace(/→/g, '->')
+    .replace(/←/g, '<-')
+    .replace(/↔/g, '<->')
+    // Impedisce a jsPDF (font WinAnsi standard) di attivare fallback UTF-16 con spaziatura alterata tra lettere
+    .replace(/[^\t\n\r\x20-\xFF€]/g, ' ');
 }
 
 export function generateProgrammazionePdfBytes(
@@ -330,39 +345,26 @@ export function generateProgrammazionePdfBytes(
         const wrapped = doc.splitTextToSize(pdfSafeText(raw), widths[0] - pad * 2) as string[];
         return wrapped.map((t) => ({ text: t, bold: true }));
       }
-      const clean = (raw ?? '')
-        .replace(/([^\n])\s*([☐☑☒□■▢•])\s*/g, '$1\n$2 ')
-        .replace(/^\s*[☐☑☒□■▢]\s*/gm, '• ')
-        .trim();
-      const hint = (opts?.nucleoHint ?? '').trim();
-      const effectiveText =
-        clean && hint && !clean.toLowerCase().startsWith(hint.toLowerCase())
-          ? `${hint}\n${clean}`
-          : clean || '-';
-      const logicalLines = effectiveText.split('\n');
+      const formattedLines = formatCurricoloCellLines(raw, opts?.nucleoHint);
+      if (formattedLines.length === 0) {
+        return [{ text: '-', bold: false }];
+      }
       const out: StyledLine[] = [];
-      logicalLines.forEach((logical, idx) => {
-        const trimmed = logical.trim();
-        const isNucleoTitle =
-          idx === 0 &&
-          !trimmed.startsWith('•') &&
-          !trimmed.startsWith('-') &&
-          ((hint.length > 0 && trimmed.toLowerCase() === hint.toLowerCase()) ||
-            (logicalLines.length > 1 && trimmed.length <= 65 && !/[.!?]$/.test(trimmed)));
-        doc.setFont(fontFamily, isNucleoTitle ? 'bold' : 'normal');
+      for (const item of formattedLines) {
+        doc.setFont(fontFamily, item.isNucleoTitle ? 'bold' : 'normal');
         doc.setFontSize(fontSize);
         const wrapped = doc.splitTextToSize(
-          pdfSafeText(logical || ' '),
+          pdfSafeText(item.text || ' '),
           widths[0] - pad * 2
         ) as string[];
         if (wrapped.length === 0) {
-          out.push({ text: '', bold: isNucleoTitle });
+          out.push({ text: '', bold: item.isNucleoTitle });
         } else {
           for (const w of wrapped) {
-            out.push({ text: w, bold: isNucleoTitle });
+            out.push({ text: w, bold: item.isNucleoTitle });
           }
         }
-      });
+      }
       return out.length ? out : [{ text: '-', bold: false }];
     };
 
@@ -1107,19 +1109,25 @@ export function generateProgrammazionePdfBytes(
       });
     };
 
+    const normalizedCompetenzeItems = resolvedCompetenze.flatMap((c) =>
+      extractNormalizedBulletEntries(c)
+    );
+    const normalizedCompetenzeDigitaliItems = plan.curricolo.competenzeDigitali.flatMap((c) =>
+      extractNormalizedBulletEntries(c)
+    );
     pushBoxText(
       'TRAGUARDI PER LO SVILUPPO DELLE COMPETENZE IN RELAZIONE AL CURRICOLO VERTICALE DEL NOSTRO ISTITUTO',
       { bold: true, size: 9.8, highlightHeader: true }
     );
-    if (resolvedCompetenze.length) {
+    if (normalizedCompetenzeItems.length) {
       pushBoxText('Competenze:', { bold: true, size: 9.6, gapBefore: 2.0 });
-      for (const c of resolvedCompetenze) {
+      for (const c of normalizedCompetenzeItems) {
         pushBoxText(`- ${c}`, { size: 9.3, gapBefore: 0.4 });
       }
     }
-    if (plan.curricolo.competenzeDigitali.length) {
+    if (normalizedCompetenzeDigitaliItems.length) {
       pushBoxText('Competenze digitali:', { bold: true, size: 9.6, gapBefore: 2.0 });
-      for (const c of plan.curricolo.competenzeDigitali) {
+      for (const c of normalizedCompetenzeDigitaliItems) {
         pushBoxText(`- ${c}`, { size: 9.3, gapBefore: 0.4 });
       }
     }
@@ -1199,15 +1207,21 @@ export function generateProgrammazionePdfBytes(
       'TRAGUARDI PER LO SVILUPPO DELLE COMPETENZE IN RELAZIONE AL CURRICOLO VERTICALE DEL NOSTRO ISTITUTO',
       { boxed: false }
     );
-    if (resolvedCompetenze.length) {
+    const normalizedCompetenzeItems = resolvedCompetenze.flatMap((c) =>
+      extractNormalizedBulletEntries(c)
+    );
+    const normalizedCompetenzeDigitaliItems = plan.curricolo.competenzeDigitali.flatMap((c) =>
+      extractNormalizedBulletEntries(c)
+    );
+    if (normalizedCompetenzeItems.length) {
       drawParagraph('Competenze:', { bold: true, size: 10, color: [accR, accG, accB] });
-      for (const c of resolvedCompetenze) {
+      for (const c of normalizedCompetenzeItems) {
         drawParagraph(`- ${c}`);
       }
     }
-    if (plan.curricolo.competenzeDigitali.length) {
+    if (normalizedCompetenzeDigitaliItems.length) {
       drawParagraph('Competenze digitali:', { bold: true, size: 10, color: [accR, accG, accB] });
-      for (const c of plan.curricolo.competenzeDigitali) {
+      for (const c of normalizedCompetenzeDigitaliItems) {
         drawParagraph(`- ${c}`);
       }
     }

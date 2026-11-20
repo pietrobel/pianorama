@@ -37,6 +37,11 @@ import {
   type SchoolSettings,
 } from '../domain/types';
 import {
+  extractNormalizedBulletEntries,
+  formatCurricoloCellLines,
+  normalizeDocumentText,
+} from '../domain/textSanitizer';
+import {
   buildUnifiedClassDescriptionText,
   getStudentNamesByLevelBand,
 } from '../engine/classCharacteristicsEngine';
@@ -150,7 +155,7 @@ export function createProgrammazioneDocument(
       },
       children: [
         new TextRun({
-          text,
+          text: normalizeDocumentText(text),
           font,
           size: opts?.size ?? bodySize,
           bold: opts?.bold,
@@ -214,7 +219,7 @@ export function createProgrammazioneDocument(
           : undefined,
         children: [
           new TextRun({
-            text: title,
+            text: normalizeDocumentText(title),
             font,
             size: headingSize,
             bold: opts?.boxed ? false : Boolean(opts?.underlined || !opts?.highlightE6),
@@ -244,7 +249,7 @@ export function createProgrammazioneDocument(
           },
       children: [
         new TextRun({
-          text: title,
+          text: normalizeDocumentText(title),
           font,
           size: headingSize,
           bold: true,
@@ -282,7 +287,12 @@ export function createProgrammazioneDocument(
       children,
     });
 
-  const headerCellText = (label: string, center = true, highlightHex?: string) =>
+  const headerCellText = (
+    label: string,
+    center = true,
+    highlightHex?: string,
+    keepNext = false
+  ) =>
     pText(label, {
       bold: true,
       color: isOriginal ? '000000' : 'FFFFFF',
@@ -290,6 +300,7 @@ export function createProgrammazioneDocument(
       align: center ? AlignmentType.CENTER : AlignmentType.LEFT,
       spaceBefore: 0,
       spaceAfter: 0,
+      keepNext,
     });
 
   const checkboxListParagraphs = (
@@ -903,14 +914,21 @@ export function createProgrammazioneDocument(
         .filter((v) => v.tipo === 'competenza' && v.testo.trim())
         .map((v) => v.testo.trim());
 
+  const normalizedCompetenzeItems = resolvedCompetenze.flatMap((c) =>
+    extractNormalizedBulletEntries(c)
+  );
+  const normalizedCompetenzeDigitaliItems = plan.curricolo.competenzeDigitali.flatMap((c) =>
+    extractNormalizedBulletEntries(c)
+  );
+
   const curricoloCatalogParagraphs: Paragraph[] = [
-    ...(resolvedCompetenze.length
+    ...(normalizedCompetenzeItems.length
       ? [
           pText('Competenze:', { bold: true, color: accentHex, spaceBefore: 30, keepNext: true }),
-          ...resolvedCompetenze.map((c) => pText(`• ${c}`, { spaceAfter: 20 })),
+          ...normalizedCompetenzeItems.map((c) => pText(`• ${c}`, { spaceAfter: 20 })),
         ]
       : []),
-    ...(plan.curricolo.competenzeDigitali.length
+    ...(normalizedCompetenzeDigitaliItems.length
       ? [
           pText('Competenze digitali:', {
             bold: true,
@@ -918,7 +936,7 @@ export function createProgrammazioneDocument(
             spaceBefore: 30,
             keepNext: true,
           }),
-          ...plan.curricolo.competenzeDigitali.map((c) => pText(`• ${c}`, { spaceAfter: 20 })),
+          ...normalizedCompetenzeDigitaliItems.map((c) => pText(`• ${c}`, { spaceAfter: 20 })),
         ]
       : []),
   ];
@@ -931,25 +949,15 @@ export function createProgrammazioneDocument(
   );
 
   const renderCurricoloCellParagraphs = (text: string, nucleoHint?: string) => {
-    const clean = (text ?? '')
-      .replace(/([^\n])\s*([☐☑☒□■▢•])\s*/g, '$1\n$2 ')
-      .replace(/^\s*[☐☑☒□■▢]\s*/gm, '• ')
-      .trim();
-    if (!clean) return [pText('—')];
-    const hint = (nucleoHint ?? '').trim();
-    const effective =
-      hint && !clean.toLowerCase().startsWith(hint.toLowerCase()) ? `${hint}\n${clean}` : clean;
-    const lines = effective.split('\n');
-    return lines.map((line, idx) => {
-      const trimmed = line.trim();
-      const isNucleoTitle =
-        idx === 0 &&
-        !trimmed.startsWith('•') &&
-        !trimmed.startsWith('-') &&
-        ((hint.length > 0 && trimmed.toLowerCase() === hint.toLowerCase()) ||
-          (lines.length > 1 && trimmed.length <= 65 && !/[.!?]$/.test(trimmed)));
-      return pText(line, { bold: isNucleoTitle, spaceAfter: isNucleoTitle ? 25 : 20 });
-    });
+    const formattedLines = formatCurricoloCellLines(text, nucleoHint);
+    if (formattedLines.length === 0) return [pText('—')];
+    return formattedLines.map((item) =>
+      pText(item.text, {
+        bold: item.isNucleoTitle,
+        keepNext: item.isNucleoTitle,
+        spaceAfter: item.isNucleoTitle ? 25 : 20,
+      })
+    );
   };
 
   const curricoloSectionBlocks: (Paragraph | Table)[] = isOriginal
@@ -958,7 +966,6 @@ export function createProgrammazioneDocument(
           width: { size: 100, type: WidthType.PERCENTAGE },
           rows: [
             new TableRow({
-              cantSplit: true,
               children: [
                 cell(
                   [
@@ -990,7 +997,6 @@ export function createProgrammazioneDocument(
               ],
             }),
             new TableRow({
-              cantSplit: true,
               children: [
                 cell(
                   [
@@ -1006,14 +1012,12 @@ export function createProgrammazioneDocument(
               ],
             }),
             new TableRow({
-              cantSplit: true,
-              tableHeader: true,
               children: [
-                cell([headerCellText(leftCurricoloHeader, true, 'E6E6E6')], {
+                cell([headerCellText(leftCurricoloHeader, true, 'E6E6E6', true)], {
                   header: true,
                   widthPct: 50,
                 }),
-                cell([headerCellText('CONOSCENZE', true, 'E6E6E6')], {
+                cell([headerCellText('CONOSCENZE', true, 'E6E6E6', true)], {
                   header: true,
                   widthPct: 50,
                 }),
@@ -1023,7 +1027,6 @@ export function createProgrammazioneDocument(
               ? plan.curricolo.righeAbilitaConoscenze.map(
                   (row) =>
                     new TableRow({
-                      cantSplit: true,
                       children: [
                         cell(renderCurricoloCellParagraphs(row.abilita, row.traguardo), {
                           widthPct: 50,
@@ -1036,7 +1039,6 @@ export function createProgrammazioneDocument(
                 )
               : [
                   new TableRow({
-                    cantSplit: true,
                     children: [
                       cell([pText(' ', { spaceAfter: 360 })], { widthPct: 50 }),
                       cell([pText(' ', { spaceAfter: 360 })], { widthPct: 50 }),
@@ -1063,18 +1065,22 @@ export function createProgrammazioneDocument(
           width: { size: 100, type: WidthType.PERCENTAGE },
           rows: [
             new TableRow({
-              cantSplit: true,
               tableHeader: true,
               children: [
-                cell([headerCellText(leftCurricoloHeader, false)], { header: true, widthPct: 50 }),
-                cell([headerCellText('CONOSCENZE', false)], { header: true, widthPct: 50 }),
+                cell([headerCellText(leftCurricoloHeader, false, undefined, true)], {
+                  header: true,
+                  widthPct: 50,
+                }),
+                cell([headerCellText('CONOSCENZE', false, undefined, true)], {
+                  header: true,
+                  widthPct: 50,
+                }),
               ],
             }),
             ...(plan.curricolo.righeAbilitaConoscenze.length
               ? plan.curricolo.righeAbilitaConoscenze.map(
                   (row) =>
                     new TableRow({
-                      cantSplit: true,
                       children: [
                         cell(renderCurricoloCellParagraphs(row.abilita, row.traguardo), {
                           widthPct: 50,
@@ -1087,7 +1093,6 @@ export function createProgrammazioneDocument(
                 )
               : [
                   new TableRow({
-                    cantSplit: true,
                     children: [
                       cell([pText('Nessuna voce inserita.', { italic: true })]),
                       cell([pText('Nessuna conoscenza inserita.', { italic: true })]),

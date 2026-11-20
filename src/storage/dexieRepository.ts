@@ -20,6 +20,10 @@ import { ensureClassDimensions } from '../engine/classCharacteristicsEngine';
 import { getDefaultIndicazioniForClasseAndYear } from '../engine/curricoloCatalogEngine';
 import { normalizeQuickClassSelection } from '../engine/quickClassDescriptionEngine';
 import {
+  normalizeDocumentText,
+  normalizeProgrammazioneTexts,
+} from '../domain/textSanitizer';
+import {
   computeMergedProgrammazioni,
   mergeItemsById,
   type BackupMergeOptions,
@@ -33,7 +37,7 @@ interface KeyValueRecord {
 }
 
 function normalizeLoadedPlan(plan: Programmazione): Programmazione {
-  return {
+  return normalizeProgrammazioneTexts({
     ...plan,
     datiGenerali: {
       ...plan.datiGenerali,
@@ -64,7 +68,7 @@ function normalizeLoadedPlan(plan: Programmazione): Programmazione {
           plan.datiGenerali?.annoScolastico
         ),
     },
-  };
+  });
 }
 
 class PianoramaDexieDB extends Dexie {
@@ -152,18 +156,25 @@ export class DexiePianoramaRepository implements PianoramaRepository {
         await this.db.kv.put({ key: 'migration_curricolo_seed_v2', value: true });
         await this.db.kv.put({ key: 'migration_curricolo_seed_v3', value: true });
         await this.db.kv.put({ key: 'migration_curricolo_seed_v4', value: true });
+        await this.db.kv.put({ key: 'migration_curricolo_seed_v5', value: true });
       } else {
-        const seedV4Flag = await this.db.kv.get('migration_curricolo_seed_v4');
-        if (!seedV4Flag) {
+        const seedV5Flag = await this.db.kv.get('migration_curricolo_seed_v5');
+        if (!seedV5Flag) {
           const existing = Array.isArray(catalogRow.value)
             ? (catalogRow.value as CurricoloCatalogEntry[])
             : [];
-          const customEntries = existing.filter(
-            (e) =>
-              !e.id.startsWith('cv-') &&
-              !e.id.startsWith('cvn-') &&
-              !e.id.startsWith('cvv-')
-          );
+          const customEntries = existing
+            .filter(
+              (e) =>
+                !e.id.startsWith('cv-') &&
+                !e.id.startsWith('cvn-') &&
+                !e.id.startsWith('cvv-')
+            )
+            .map((e) => ({
+              ...e,
+              nucleoTematico: normalizeDocumentText(e.nucleoTematico),
+              testo: normalizeDocumentText(e.testo),
+            }));
           await this.db.kv.put({
             key: 'curricoloCatalog',
             value: [...CURRICOLO_VERTICALE_SEED, ...customEntries],
@@ -171,6 +182,7 @@ export class DexiePianoramaRepository implements PianoramaRepository {
           await this.db.kv.put({ key: 'migration_curricolo_seed_v2', value: true });
           await this.db.kv.put({ key: 'migration_curricolo_seed_v3', value: true });
           await this.db.kv.put({ key: 'migration_curricolo_seed_v4', value: true });
+          await this.db.kv.put({ key: 'migration_curricolo_seed_v5', value: true });
         }
       }
 

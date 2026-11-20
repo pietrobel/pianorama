@@ -1,6 +1,12 @@
 import JSZip from 'jszip';
 import * as XLSX from 'xlsx';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { describe, expect, it } from 'vitest';
+import {
+  formatCurricoloCellLines,
+  normalizeDocumentText,
+  normalizeProgrammazioneTexts,
+} from '../domain/textSanitizer';
 import { isValidAccessPassword } from '../components/PasswordGate';
 import defaultMappingRaw from '../data/defaultDocxMapping.json';
 import defaultRulesRaw from '../data/defaultRules.json';
@@ -2391,6 +2397,178 @@ Utilizzare con sicurezza le tecniche di calcolo \\tab Eseguire espressioni con f
     expect(clip.plainText).toContain('De Luca Chiara');
     expect(clip.plainText).not.toMatch(/\(\s*\d+\s*\)/);
     expect(clip.plainText).not.toContain('ROSSI MARIO');
+  });
+
+  it('catalogo curricolo verticale privo di segni combinanti NFD, accenti staccati o residui PDF (# / ●)', () => {
+    for (const entry of CURRICOLO_VERTICALE_SEED) {
+      for (const fieldValue of [entry.nucleoTematico, entry.testo]) {
+        expect(fieldValue).not.toMatch(/[\u0300-\u036f]/);
+        expect(fieldValue).not.toMatch(/[\u25CF#]/);
+        expect(fieldValue).not.toMatch(
+          /([A-Za-zÀ-ÿ’']+)\s+([ìòùéî])(?![A-Za-zÀ-ÿ])/
+        );
+      }
+    }
+  });
+
+  it('normalizza accenti combinanti/staccati ed esporta PDF e DOCX senza spaziatura tra lettere (numeri irrazionali e simboli)', async () => {
+    const dirtyPhrase =
+      'Comprendere che non esiste alcuna frazione o numero decimale finito o periodico il cui quadrato sia uguale a 2 (o ad altri numeri interi non quadrati), riconoscendo cos i\u0300 l’esistenza e la natura dei numeri irrazionali';
+    const cleanedPhrase = normalizeDocumentText(dirtyPhrase);
+    expect(cleanedPhrase).toBe(
+      'Comprendere che non esiste alcuna frazione o numero decimale finito o periodico il cui quadrato sia uguale a 2 (o ad altri numeri interi non quadrati), riconoscendo così l’esistenza e la natura dei numeri irrazionali'
+    );
+    expect(cleanedPhrase).not.toMatch(/[\u0300-\u036f]/);
+    expect(normalizeDocumentText('citt a\u0300, attivit à, pi ù, s e\u0301, d ì#, princip i\u0302, aller à')).toBe(
+      'città, attività, più, sé, dì, principî, aller à'
+    );
+
+    const mapping = defaultMappingRaw as DocxMappingSchema;
+    const plan = createEmptyProgrammazione(DEFAULT_SCHOOL_SETTINGS, {
+      disciplina: 'Matematica',
+      classe: 'Prima',
+      sezione: 'A',
+    });
+    plan.curricolo.righeAbilitaConoscenze = [
+      {
+        id: 'row-irrazionali',
+        competenze: '',
+        traguardo: 'Numeri',
+        abilita: `Numeri\n• ${dirtyPhrase}`,
+        conoscenze: 'Numeri\n• Il numero π e i numeri irrazionali.',
+      },
+    ];
+
+    const normalizedPlan = normalizeProgrammazioneTexts(plan);
+    expect(normalizedPlan.curricolo.righeAbilitaConoscenze[0].abilita).toContain('riconoscendo così');
+
+    const pdfBytes = generateProgrammazionePdfBytes(plan, DEFAULT_SCHOOL_SETTINGS, mapping);
+    const pdfDoc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
+    const allItems: string[] = [];
+    for (let p = 1; p <= pdfDoc.numPages; p++) {
+      const page = await pdfDoc.getPage(p);
+      const tc = await page.getTextContent();
+      for (const item of tc.items) {
+        if ('str' in item && item.str.trim()) {
+          allItems.push(item.str);
+        }
+      }
+    }
+    const joinedPdfText = allItems.join(' ');
+    expect(joinedPdfText).toContain('riconoscendo così');
+    expect(joinedPdfText).toContain('pi');
+    expect(
+      allItems.some((s) => /\b[a-zàèéìòù]\s+[a-zàèéìòù]\s+[a-zàèéìòù]\s+[a-zàèéìòù]\b/i.test(s))
+    ).toBe(false);
+
+    const docxBytes = await generateProgrammazioneDocxBytes(plan, DEFAULT_SCHOOL_SETTINGS, mapping);
+    const zip = await JSZip.loadAsync(docxBytes.buffer as ArrayBuffer);
+    const xml = await zip.file('word/document.xml')!.async('string');
+    expect(xml).toContain('riconoscendo così');
+    expect(xml).not.toMatch(/[\u0300-\u036f]/);
+  });
+
+  it('pubblica sempre il punto elenco per obiettivi/abilità/conoscenze e rimuove il blocco w:cantSplit dalla tabella curricolo nel DOCX', async () => {
+    // 1. Verifica formattazione celle: anche obiettivi senza pallino iniziale o con marker vari ricevono "• "
+    expect(
+      formatCurricoloCellLines(
+        'Leggere testi espositivi complessi\n- Individuare informazioni implicite\n● Riassumere oralmente'
+      )
+    ).toEqual([
+      { text: '• Leggere testi espositivi complessi', isNucleoTitle: false },
+      { text: '• Individuare informazioni implicite', isNucleoTitle: false },
+      { text: '• Riassumere oralmente', isNucleoTitle: false },
+    ]);
+
+    expect(
+      formatCurricoloCellLines('• Eseguire operazioni in N\nCalcolare potenze in N', 'Numeri')
+    ).toEqual([
+      { text: 'Numeri', isNucleoTitle: true },
+      { text: '• Eseguire operazioni in N', isNucleoTitle: false },
+      { text: '• Calcolare potenze in N', isNucleoTitle: false },
+    ]);
+
+    const mapping = defaultMappingRaw as DocxMappingSchema;
+    const plan = createEmptyProgrammazione(DEFAULT_SCHOOL_SETTINGS, {
+      disciplina: 'Matematica',
+      classe: 'Prima',
+      sezione: 'A',
+      layoutDocumento: 'originale',
+      indicazioniVersione: 'nuove',
+    });
+    plan.curricolo.competenzeAttese = [
+      'L’alunno si muove con sicurezza nel calcolo con i numeri naturali e razionali.',
+    ];
+    plan.curricolo.righeAbilitaConoscenze = [
+      {
+        id: 'row-nobullet-1',
+        competenze: '',
+        traguardo: 'Numeri',
+        abilita:
+          'Riconoscere multipli e divisori di un numero naturale\nCalcolare MCD e mcm tra numeri',
+        conoscenze: 'Numeri naturali e divisibilità\nScomposizione in fattori primi',
+      },
+      {
+        id: 'row-nobullet-2',
+        competenze: '',
+        abilita: 'Risolvere problemi geometrici con i triangoli.',
+        conoscenze: 'Classificazione dei triangoli e proprietà degli angoli.',
+      },
+    ];
+
+    // 2. DOCX originale: ogni obiettivo e conoscenza ha "• ", e nessuna riga della tabella curricolo ha w:cantSplit
+    const origBytes = await generateProgrammazioneDocxBytes(plan, DEFAULT_SCHOOL_SETTINGS, mapping);
+    const origZip = await JSZip.loadAsync(origBytes.buffer as ArrayBuffer);
+    const origXml = await origZip.file('word/document.xml')!.async('string');
+    expect(origXml).toContain('• Riconoscere multipli e divisori di un numero naturale');
+    expect(origXml).toContain('• Calcolare MCD e mcm tra numeri');
+    expect(origXml).toContain('• Risolvere problemi geometrici con i triangoli.');
+    expect(origXml).toContain('• Classificazione dei triangoli e proprietà degli angoli.');
+
+    const traguardiPos = origXml.indexOf('TRAGUARDI PER LO SVILUPPO DELLE COMPETENZE');
+    expect(traguardiPos).toBeGreaterThan(-1);
+    const tblStart = origXml.lastIndexOf('<w:tbl>', traguardiPos);
+    const tblEnd = origXml.indexOf('</w:tbl>', traguardiPos);
+    expect(tblStart).toBeGreaterThan(-1);
+    expect(tblEnd).toBeGreaterThan(tblStart);
+    const origCurriculumTableXml = origXml.slice(tblStart, tblEnd + 8);
+    expect(origCurriculumTableXml).toContain('OBIETTIVI');
+    expect(origCurriculumTableXml).toContain('CONOSCENZE');
+    expect(origCurriculumTableXml).not.toContain('w:cantSplit');
+
+    // 3. DOCX moderno: neppure la tabella Obiettivi/Conoscenze moderna blocca la divisione tra pagine
+    const modernPlan = {
+      ...plan,
+      datiGenerali: { ...plan.datiGenerali, layoutDocumento: 'moderno' as const },
+    };
+    const modernBytes = await generateProgrammazioneDocxBytes(
+      modernPlan,
+      DEFAULT_SCHOOL_SETTINGS,
+      mapping
+    );
+    const modernZip = await JSZip.loadAsync(modernBytes.buffer as ArrayBuffer);
+    const modernXml = await modernZip.file('word/document.xml')!.async('string');
+    const modHeaderPos = modernXml.indexOf('Risolvere problemi geometrici con i triangoli.');
+    const modTblStart = modernXml.lastIndexOf('<w:tbl>', modHeaderPos);
+    const modTblEnd = modernXml.indexOf('</w:tbl>', modHeaderPos);
+    const modernCurriculumTableXml = modernXml.slice(modTblStart, modTblEnd + 8);
+    expect(modernCurriculumTableXml).not.toContain('w:cantSplit');
+
+    // 4. PDF: anche gli obiettivi senza pallino iniziale vengono pubblicati con trattino/punto elenco
+    const pdfBytes = generateProgrammazionePdfBytes(plan, DEFAULT_SCHOOL_SETTINGS, mapping);
+    const pdfDoc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
+    const pdfTexts: string[] = [];
+    for (let p = 1; p <= pdfDoc.numPages; p++) {
+      const page = await pdfDoc.getPage(p);
+      const tc = await page.getTextContent();
+      for (const item of tc.items) {
+        if ('str' in item && item.str.trim()) pdfTexts.push(item.str);
+      }
+    }
+    const joinedPdf = pdfTexts.join(' ');
+    expect(joinedPdf).toContain('- Riconoscere multipli e divisori');
+    expect(joinedPdf).toContain('- Calcolare MCD e mcm');
+    expect(joinedPdf).toContain('- Risolvere problemi geometrici con i');
   });
 });
 

@@ -615,7 +615,7 @@ function extractNucleoBullets(cellText: string, nucleo: string): string[] {
   const normNucleo = nucleo.trim().toLowerCase();
   return lines
     .filter((l, idx) => !(idx === 0 && l.toLowerCase() === normNucleo))
-    .map((l) => l.replace(/^[•\-\*]\s*/, '').trim())
+    .map((l) => l.replace(/^[•●○▪▫◦☐☑☒□■▢\uF0B7\uF0A7\-–—*]+\s*/, '').trim())
     .filter(Boolean);
 }
 

@@ -20,6 +20,10 @@ import type {
   SchoolSettings,
 } from '../domain/types';
 import {
+  extractNormalizedBulletEntries,
+  formatCurricoloCellLines,
+} from '../domain/textSanitizer';
+import {
   buildUnifiedClassDescriptionText,
   getStudentNamesByLevelBand,
 } from '../engine/classCharacteristicsEngine';
@@ -75,11 +79,16 @@ export function DocumentSheetPreview({
     plan.curricolo.notaIntroduttiva,
     plan.curricolo.indicazioniVersione
   );
-  const resolvedCompetenze = plan.curricolo.competenzeAttese.length
-    ? plan.curricolo.competenzeAttese
-    : (plan.curricolo.vociCatalogoImportate ?? [])
-        .filter((v) => v.tipo === 'competenza' && v.testo.trim())
-        .map((v) => v.testo.trim());
+  const resolvedCompetenze = (
+    plan.curricolo.competenzeAttese.length
+      ? plan.curricolo.competenzeAttese
+      : (plan.curricolo.vociCatalogoImportate ?? [])
+          .filter((v) => v.tipo === 'competenza' && v.testo.trim())
+          .map((v) => v.testo.trim())
+  ).flatMap((c) => extractNormalizedBulletEntries(c));
+  const resolvedCompetenzeDigitali = plan.curricolo.competenzeDigitali.flatMap((c) =>
+    extractNormalizedBulletEntries(c)
+  );
 
   const renderCheck = (checked: boolean, label: string, bracketStyle = false) => {
     const marker = bracketStyle
@@ -813,11 +822,11 @@ export function DocumentSheetPreview({
                     </div>
                   )}
 
-                  {plan.curricolo.competenzeDigitali.length > 0 && (
+                  {resolvedCompetenzeDigitali.length > 0 && (
                     <div className="mt-2">
                       <p className="font-bold">Competenze digitali:</p>
                       <ul className="mt-0.5 list-disc pl-5">
-                        {plan.curricolo.competenzeDigitali.map((c, idx) => (
+                        {resolvedCompetenzeDigitali.map((c, idx) => (
                           <li key={idx}>{c}</li>
                         ))}
                       </ul>
@@ -837,31 +846,13 @@ export function DocumentSheetPreview({
               {plan.curricolo.righeAbilitaConoscenze.length > 0 ? (
                 plan.curricolo.righeAbilitaConoscenze.map((row) => {
                   const renderCell = (text: string, hint?: string) => {
-                    const clean = (text ?? '')
-                      .replace(/([^\n])\s*([☐☑☒□■▢•])\s*/g, '$1\n$2 ')
-                      .replace(/^\s*[☐☑☒□■▢]\s*/gm, '• ')
-                      .trim();
-                    if (!clean) return '—';
-                    const normHint = (hint ?? '').trim();
-                    const effective =
-                      normHint && !clean.toLowerCase().startsWith(normHint.toLowerCase())
-                        ? `${normHint}\n${clean}`
-                        : clean;
-                    const lines = effective.split('\n');
-                    return lines.map((line, idx) => {
-                      const t = line.trim();
-                      const isNucleo =
-                        idx === 0 &&
-                        !t.startsWith('•') &&
-                        !t.startsWith('-') &&
-                        ((normHint.length > 0 && t.toLowerCase() === normHint.toLowerCase()) ||
-                          (lines.length > 1 && t.length <= 65 && !/[.!?]$/.test(t)));
-                      return (
-                        <div key={idx} className={isNucleo ? 'font-bold' : undefined}>
-                          {line}
-                        </div>
-                      );
-                    });
+                    const formattedLines = formatCurricoloCellLines(text, hint);
+                    if (formattedLines.length === 0) return '—';
+                    return formattedLines.map((item, idx) => (
+                      <div key={idx} className={item.isNucleoTitle ? 'font-bold' : undefined}>
+                        {item.text}
+                      </div>
+                    ));
                   };
                   return (
                     <tr key={row.id}>
@@ -904,13 +895,13 @@ export function DocumentSheetPreview({
               </div>
             )}
 
-            {plan.curricolo.competenzeDigitali.length > 0 && (
+            {resolvedCompetenzeDigitali.length > 0 && (
               <div className="mt-2">
                 <p className="font-bold" style={{ color: accentColor }}>
                   Competenze digitali:
                 </p>
                 <ul className="mt-1 list-disc pl-5">
-                  {plan.curricolo.competenzeDigitali.map((c, idx) => (
+                  {resolvedCompetenzeDigitali.map((c, idx) => (
                     <li key={idx}>{c}</li>
                   ))}
                 </ul>
@@ -934,31 +925,13 @@ export function DocumentSheetPreview({
                 {plan.curricolo.righeAbilitaConoscenze.length > 0 ? (
                   plan.curricolo.righeAbilitaConoscenze.map((row) => {
                     const renderCell = (text: string, hint?: string) => {
-                      const clean = (text ?? '')
-                        .replace(/([^\n])\s*([☐☑☒□■▢•])\s*/g, '$1\n$2 ')
-                        .replace(/^\s*[☐☑☒□■▢]\s*/gm, '• ')
-                        .trim();
-                      if (!clean) return '—';
-                      const normHint = (hint ?? '').trim();
-                      const effective =
-                        normHint && !clean.toLowerCase().startsWith(normHint.toLowerCase())
-                          ? `${normHint}\n${clean}`
-                          : clean;
-                      const lines = effective.split('\n');
-                      return lines.map((line, idx) => {
-                        const t = line.trim();
-                        const isNucleo =
-                          idx === 0 &&
-                          !t.startsWith('•') &&
-                          !t.startsWith('-') &&
-                          ((normHint.length > 0 && t.toLowerCase() === normHint.toLowerCase()) ||
-                            (lines.length > 1 && t.length <= 65 && !/[.!?]$/.test(t)));
-                        return (
-                          <div key={idx} className={isNucleo ? 'font-bold' : undefined}>
-                            {line}
-                          </div>
-                        );
-                      });
+                      const formattedLines = formatCurricoloCellLines(text, hint);
+                      if (formattedLines.length === 0) return '—';
+                      return formattedLines.map((item, idx) => (
+                        <div key={idx} className={item.isNucleoTitle ? 'font-bold' : undefined}>
+                          {item.text}
+                        </div>
+                      ));
                     };
                     return (
                       <tr key={row.id}>
