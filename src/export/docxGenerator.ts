@@ -925,7 +925,10 @@ export function createProgrammazioneDocument(
   );
 
   const renderCurricoloCellParagraphs = (text: string, nucleoHint?: string) => {
-    const clean = (text ?? '').trim();
+    const clean = (text ?? '')
+      .replace(/([^\n])\s*([☐☑☒□■▢•])\s*/g, '$1\n$2 ')
+      .replace(/^\s*[☐☑☒□■▢]\s*/gm, '• ')
+      .trim();
     if (!clean) return [pText('—')];
     const hint = (nucleoHint ?? '').trim();
     const effective =
@@ -938,7 +941,7 @@ export function createProgrammazioneDocument(
         !trimmed.startsWith('•') &&
         !trimmed.startsWith('-') &&
         ((hint.length > 0 && trimmed.toLowerCase() === hint.toLowerCase()) ||
-          lines.length > 1);
+          (lines.length > 1 && trimmed.length <= 65 && !/[.!?]$/.test(trimmed)));
       return pText(line, { bold: isNucleoTitle, spaceAfter: isNucleoTitle ? 25 : 20 });
     });
   };
@@ -1145,11 +1148,16 @@ export function createProgrammazioneDocument(
               `${compositionIntro} Descrizione sintetica non ancora compilata.`,
             { spaceAfter: 100 }
           ),
-          pText('Livelli di partenza rilevati (conteggi aggregati):', {
-            bold: true,
-            color: accentHex,
-            keepNext: true,
-          }),
+          pText(
+            bandStudents.hasAnyImportedStudents
+              ? 'Livelli di partenza rilevati:'
+              : 'Livelli di partenza rilevati (conteggi aggregati):',
+            {
+              bold: true,
+              color: accentHex,
+              keepNext: true,
+            }
+          ),
         ]),
     livelliTable,
 
@@ -1492,19 +1500,26 @@ export function createProgrammazioneDocument(
       line: isOriginal ? 360 : undefined,
       spaceAfter: 60,
     }),
-    new Paragraph({
-      alignment: AlignmentType.RIGHT,
-      spacing: { before: 280, after: 60 },
-      children: [
-        new TextRun({
-          text: firmaDocente,
-          font,
-          size: bodySize,
-          bold: !isOriginal,
-          color: accentHex,
-        }),
-      ],
-    }),
+    ...firmaDocente.split(/\r?\n/).map(
+      (lineText, idx, arr) =>
+        new Paragraph({
+          alignment: AlignmentType.RIGHT,
+          keepNext: idx < arr.length - 1,
+          spacing: {
+            before: idx === 0 ? 280 : 0,
+            after: idx === arr.length - 1 ? 60 : 20,
+          },
+          children: [
+            new TextRun({
+              text: lineText,
+              font,
+              size: bodySize,
+              bold: !isOriginal,
+              color: accentHex,
+            }),
+          ],
+        })
+    ),
   ];
 
   return new Document({

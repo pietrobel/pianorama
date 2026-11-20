@@ -147,10 +147,28 @@ export interface QuestionnaireAnswer {
   notaEterogenea: string;
 }
 
+export type QuickEterogeneitaLevel = 'omogenea' | 'moderata' | 'elevata';
+export type QuickPreparazioneLevel = 'buono' | 'medio' | 'fragile';
+export type QuickClimaLevel = 'sereno' | 'vivace' | 'complesso';
+export type QuickMotivazioneLevel = 'attiva' | 'selettiva' | 'debole';
+
+export type QuickClassModeKey =
+  `${QuickEterogeneitaLevel}|${QuickPreparazioneLevel}|${QuickClimaLevel}|${QuickMotivazioneLevel}`;
+
+export interface QuickClassModeSelection {
+  eterogeneita: QuickEterogeneitaLevel;
+  preparazione: QuickPreparazioneLevel;
+  clima: QuickClimaLevel;
+  motivazione: QuickMotivazioneLevel;
+  varianteSelezionata: 0 | 1 | 2;
+}
+
 export interface ClassQuestionnaire {
   risposte: Partial<Record<QuestionnaireIndicatorKey, QuestionnaireAnswer>>;
   modalitaGenerazione: 'sintetica' | 'completa';
   ultimoAggiornamento: string | null;
+  modalitaCompilazione?: 'rapida' | 'dettagliata';
+  modalitaRapida?: QuickClassModeSelection;
 }
 
 export interface AnalisiPartenza {

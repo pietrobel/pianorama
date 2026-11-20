@@ -3,6 +3,7 @@ import {
   DEFAULT_SOGLIE_QUOTE_CARATTERISTICHE,
 } from '../domain/defaults';
 import type {
+  AnonymousStudentBandEntry,
   ClassCharacteristicDimension,
   ClassCharacteristicSegment,
   FasciaLivelloKey,
@@ -10,6 +11,7 @@ import type {
   SchoolSettings,
   SoglieQuoteCaratteristiche,
 } from '../domain/types';
+import { extractCognomeOnly } from './gradebookImporter';
 
 export interface DocumentCharacteristicParagraph {
   id: string;
@@ -1168,7 +1170,112 @@ export function computeStudentCountFromPct(pct: number, alunniTotali: number): n
 }
 
 /**
- * Restituisce i nominativi completi degli alunni importati suddivisi nelle 4 fasce di livello.
+ * Formatta nome e cognome con la prima lettera di ciascuna parola in maiuscolo
+ * e le successive in minuscolo (es. "ROSSI MARIO" -> "Rossi Mario", "D'ANGELO LUCA" -> "D'Angelo Luca").
+ */
+export function formatStudentNameTitleCase(name: string): string {
+  const trimmed = (name ?? '').trim().replace(/\s+/g, ' ');
+  if (!trimmed) return '';
+  return trimmed
+    .toLocaleLowerCase('it-IT')
+    .replace(/(^|[\s\-’'])(\p{L})/giu, (_, sep: string, ch: string) => {
+      return `${sep}${ch.toLocaleUpperCase('it-IT')}`;
+    });
+}
+
+/**
+ * Estrae eventuale numero di registro tra parentesi (es. "Rossi Mario (12)" o "(3) Bianchi Luca")
+ * e restituisce il nominativo pulito privo di parentesi numeriche e formattato in Title Case.
+ */
+export function extractRegisterOrderAndCleanName(rawName: string): {
+  cleanName: string;
+  registerOrder: number | null;
+} {
+  const trimmed = (rawName ?? '').trim().replace(/\s+/g, ' ');
+  if (!trimmed) return { cleanName: '', registerOrder: null };
+
+  let registerOrder: number | null = null;
+  const matches = [...trimmed.matchAll(/\(\s*(\d{1,3})\s*\)/g)];
+  if (matches.length > 0) {
+    const parsed = Number(matches[0][1]);
+    if (Number.isFinite(parsed)) {
+      registerOrder = parsed;
+    }
+  }
+
+  const withoutParens = trimmed
+    .replace(/\(\s*\d{1,3}\s*\)/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([,;:.])/g, '$1')
+    .trim();
+
+  const cleanName = formatStudentNameTitleCase(withoutParens);
+
+  return { cleanName, registerOrder };
+}
+
+/**
+ * Ordina i nominativi all'interno di ciascuna fascia utilizzando prioritariamente il numero di registro
+ * tra parentesi (ordine alfabetico dei cognomi nel registro) e rimuove i numeri tra parentesi dal testo esportabile.
+ */
+export function sortAndCleanStudentNamesForBands(
+  entries: AnonymousStudentBandEntry[]
+): Record<'basso' | 'medio_basso' | 'medio' | 'alto', string[]> {
+  type Item = {
+    cleanName: string;
+    cognome: string;
+    registerOrder: number | null;
+    ordine: number;
+  };
+
+  const buckets: Record<'basso' | 'medio_basso' | 'medio' | 'alto', Item[]> = {
+    basso: [],
+    medio_basso: [],
+    medio: [],
+    alto: [],
+  };
+
+  for (const entry of entries) {
+    const { cleanName, registerOrder } = extractRegisterOrderAndCleanName(entry.nominativo ?? '');
+    if (!cleanName) continue;
+    const key: FasciaLivelloKey = entry.fasciaCorrente;
+    if (key === 'basso' || key === 'medio_basso' || key === 'medio' || key === 'alto') {
+      buckets[key].push({
+        cleanName,
+        cognome: extractCognomeOnly(cleanName),
+        registerOrder,
+        ordine: entry.ordine ?? 0,
+      });
+    }
+  }
+
+  const compareItems = (a: Item, b: Item): number => {
+    if (a.registerOrder !== null && b.registerOrder !== null) {
+      if (a.registerOrder !== b.registerOrder) {
+        return a.registerOrder - b.registerOrder;
+      }
+    } else {
+      const surnameCmp = a.cognome.localeCompare(b.cognome, 'it', { sensitivity: 'base' });
+      if (surnameCmp !== 0) return surnameCmp;
+      if (a.registerOrder !== null && b.registerOrder === null) return -1;
+      if (a.registerOrder === null && b.registerOrder !== null) return 1;
+    }
+    const fullCmp = a.cleanName.localeCompare(b.cleanName, 'it', { sensitivity: 'base' });
+    if (fullCmp !== 0) return fullCmp;
+    return a.ordine - b.ordine;
+  };
+
+  return {
+    basso: [...buckets.basso].sort(compareItems).map((item) => item.cleanName),
+    medio_basso: [...buckets.medio_basso].sort(compareItems).map((item) => item.cleanName),
+    medio: [...buckets.medio].sort(compareItems).map((item) => item.cleanName),
+    alto: [...buckets.alto].sort(compareItems).map((item) => item.cleanName),
+  };
+}
+
+/**
+ * Restituisce i nominativi completi degli alunni importati suddivisi nelle 4 fasce di livello,
+ * ordinati per ordine alfabetico di cognome (numero di registro tra parentesi) e senza numeri tra parentesi.
  */
 export function getStudentNamesByLevelBand(
   plan: Programmazione
@@ -1176,24 +1283,14 @@ export function getStudentNamesByLevelBand(
   hasAnyImportedStudents: boolean;
   bands: Record<'basso' | 'medio_basso' | 'medio' | 'alto', string[]>;
 } {
-  const bands: Record<'basso' | 'medio_basso' | 'medio' | 'alto', string[]> = {
-    basso: [],
-    medio_basso: [],
-    medio: [],
-    alto: [],
-  };
   const list = plan.analisiPartenza.alunniAnonimiFasce ?? [];
-  let hasAny = false;
-  for (const entry of list) {
-    const name = (entry.nominativo ?? '').trim();
-    if (!name) continue;
-    hasAny = true;
-    const key: FasciaLivelloKey = entry.fasciaCorrente;
-    if (key === 'basso' || key === 'medio_basso' || key === 'medio' || key === 'alto') {
-      bands[key].push(name);
-    }
-  }
-  return { hasAnyImportedStudents: hasAny, bands };
+  const bands = sortAndCleanStudentNamesForBands(list);
+  const hasAnyImportedStudents =
+    bands.basso.length > 0 ||
+    bands.medio_basso.length > 0 ||
+    bands.medio.length > 0 ||
+    bands.alto.length > 0;
+  return { hasAnyImportedStudents, bands };
 }
 
 /**

@@ -466,6 +466,10 @@ const CANONICAL_NUCLEO_ORDER: Record<string, string[]> = {
     'tre italie',
     'tre rivoluzioni',
     'regno d’italia',
+    'il primo novecento',
+    'l’età dei totalitarismi',
+    'la seconda guerra mondiale',
+    'il mondo contemporaneo',
     'digitale',
   ],
   geografia: [
@@ -911,5 +915,177 @@ export function computeCatalogDiff(
     modifiedCount,
     removedCount,
     unchangedCount,
+  };
+}
+
+/**
+ * Risolve le voci di catalogo coerenti con classe, disciplina e curricolo selezionato
+ * ('nuove' = Obiettivi specifici + Competenze + Conoscenze; 'vecchie' = Abilità + Competenze + Conoscenze).
+ * Evita di mescolare obiettivi delle Nuove Indicazioni dentro le Vecchie e viceversa.
+ */
+export function resolveCatalogEntriesForCurriculum(
+  catalog: CurricoloCatalogEntry[],
+  classe: ClasseSecondaria,
+  disciplina: string,
+  indicazioniVersion: IndicazioniVersion
+): CurricoloCatalogEntry[] {
+  const byClassDisc = filterCatalogEntries(catalog, classe, disciplina);
+  const versionMatched = filterCatalogEntries(catalog, classe, disciplina, indicazioniVersion);
+
+  if (indicazioniVersion === 'nuove') {
+    return versionMatched.filter(
+      (e) =>
+        e.tipo === 'competenza' ||
+        e.tipo === 'obiettivo_specifico' ||
+        e.tipo === 'conoscenza'
+    );
+  }
+
+  // Vecchie Indicazioni: usa Abilità + Conoscenze vecchie; se nel seed mancano competenze o conoscenze
+  // specificamente marcate "vecchio" per quella classe, integra quelle condivise della stessa classe/disciplina
+  // escludendo sempre gli obiettivi specifici delle Nuove Indicazioni.
+  const result: CurricoloCatalogEntry[] = [];
+  const seenIds = new Set<string>();
+  const pushUnique = (items: CurricoloCatalogEntry[]) => {
+    for (const item of items) {
+      if (item.tipo === 'obiettivo_specifico') continue;
+      if (seenIds.has(item.id)) continue;
+      seenIds.add(item.id);
+      result.push(item);
+    }
+  };
+
+  const hasVecchieCompetenze = versionMatched.some((e) => e.tipo === 'competenza');
+  if (!hasVecchieCompetenze) {
+    pushUnique(byClassDisc.filter((e) => e.tipo === 'competenza'));
+  } else {
+    pushUnique(versionMatched.filter((e) => e.tipo === 'competenza'));
+  }
+
+  pushUnique(versionMatched.filter((e) => e.tipo === 'abilita'));
+
+  const vecchieConoscenze = versionMatched.filter((e) => e.tipo === 'conoscenza');
+  if (vecchieConoscenze.length > 0) {
+    pushUnique(vecchieConoscenze);
+  } else {
+    pushUnique(byClassDisc.filter((e) => e.tipo === 'conoscenza'));
+  }
+
+  return result;
+}
+
+export interface OtherClassCatalogBucket {
+  classe: ClasseSecondaria;
+  entries: CurricoloCatalogEntry[];
+}
+
+/**
+ * Restituisce le voci delle altre classi della stessa disciplina facendo SEMPRE riferimento
+ * allo stesso curricolo selezionato (Nuove vs Vecchie Indicazioni).
+ */
+export function resolveOtherClassesEntriesForCurriculum(
+  catalog: CurricoloCatalogEntry[],
+  currentClasse: ClasseSecondaria,
+  disciplina: string,
+  indicazioniVersion: IndicazioniVersion
+): OtherClassCatalogBucket[] {
+  const allClasses: ClasseSecondaria[] = ['Prima', 'Seconda', 'Terza'];
+  return allClasses
+    .filter((cls) => cls !== currentClasse)
+    .map((cls) => ({
+      classe: cls,
+      entries: resolveCatalogEntriesForCurriculum(catalog, cls, disciplina, indicazioniVersion),
+    }))
+    .filter((bucket) => bucket.entries.length > 0);
+}
+
+export interface CurriculumSheetNucleoRow {
+  nucleoKey: string;
+  nucleoTematico: string;
+  leftItems: CurricoloCatalogEntry[];
+  rightItems: CurricoloCatalogEntry[];
+}
+
+export interface CurriculumSheetModel {
+  competenze: CurricoloCatalogEntry[];
+  rows: CurriculumSheetNucleoRow[];
+  leftColumnLabel: string;
+  rightColumnLabel: string;
+}
+
+/**
+ * Organizza le voci del curricolo in una struttura analoga al documento finale di output:
+ * - Competenze attese in testa (1 colonna)
+ * - Tabella a 2 colonne raggruppata per Nucleo Tematico:
+ *   Obiettivi specifici (Nuove Indicazioni) oppure Abilità (Vecchie Indicazioni) a sinistra,
+ *   Conoscenze / Contenuti a destra, con i nuclei digitali/STEAM sempre in coda.
+ */
+export function buildCurriculumSheetModel(
+  entries: CurricoloCatalogEntry[],
+  disciplina: string,
+  indicazioniVersion: IndicazioniVersion
+): CurriculumSheetModel {
+  const competenze: CurricoloCatalogEntry[] = [];
+  const seenComp = new Set<string>();
+
+  type MutableRow = {
+    nucleoKey: string;
+    nucleoTematico: string;
+    leftItems: CurricoloCatalogEntry[];
+    rightItems: CurricoloCatalogEntry[];
+  };
+  const rowMap = new Map<string, MutableRow>();
+
+  const expectedLeftType: CurricoloVoiceType =
+    indicazioniVersion === 'nuove' ? 'obiettivo_specifico' : 'abilita';
+
+  for (const entry of entries) {
+    if (entry.tipo === 'competenza') {
+      const textKey = `${entry.classe}|${entry.testo.trim().toLowerCase()}`;
+      if (!seenComp.has(textKey)) {
+        seenComp.add(textKey);
+        competenze.push(entry);
+      }
+      continue;
+    }
+
+    if (entry.tipo !== expectedLeftType && entry.tipo !== 'conoscenza') {
+      continue;
+    }
+
+    const nucleo = entry.nucleoTematico.trim() || 'Contenuti disciplinari';
+    const nucleoKey = nucleo.toLowerCase();
+    let row = rowMap.get(nucleoKey);
+    if (!row) {
+      row = {
+        nucleoKey,
+        nucleoTematico: nucleo,
+        leftItems: [],
+        rightItems: [],
+      };
+      rowMap.set(nucleoKey, row);
+    }
+
+    if (entry.tipo === expectedLeftType) {
+      row.leftItems.push(entry);
+    } else if (entry.tipo === 'conoscenza') {
+      row.rightItems.push(entry);
+    }
+  }
+
+  const rows = Array.from(rowMap.values()).sort(
+    (a, b) =>
+      getNucleoSortRank(disciplina, a.nucleoTematico) -
+      getNucleoSortRank(disciplina, b.nucleoTematico)
+  );
+
+  return {
+    competenze,
+    rows,
+    leftColumnLabel:
+      indicazioniVersion === 'nuove'
+        ? 'Obiettivi specifici di apprendimento'
+        : 'Abilità',
+    rightColumnLabel: 'Conoscenze (Contenuti)',
   };
 }

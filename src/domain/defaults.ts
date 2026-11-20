@@ -1356,7 +1356,7 @@ export function formatFirmaDocente(
   genere: DocenteGenere = 'F'
 ): string {
   const prefisso = genere === 'M' ? 'Il docente' : 'La docente';
-  return `${prefisso} ${formatDocenteConTitolo(docente, genere)}`;
+  return `${prefisso}\n${formatDocenteConTitolo(docente, genere)}`;
 }
 
 export function createDefaultClassDimensions(): ClassCharacteristicDimension[] {

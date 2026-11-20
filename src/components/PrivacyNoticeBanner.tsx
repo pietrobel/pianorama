@@ -13,7 +13,7 @@ export function PrivacyNoticeBanner({ compact = false }: PrivacyNoticeBannerProp
       >
         <Lock className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" />
         <p className="leading-relaxed">
-          <strong>Archivio offline protetto:</strong> puoi lavorare localmente con elenchi alunni, fasce di livello e note BES/DSA/PEI nella scheda <em>Registro / Fasce</em>. I documenti DOCX/PDF ufficiali esportano solo conteggi aggregati.
+          <strong>Archivio 100% offline protetto:</strong> medie voti, categorie BES/DSA/PEI e note riservate restano solo sul dispositivo e non vengono mai esportate. Lavorando offline, i soli nominativi degli alunni possono comparire nella tabella <em>Livelli di partenza</em> (oppure soli conteggi aggregati scegliendo la modalità anonima).
         </p>
       </div>
     );
@@ -31,7 +31,7 @@ export function PrivacyNoticeBanner({ compact = false }: PrivacyNoticeBannerProp
             Spazio di lavoro 100% offline per elenchi alunni e dati sensibili
           </p>
           <p className="text-xs leading-relaxed text-amber-900/90 dark:text-amber-100/90">
-            Proprio perché PIANORAMA lavora interamente offline sul tuo dispositivo senza trasmettere nulla online, puoi gestire elenchi nominativi, fasce di livello e annotazioni BES/DSA/PDP/PEI nello spazio riservato del registro. Nell’esportazione ufficiale DOCX e PDF della programmazione vengono inclusi invece esclusivamente conteggi numerici aggregati e strategie inclusive generali.
+            PIANORAMA elabora tutto localmente sul tuo dispositivo senza trasmettere nulla online: nel registro offline puoi gestire voti, fasce di livello e annotazioni BES/DSA/PDP/PEI. Nei documenti DOCX e PDF esportati, medie dei voti, categorie BES/DSA/PEI e note sensibili non vengono mai esposte; se scegli di mantenere i nominativi, questi compaiono esclusivamente nelle colonne delle fasce di livello (altrimenti vengono esportati solo conteggi numerici aggregati).
           </p>
         </div>
       </div>

@@ -733,7 +733,7 @@ export function buildClassCompositionIntro(
   plan: Programmazione,
   variantOverride?: number
 ): string {
-  const { alunni, maschi, femmine, ripetenti, bes } = plan.composizione;
+  const { alunni, maschi, femmine, ripetenti, bes, disabilita = 0 } = plan.composizione;
   const classeLabel = [plan.datiGenerali.classe, plan.datiGenerali.sezione]
     .filter(Boolean)
     .join(' ')
@@ -745,6 +745,11 @@ export function buildClassCompositionIntro(
   if (bes > 0) {
     extraParts.push(
       `${bes} alunn${bes === 1 ? 'o' : 'i'} con Bisogni Educativi Speciali (BES)`
+    );
+  }
+  if (disabilita > 0) {
+    extraParts.push(
+      `${disabilita} alunn${disabilita === 1 ? 'o' : 'i'} con disabilità certificata`
     );
   }
 

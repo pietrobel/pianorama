@@ -91,8 +91,9 @@ function makeId(prefix: string): string {
 function cleanText(raw: string): string {
   return raw
     .replace(/\u00A0/g, ' ')
-    .replace(/[\uF0FE\uF0FD\uF052\uF0FC\uF078\u2611]/g, '☒')
-    .replace(/[\uF0A8\uF06F\uF0A3\u25A1]/g, '☐')
+    .replace(/[\uF0FE\uF0FD\uF052\uF0FC\uF078\u2611\u2612]/g, '☒')
+    .replace(/[\uF0A8\uF06F\uF0A3\uF071\u25A1\u2610\u25FB\u25A2\u274F-\u2752]/g, '☐')
+    .replace(/[\uF0B7\uF0A7]/g, '•')
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
     .replace(/[ \t]+/g, ' ')
@@ -523,28 +524,26 @@ function extractTablesFromPdfRowGroups(pageRowGroups: PdfTextToken[][][]): strin
       const typicalGap = sortedGaps.length > 0 ? sortedGaps[Math.floor(sortedGaps.length / 2)] : 10.5;
 
       const hasExistingContent = colBuffers.some((b) => b.length > 0);
-      const nonEmptyColsCount = cells.filter((c) => c.length > 0).length;
       const col0EndsSentence =
         colBuffers[0].length > 0 &&
         /[.!?;:]$/.test(colBuffers[0][colBuffers[0].length - 1]);
       const startsNewItem =
-        cells[0].length > 0 && /^[A-ZÀ-Ö0-9•\-]/.test(cells[0]);
+        cells[0].length > 0 && /^[A-ZÀ-Ö0-9•\-☐☑☒]/.test(cells[0]);
       const startsNewNucleoGroup =
         numCols >= 2 &&
-        colBuffers[0].some((line) => line.startsWith('•')) &&
+        hasExistingContent &&
         cells[0].length > 2 &&
         cells[1].length > 2 &&
         cells[0].length < 55 &&
-        !cells[0].startsWith('•') &&
+        !/^[•\-\*☐☑☒]/.test(cells[0]) &&
+        !/[.!?]$/.test(cells[0]) &&
         cells[0].toLowerCase() === cells[1].toLowerCase();
 
       const shouldSplitRow =
         hasExistingContent &&
         (startsNewNucleoGroup ||
           (cur.page !== prevPage && col0EndsSentence && startsNewItem) ||
-          (cur.page === prevPage &&
-            (gap > typicalGap * 1.45 ||
-              (nonEmptyColsCount >= 2 && col0EndsSentence && startsNewItem))));
+          (cur.page === prevPage && gap > Math.max(typicalGap * 1.85, 20)));
 
       if (shouldSplitRow) {
         flushRow();
@@ -1066,6 +1065,189 @@ function isRepeatedCurriculumHeaderRow(cells: string[]): boolean {
   return hasLeft && hasRight;
 }
 
+const BULLET_OR_CHECKBOX_PREFIX_RX =
+  /^(?:[•\-\*▪▫◦●○–—☒☑☐□■▢❏❐❑❒✓✔]+(?:\s*\|\s*)?|\[\s*[xX ]?\s*\](?:\s*\|\s*)?|\(\s*[xX ]?\s*\)(?:\s*\|\s*)?|\d+[.)]\s+)/;
+
+const CHECKBOX_OR_BULLET_CELL_RX =
+  /^(?:[☐☑☒□■▢❏❐❑❒✓✔•▪▫◦●○]+(?:\s*\|\s*)?|\[\s*[xX ]?\s*\](?:\s*\|\s*)?|\(\s*[xX ]?\s*\)(?:\s*\|\s*)?|(?<!\d)[-\*](?=\s+))/;
+
+function stripCurricoloHeaderBoilerplateInline(raw: string): string {
+  return (raw ?? '')
+    .replace(/\(?\s*clicca\s+sul\s+link\s+per\s+visualizzarlo\s*\)?/gi, '')
+    .replace(
+      /TRAGUARDI\s+PER\s+LO\s+SVILUPPO\s+DELLE\s+COMPETENZE(?:\s+IN\s+RELAZIONE(?:\s+AL)?(?:\s+CURRICOLO)?(?:\s+VERTICALE(?:\s+DEL\s+NOSTRO\s+ISTITUTO)?)?)?/gi,
+      ''
+    )
+    .replace(
+      /\bIN\s+RELAZIONE\s+AL\s+CURRICOLO(?:\s+VERTICALE(?:\s+DEL\s+NOSTRO\s+ISTITUTO)?)?/gi,
+      ''
+    )
+    .replace(/\b(?:CURRICOLO\s+)?VERTICALE\s+DEL\s+NOSTRO\s+ISTITUTO\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isCurricoloHeaderBoilerplateLine(line: string): boolean {
+  const stripped = stripCurricoloHeaderBoilerplateInline(line);
+  if (!stripped || stripped.length <= 2) return true;
+  if (
+    /^(?:voci dal curricolo verticale|nessuna competenza|competenze(?:\s+digitali)?\s*:?)$/i.test(
+      stripped
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function extractBulletedItemsFromWrappedLines(rawBlock: string): string[] {
+  const rawLines = rawBlock
+    .replace(/([^\n])\s*([•☒☑☐□■▢❏❐❑❒])\s*/g, '$1\n$2 ')
+    .split('\n')
+    .map((l) =>
+      stripCurricoloHeaderBoilerplateInline(l.replace(/\|/g, ' ').replace(/\s+/g, ' ').trim())
+    )
+    .filter(
+      (l) => l.length > 0 && !isCurricoloHeaderBoilerplateLine(l) && !isPlaceholderValue(l)
+    );
+
+  if (rawLines.length === 0) return [];
+
+  const hasExplicitBullets = rawLines.some((l) => BULLET_OR_CHECKBOX_PREFIX_RX.test(l));
+  const items: string[] = [];
+
+  for (const line of rawLines) {
+    const startsWithBullet = BULLET_OR_CHECKBOX_PREFIX_RX.test(line);
+    const cleanContent = line.replace(BULLET_OR_CHECKBOX_PREFIX_RX, '').trim();
+    if (
+      !cleanContent ||
+      isPlaceholderValue(cleanContent) ||
+      isCurricoloHeaderBoilerplateLine(cleanContent)
+    ) {
+      continue;
+    }
+
+    if (startsWithBullet || items.length === 0) {
+      items.push(cleanContent);
+      continue;
+    }
+
+    const prev = items[items.length - 1];
+    const prevEndsHardPunct = /[.!?;:]$/.test(prev);
+    const startsLowerOrCont = /^[a-zàèéìòù,;:\)\]]/.test(cleanContent);
+
+    if (prev.endsWith('-')) {
+      items[items.length - 1] = `${prev.slice(0, -1)}${cleanContent}`;
+    } else if (hasExplicitBullets) {
+      items[items.length - 1] = `${prev} ${cleanContent}`;
+    } else if (!prevEndsHardPunct || startsLowerOrCont) {
+      items[items.length - 1] = `${prev} ${cleanContent}`;
+    } else {
+      items.push(cleanContent);
+    }
+  }
+
+  return items.filter((item) => item.length > 3);
+}
+
+function normalizeImportedCurricoloCellText(raw: string, nucleoHint?: string): string {
+  const cleanedRaw = (raw ?? '')
+    .replace(/\u00A0/g, ' ')
+    .replace(/[\uF0FE\uF0FD\uF052\uF0FC\uF078\u2611\u2612]/g, '☒')
+    .replace(/[\uF0A8\uF06F\uF0A3\uF071\u25A1\u2610\u25FB\u25A2\u274F-\u2752]/g, '☐')
+    .replace(/[\uF0B7\uF0A7]/g, '•')
+    .trim();
+  if (!cleanedRaw || isPlaceholderValue(cleanedRaw)) return '';
+
+  // Forza a capo prima di ogni casella di spunta o pallino presente sulla stessa riga
+  const splitOnMarkers = cleanedRaw
+    .replace(/([^\n])\s*([☐☑☒□■▢❏❐❑❒•▪▫◦●])\s*/g, '$1\n$2 ')
+    .replace(/([^\n])\s+(\[[xX ]?\])\s+/g, '$1\n$2 ');
+
+  const rawLines = splitOnMarkers
+    .split('\n')
+    .map((l) => l.replace(/\s*\|\s*/g, ' ').replace(/\s+/g, ' ').trim())
+    .filter(
+      (l) => l.length > 0 && !isPlaceholderValue(l) && !isCurricoloHeaderBoilerplateLine(l)
+    );
+
+  if (rawLines.length === 0) return '';
+
+  const hasExplicitMarkers = rawLines.some((l) => CHECKBOX_OR_BULLET_CELL_RX.test(l));
+  type CellEntry = { text: string; isNucleo: boolean };
+  const entries: CellEntry[] = [];
+
+  rawLines.forEach((line, idx) => {
+    const hasMarker = CHECKBOX_OR_BULLET_CELL_RX.test(line);
+    const content = line.replace(CHECKBOX_OR_BULLET_CELL_RX, '').trim();
+    if (!content) return;
+
+    const matchesHint =
+      Boolean(nucleoHint) && content.toLowerCase() === nucleoHint!.trim().toLowerCase();
+    const looksLikeShortHeading =
+      !hasMarker &&
+      rawLines.length > 1 &&
+      idx === 0 &&
+      content.length <= 55 &&
+      !/[.!?;,:]$/.test(content) &&
+      (matchesHint || !/^[a-zàèéìòù]/.test(content));
+
+    if (matchesHint || looksLikeShortHeading) {
+      entries.push({ text: content, isNucleo: true });
+      return;
+    }
+
+    if (hasMarker) {
+      entries.push({ text: content, isNucleo: false });
+      return;
+    }
+
+    if (entries.length === 0 || entries[entries.length - 1].isNucleo) {
+      entries.push({ text: content, isNucleo: false });
+      return;
+    }
+
+    const prev = entries[entries.length - 1];
+    const prevEndsSentence = /[.!?;:]$/.test(prev.text);
+    const startsLowerOrCont = /^[a-zàèéìòù,;:\)\]]/.test(content);
+
+    if (prev.text.endsWith('-')) {
+      prev.text = `${prev.text.slice(0, -1)}${content}`;
+    } else if (!prevEndsSentence || startsLowerOrCont) {
+      prev.text = `${prev.text} ${content}`;
+    } else if (hasExplicitMarkers) {
+      entries.push({ text: content, isNucleo: false });
+    } else {
+      entries.push({ text: content, isNucleo: false });
+    }
+  });
+
+  return entries
+    .map((e) => (e.isNucleo ? e.text : `• ${e.text}`))
+    .join('\n')
+    .trim();
+}
+
+function mergeNormalizedCurricoloTexts(existing: string, addition: string): string {
+  const a = existing.trim();
+  const b = addition.trim();
+  if (!a) return b;
+  if (!b) return a;
+  const aLines = a.split('\n');
+  const bLines = b.split('\n');
+  // Evita di ripetere lo stesso titolo di nucleo se identico nella prima riga di b
+  if (
+    aLines[0] &&
+    bLines[0] &&
+    !bLines[0].startsWith('•') &&
+    aLines[0].toLowerCase() === bLines[0].toLowerCase()
+  ) {
+    const restB = bLines.slice(1).join('\n').trim();
+    return restB ? `${a}\n${restB}` : a;
+  }
+  return `${a}\n${b}`;
+}
+
 function detectCurriculumRowsFromTables(tables: string[][][]): {
   rows: AbilitaConoscenzaRow[];
   matchedTableIndexes: Set<number>;
@@ -1173,8 +1355,7 @@ function detectCurriculumRowsFromTables(tables: string[][][]): {
         const single = cells[0].trim();
         if (
           /^tenuto conto della/i.test(single) ||
-          /^traguardi per lo sviluppo/i.test(single) ||
-          /^\(clicca sul link/i.test(single)
+          isCurricoloHeaderBoilerplateLine(single)
         ) {
           continue;
         }
@@ -1184,7 +1365,10 @@ function detectCurriculumRowsFromTables(tables: string[][][]): {
         }
         if (rows.length > 0) {
           const prev = rows[rows.length - 1];
-          prev.conoscenze = prev.conoscenze ? `${prev.conoscenze}\n${single}` : single;
+          const normSingle = normalizeImportedCurricoloCellText(single, prev.traguardo);
+          if (normSingle) {
+            prev.conoscenze = mergeNormalizedCurricoloTexts(prev.conoscenze, normSingle);
+          }
         }
         continue;
       }
@@ -1194,19 +1378,49 @@ function detectCurriculumRowsFromTables(tables: string[][][]): {
         pendingNucleo = '';
       }
 
+      const nucleoClean =
+        rawNucleo && !isPlaceholderValue(rawNucleo) ? rawNucleo.trim() : undefined;
+
       if (rawNucleo && !isPlaceholderValue(rawNucleo)) {
         rawComp = rawComp && !isPlaceholderValue(rawComp) ? `[${rawNucleo}] ${rawComp}` : rawNucleo;
       }
 
       const competenze = isPlaceholderValue(rawComp) ? '' : rawComp;
-      const abilita = isPlaceholderValue(rawAb) ? '' : rawAb;
-      const conoscenze = isPlaceholderValue(rawCon) ? '' : rawCon;
+      const abilita = normalizeImportedCurricoloCellText(rawAb, nucleoClean);
+      const conoscenze = normalizeImportedCurricoloCellText(rawCon, nucleoClean);
 
       if (!competenze && !abilita && !conoscenze) continue;
+
+      const prev = rows[rows.length - 1];
+      const sameNonEmptyNucleo =
+        Boolean(prev?.traguardo && nucleoClean) &&
+        prev.traguardo!.toLowerCase() === nucleoClean!.toLowerCase();
+      const prevUnfinishedOrOneSided =
+        Boolean(prev) &&
+        !nucleoClean &&
+        !competenze &&
+        ((prev.abilita.trim().length > 0 && !/[.!?;:]$/.test(prev.abilita.trim())) ||
+          (prev.conoscenze.trim().length > 0 && !/[.!?;:]$/.test(prev.conoscenze.trim())) ||
+          !abilita ||
+          !conoscenze);
+
+      if (prev && (sameNonEmptyNucleo || prevUnfinishedOrOneSided)) {
+        if (abilita) {
+          prev.abilita = mergeNormalizedCurricoloTexts(prev.abilita, abilita);
+        }
+        if (conoscenze) {
+          prev.conoscenze = mergeNormalizedCurricoloTexts(prev.conoscenze, conoscenze);
+        }
+        if (competenze && !prev.competenze) {
+          prev.competenze = competenze;
+        }
+        continue;
+      }
+
       rows.push({
         id: makeId('imp-row'),
         competenze: competenze || undefined,
-        traguardo: rawNucleo && !isPlaceholderValue(rawNucleo) ? rawNucleo : undefined,
+        traguardo: nucleoClean,
         abilita,
         conoscenze,
       });
@@ -1350,7 +1564,16 @@ function detectCurriculumRowsFromLines(
     }
   }
 
-  if (rows.length > 0) return { rows, detectedIndicazioni };
+  if (rows.length > 0) {
+    return {
+      rows: rows.map((row) => ({
+        ...row,
+        abilita: normalizeImportedCurricoloCellText(row.abilita, row.traguardo),
+        conoscenze: normalizeImportedCurricoloCellText(row.conoscenze, row.traguardo),
+      })),
+      detectedIndicazioni,
+    };
+  }
 
   const competenzeBuf: string[] = [];
   const abilitaBuf: string[] = [];
@@ -1390,7 +1613,7 @@ function detectCurriculumRowsFromLines(
     if (
       activeCol &&
       !/^tenuto conto della/i.test(lower) &&
-      !/^\(clicca sul link/i.test(lower) &&
+      !isCurricoloHeaderBoilerplateLine(line) &&
       !isPlaceholderValue(line) &&
       line.length > 3
     ) {
@@ -1404,12 +1627,38 @@ function detectCurriculumRowsFromLines(
     rows.push({
       id: makeId('imp-row'),
       competenze: competenzeBuf.join('\n'),
-      abilita: abilitaBuf.join('\n'),
-      conoscenze: conoscenzeBuf.join('\n'),
+      abilita: normalizeImportedCurricoloCellText(abilitaBuf.join('\n')),
+      conoscenze: normalizeImportedCurricoloCellText(conoscenzeBuf.join('\n')),
     });
   }
 
   return { rows, detectedIndicazioni };
+}
+
+function isValidDocenteCandidate(raw: string): boolean {
+  const cleaned = stripLeadingUnderscores(raw.replace(/[_\n|].*$/, '').trim());
+  if (!cleaned || isPlaceholderValue(cleaned)) return false;
+  const stripped = stripDocenteTitoli(cleaned);
+  if (!stripped || stripped.length < 3 || stripped.length > 55) return false;
+  if (
+    /\b(?:si\s+riserva|riserva\s+di|utilizzare|funzionalit[àa]|google|classroom|gsuite|meet|piattaforma|didattica|digitale|integrata|valutazione|metodologia|curricolo|docente|firma|alunn[io]|class[ei]|programmazione|piano|istituto|comprensivo|verific[ah]|strument[io]|material[ei]|attivit[àa]|potr[àa]|dovr[àa]|deve|hanno|essere|secondo|qualora|mediante|attraverso|presente|allegato)\b/i.test(
+      stripped
+    )
+  ) {
+    return false;
+  }
+  const tokens = stripped.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0 || tokens.length > 5) return false;
+  if (
+    /^(?:si|ci|vi|mi|ti|li|le|lo|la|il|un|una|per|con|su|tra|fra|da|di|a|in|che|non|nel|sul)\b/.test(
+      stripped
+    )
+  ) {
+    return false;
+  }
+  const upperCount = tokens.filter((t) => /^[A-ZÀ-Ö]/.test(t)).length;
+  if (tokens.length >= 2 && upperCount === 0) return false;
+  return true;
 }
 
 function cleanExtractedAltroValue(raw: string): string {
@@ -1486,22 +1735,33 @@ export async function importProgrammazioneFromBuffer(
     /PLESSO(?:\s+DI\s*[:\-]?)?(?:\s*[:\-]\s*|\s+)([A-Za-zÀ-ÿ' ]{3,35}?)(?=\s*(?:\n|\||ANNO\b|CLASSE\b|DISCIPLINA\b|DOCENTE\b|$))/im
   );
   const scuolaMatch = fullText.match(/(?:^|\n|\|)\s*SCUOLA\s*[:\-]?\s+([^\n|]+)/im);
-  const docenteFieldMatch = fullText.match(/(?:^|\n|\|)\s*DOCENTE\s*[:\-]?\s+([^\n|]+)/im);
-  const signatureMatch = fullText.match(
-    /(?:^|\n)\s*(La\s+docente|Il\s+docente|Il\/La\s+Docente)\s*((?:Prof\.?\s*ssa|Prof\.?)?\s*[A-Za-zÀ-ÿ' ]{0,55})/im
-  );
+  const headAreaForDocente = fullText.slice(0, 2600);
+  const docenteFieldMatch =
+    headAreaForDocente.match(/(?:^|\n|\|)\s*DOCENTE\s*[:\-]\s*([^\n|]+)/im) ??
+    headAreaForDocente.match(
+      /(?:^|\n|\|)\s*DOCENTE\s+((?:Prof\.?\s*ssa|Prof\.?)?\s*[A-ZÀ-Ö][A-Za-zÀ-ÿ' .\-]{2,55})/m
+    );
+  const signatureMatches = [
+    ...fullText.matchAll(
+      /(?:^|\n)\s*(La\s+docente|Il\s+docente|Il\/La\s+Docente)\s*[:\-]?\s*(?:\n\s*)?((?:Prof\.?\s*ssa|Prof\.?)?\s*[A-Za-zÀ-ÿ' .]{0,60})/gim
+    ),
+  ];
 
   let docenteName = basePlan.datiGenerali.docente;
   let docenteGenere: DocenteGenere =
     basePlan.datiGenerali.docenteGenere ?? settings.defaultDocenteGenere ?? 'F';
 
   const applyDocenteCandidate = (rawField: string, hintText: string) => {
-    const cleaned = stripLeadingUnderscores(rawField.replace(/[_\n|].*$/, '').trim());
+    const isProseMatch = /\b(?:si\s+riserva|utilizzare|funzionalit[àa]|google|classroom)\b/i.test(
+      `${hintText} ${rawField}`
+    );
+    if (isProseMatch) return;
     if (!/il\s*\/\s*la\s+docente/i.test(hintText)) {
       if (/\bprof\.?\s*ssa\b|\bla\s+docente\b/i.test(hintText)) docenteGenere = 'F';
       else if (/\bprof\.?(?=\s|$)|\bil\s+docente\b/i.test(hintText)) docenteGenere = 'M';
     }
-    if (!isPlaceholderValue(cleaned)) {
+    const cleaned = stripLeadingUnderscores(rawField.replace(/[_\n|].*$/, '').trim());
+    if (isValidDocenteCandidate(cleaned)) {
       const stripped = stripDocenteTitoli(cleaned);
       if (stripped && stripped.length > 2) docenteName = stripped;
     }
@@ -1510,8 +1770,8 @@ export async function importProgrammazioneFromBuffer(
   if (docenteFieldMatch?.[1]) {
     applyDocenteCandidate(docenteFieldMatch[1], docenteFieldMatch[0]);
   }
-  if (signatureMatch) {
-    applyDocenteCandidate(signatureMatch[2] || '', signatureMatch[0]);
+  for (const sigMatch of signatureMatches) {
+    applyDocenteCandidate(sigMatch[2] || '', sigMatch[0]);
   }
 
   if (disciplina) {
@@ -2049,48 +2309,42 @@ export async function importProgrammazioneFromBuffer(
   }
 
   // 5. Traguardi, Competenze attese/digitali & Tabella / Programma Curricolo
+  const curricoloTableOrNextSectionStops: RegExp[] = [
+    /Voci dal Curricolo Verticale/i,
+    /Tenuto conto della eterogeneit/i,
+    /Tenuto conto delle Indicazioni/i,
+    /(?:^|\n)\s*\|?\s*(?:COMPETENZE\b[^|\n]*\|[^|\n]*(?:ABILIT|OBIETTIV|CONOSCENZ)|(?:ABILIT[ÀA']|OBIETTIVI)(?:\s+SPECIFICI)?\s*(?:\||$))/im,
+    /(?:^|\n)\s*Attivit[àa]['’]?\s+programmate\s*:?/im,
+    /(?:^|\n)\s*CRITERI METODOLOGICI\b/im,
+    /(?:^|\n)\s*DIDATTICA DIGITALE INTEGRATA\b/im,
+    /(?:^|\n)\s*(?:CRITERI\s+DI\s+)?VALUTAZIONE\b/im,
+  ];
+
   const traguardiBlock = extractSectionSlice(
     fullText,
-    /TRAGUARDI PER LO SVILUPPO DELLE COMPETENZE(?:\s+IN\s+RELAZIONE[^\n]*)?(?:\s*\(clicca sul link[^)]*\))?/i,
-    [
-      /Voci dal Curricolo Verticale/i,
-      /Tenuto conto della eterogeneit/i,
-      /Tenuto conto delle Indicazioni/i,
-      /^\s*(?:COMPETENZE\b|ABILIT[ÀA']\b|OBIETTIVI\b)\s*(?:\||$)/im,
-      /^\s*Attivit[àa]\s+programmate\s*:/im,
-    ]
+    /TRAGUARDI PER LO SVILUPPO DELLE COMPETENZE(?:\s+IN\s+RELAZIONE(?:\s+AL)?(?:\s+CURRICOLO)?(?:\s+VERTICALE(?:\s+DEL\s+NOSTRO\s+ISTITUTO)?)?)?(?:\s*\(clicca sul link[^)]*\))?/is,
+    curricoloTableOrNextSectionStops
   );
 
   const compAttSlice =
     extractSectionSlice(traguardiBlock, /(?:Traguardi e competenze attese|Competenze)\s*:/i, [
       /Competenze digitali/i,
-      /Voci dal Curricolo Verticale/i,
-      /Tenuto conto/i,
+      ...curricoloTableOrNextSectionStops,
     ]) ||
     extractSectionSlice(fullText, /Traguardi e competenze attese\s*:/i, [
       /Competenze digitali/i,
-      /Voci dal Curricolo Verticale/i,
-      /Tenuto conto della eterogeneit/i,
-      /(?:^|\n)\s*(?:COMPETENZE\b|ABILIT[ÀA']\b|OBIETTIVI\b)/i,
+      ...curricoloTableOrNextSectionStops,
     ]);
   const compLinesSource = compAttSlice
     ? compAttSlice
     : traguardiBlock
     ? extractSectionSlice(`__START__\n${traguardiBlock}`, /^__START__\s*/i, [
         /Competenze digitali/i,
+        ...curricoloTableOrNextSectionStops,
       ])
     : '';
   if (compLinesSource) {
-    const extractedComp = compLinesSource
-      .split('\n')
-      .map((l) => l.replace(/^[•\-\*]\s*/, '').trim())
-      .filter(
-        (l) =>
-          l.length > 3 &&
-          !isPlaceholderValue(l) &&
-          !/^nessuna competenza/i.test(l) &&
-          !/^(?:in relazione al|curricolo verticale del nostro istituto|\(clicca sul link)/i.test(l)
-      );
+    const extractedComp = extractBulletedItemsFromWrappedLines(compLinesSource);
     if (extractedComp.length > 0) {
       basePlan.curricolo.competenzeAttese = extractedComp;
       recordRecognized(
@@ -2105,23 +2359,10 @@ export async function importProgrammazioneFromBuffer(
   const compDigSlice = extractSectionSlice(
     traguardiBlock || fullText,
     /Competenze digitali\s*(?:\([^)]*\))?[^:\n]*:/i,
-    [
-      /Voci dal Curricolo Verticale/i,
-      /Tenuto conto della eterogeneit/i,
-      /Tenuto conto delle Indicazioni/i,
-      /(?:^|\n)\s*(?:COMPETENZE\b|ABILIT[ÀA']\b|OBIETTIVI\b)/i,
-    ]
+    curricoloTableOrNextSectionStops
   );
   if (compDigSlice) {
-    const extractedDig = compDigSlice
-      .split('\n')
-      .map((l) => l.replace(/^[•\-\*]\s*/, '').trim())
-      .filter(
-        (l) =>
-          l.length > 3 &&
-          !isPlaceholderValue(l) &&
-          !/^nessuna competenza/i.test(l)
-      );
+    const extractedDig = extractBulletedItemsFromWrappedLines(compDigSlice);
     if (extractedDig.length > 0) {
       basePlan.curricolo.competenzeDigitali = extractedDig;
       recordRecognized(
@@ -2285,7 +2526,7 @@ export async function importProgrammazioneFromBuffer(
     /^strategie ed interventi|^strategie da utilizzare/i,
     /^gruppi di livello|^potenziamento|^consolidamento|^recupero/i,
     /^alunni con bes/i,
-    /^traguardi per lo sviluppo|^in relazione al curricolo verticale|^curricolo verticale del nostro istituto|^tenuto conto|^nessuna competenza|^\(clicca sul link/i,
+    /^traguardi per lo sviluppo|^in relazione al curricolo verticale|^(?:curricolo\s+)?verticale del nostro istituto|^tenuto conto|^nessuna competenza|^\(?clicca sul link/i,
     /^competenze(?:\s+digitali)?\s*:?$|^abilit(?:à|a['’]?)\b|^obiettivi\b|^conoscenze\b|^attivit(?:à|a['’]?)\s+programmate/i,
     /^criteri metodologici|^metodi\b|^mezzi e strumenti|^ausili didattici|^\(libri di testo|^didattica digitale|^altre metodologie|^altri sussidi/i,
     /^verifiche in itinere|^scritta\b|^orale\b|^altri tipi di prove/i,

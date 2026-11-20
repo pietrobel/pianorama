@@ -78,7 +78,7 @@ export function WelcomePrivacyModal({
                 <strong>Mascheramento rapido a schermo:</strong> nella scheda fasce puoi attivare in qualsiasi momento la vista anonima (<em>Alunno 1, Alunno 2...</em>).
               </li>
               <li>
-                <strong>Nei documenti ufficiali DOCX e PDF:</strong> l’esportazione per la scuola include esclusivamente conteggi numerici aggregati (<em>Composizione della classe</em> e <em>Livelli di partenza</em>) e misure didattiche generali, senza mai esporre nominativi né note sensibili individuali.
+                <strong>Nei documenti ufficiali DOCX e PDF:</strong> lavorando offline in locale, nella tabella <em>Livelli di partenza</em> possono comparire i soli nominativi degli alunni mantenuti o inseriti nelle fasce (oppure soli conteggi aggregati scegliendo la modalità anonima). Medie dei voti, categorie BES/DSA/PEI e annotazioni sensibili individuali restano invece sempre riservate e non vengono mai esportate.
               </li>
             </ul>
           </div>

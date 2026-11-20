@@ -249,6 +249,13 @@ export function restoreAutomaticFasce(
   });
 }
 
+export function removeStudentFromFasce(
+  entries: AnonymousStudentBandEntry[],
+  studentId: string
+): AnonymousStudentBandEntry[] {
+  return entries.filter((entry) => entry.id !== studentId);
+}
+
 export function createManualStudentEntry(
   existingEntries: AnonymousStudentBandEntry[],
   data: {

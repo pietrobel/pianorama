@@ -287,11 +287,21 @@ export function PlanEditorPage({
     });
   };
 
-  const handleImportCatalogEntries = (selectedEntries: CurricoloCatalogEntry[]) => {
+  const handleImportCatalogEntries = (
+    selectedEntries: CurricoloCatalogEntry[],
+    usedIndicazioni?: IndicazioniVersion
+  ) => {
     const newVoices = importCatalogEntriesToVoices(selectedEntries);
     const crossClassCount = newVoices.filter(
       (v) => v.classeOrigine !== draft.datiGenerali.classe
     ).length;
+    const resolvedIndicazioni =
+      usedIndicazioni ??
+      draft.curricolo.indicazioniVersione ??
+      getDefaultIndicazioniForClasseAndYear(
+        draft.datiGenerali.classe,
+        draft.datiGenerali.annoScolastico
+      );
     setDraft((prev) => {
       const nextCompetenze = extractCompetenzeFromCatalogVoices(
         newVoices,
@@ -300,12 +310,13 @@ export function PlanEditorPage({
       const nextRows = buildProgramRowsFromCatalogVoices(
         newVoices,
         prev.curricolo.righeAbilitaConoscenze,
-        { indicazioniVersione: prev.curricolo.indicazioniVersione }
+        { indicazioniVersione: resolvedIndicazioni }
       );
       return {
         ...prev,
         curricolo: {
           ...prev.curricolo,
+          indicazioniVersione: resolvedIndicazioni,
           competenzeAttese: nextCompetenze,
           vociCatalogoImportate: [...(prev.curricolo.vociCatalogoImportate ?? []), ...newVoices],
           righeAbilitaConoscenze: nextRows,
@@ -315,7 +326,7 @@ export function PlanEditorPage({
             id: crypto.randomUUID(),
             timestamp: new Date().toISOString(),
             evento: 'Importazione da Curricolo Verticale',
-            dettaglio: `Importate ${newVoices.length} voci dal catalogo locale (${
+            dettaglio: `Importate ${newVoices.length} voci dalla scheda curricolo (${
               crossClassCount > 0 ? `${crossClassCount} da altra classe` : `Classe ${draft.datiGenerali.classe}`
             }): competenze aggiunte dopo i Traguardi e programma raggruppato nella tabella a 2 colonne.`,
           },
@@ -325,8 +336,8 @@ export function PlanEditorPage({
     });
     setCatalogImportError(null);
     setCatalogImportFeedback(
-      `Importate ${newVoices.length} voci dal catalogo curricolare: competenze inserite dopo i Traguardi e contenuti raggruppati per nucleo nella tabella a 2 colonne (${
-        draft.curricolo.indicazioniVersione === 'nuove' ? 'Obiettivi' : 'Abilità'
+      `Importate ${newVoices.length} voci dalla scheda curricolare: competenze inserite dopo i Traguardi e contenuti raggruppati per nucleo nella tabella a 2 colonne (${
+        resolvedIndicazioni === 'nuove' ? 'Obiettivi' : 'Abilità'
       }, Conoscenze).`
     );
   };
@@ -1208,7 +1219,7 @@ export function PlanEditorPage({
                       {formatFirmaDocente(
                         draft.verificheValutazione.firmaDocente || draft.datiGenerali.docente,
                         draft.datiGenerali.docenteGenere ?? settings.defaultDocenteGenere ?? 'F'
-                      )}
+                      ).replace(/\n/g, ' / ')}
                     </strong>
                   </span>
                 </label>
@@ -1459,13 +1470,13 @@ export function PlanEditorPage({
                     },
                   }))
                 }
-                onApplyGeneratedDescription={(text, mode) =>
+                onApplyGeneratedDescription={(text, mode, nextQuestionnaire) =>
                   setDraft((prev) => ({
                     ...prev,
                     analisiPartenza: {
                       ...prev.analisiPartenza,
                       descrizioneDisciplinare: text,
-                      questionario: {
+                      questionario: nextQuestionnaire ?? {
                         ...(prev.analisiPartenza.questionario ?? {
                           risposte: {},
                           modalitaGenerazione: mode,
@@ -1690,8 +1701,16 @@ export function PlanEditorPage({
                           ...prev.analisiPartenza,
                           alunniAnonimiFasce: nextEntries,
                           livelli: nextLivelli,
+                          registroClasseRilevata:
+                            nextEntries.length === 0
+                              ? undefined
+                              : prev.analisiPartenza.registroClasseRilevata,
                         },
                       }));
+                      if (nextEntries.length === 0) {
+                        setGradebookStatus(null);
+                        setGradebookError(null);
+                      }
                     }}
                     onSyncComposizione={(totaleAlunni, totaleBes, totaleDisabilita = 0) => {
                       setDraft((prev) => ({
@@ -2987,8 +3006,8 @@ export function PlanEditorPage({
                     className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
                   />
                   <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
-                    Anteprima firma:{' '}
-                    <strong className="text-slate-700 dark:text-slate-200">
+                    Anteprima firma in calce:
+                    <strong className="mt-0.5 block whitespace-pre-line text-right text-slate-700 dark:text-slate-200">
                       {formatFirmaDocente(
                         draft.verificheValutazione.firmaDocente || draft.datiGenerali.docente,
                         draft.datiGenerali.docenteGenere ?? settings.defaultDocenteGenere ?? 'F'

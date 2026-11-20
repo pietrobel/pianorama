@@ -17,6 +17,7 @@ import type {
   DocumentLayoutStyle,
   LivelliPartenza,
 } from '../domain/types';
+import { sortAndCleanStudentNamesForBands } from '../engine/classCharacteristicsEngine';
 
 export interface LivelliTableExportInput {
   livelli: LivelliPartenza;
@@ -57,25 +58,13 @@ export function buildLivelliTableColumns(
   hasAnyNames: boolean;
   totalNamedExported: number;
 } {
-  const bands: Record<FourBandKey, string[]> = {
-    basso: [],
-    medio_basso: [],
-    medio: [],
-    alto: [],
-  };
-  let hasAnyNames = false;
-  let totalNamedExported = 0;
-
-  for (const entry of entries ?? []) {
-    const cleanName = (entry.nominativo ?? '').trim();
-    if (!cleanName) continue;
-    const key = entry.fasciaCorrente;
-    if (key === 'basso' || key === 'medio_basso' || key === 'medio' || key === 'alto') {
-      hasAnyNames = true;
-      totalNamedExported += 1;
-      bands[key].push(cleanName);
-    }
-  }
+  const bands = sortAndCleanStudentNamesForBands(entries ?? []);
+  const totalNamedExported =
+    bands.basso.length +
+    bands.medio_basso.length +
+    bands.medio.length +
+    bands.alto.length;
+  const hasAnyNames = totalNamedExported > 0;
 
   const columns: BandColumnSpec[] = [
     {

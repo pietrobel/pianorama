@@ -1,14 +1,26 @@
-import { BookMarked, CheckSquare, ChevronDown, ChevronRight, Info, Square, X } from 'lucide-react';
+import {
+  BookMarked,
+  CalendarPlus,
+  Check,
+  CheckSquare,
+  Plus,
+  Square,
+  X,
+} from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { DISCIPLINE_SECONDARIA } from '../domain/defaults';
-import type { ClasseSecondaria, CurricoloCatalogEntry, IndicazioniVersion } from '../domain/types';
+import type {
+  ClasseSecondaria,
+  CurricoloCatalogEntry,
+  CurricoloVoiceType,
+  IndicazioniVersion,
+} from '../domain/types';
 import {
-  INDICAZIONI_LABELS,
-  computePreselectedCatalogIds,
-  filterCatalogEntries,
+  buildCurriculumSheetModel,
   getDefaultIndicazioniForClasseAndYear,
-  groupCatalogEntries,
-  type CurricoloTypeGroup,
+  INDICAZIONI_LABELS,
+  resolveCatalogEntriesForCurriculum,
+  resolveOtherClassesEntriesForCurriculum,
 } from '../engine/curricoloCatalogEngine';
 
 interface CurricoloCatalogSelectorProps {
@@ -20,7 +32,10 @@ interface CurricoloCatalogSelectorProps {
   planDisciplina: string;
   planConoscenze?: string[];
   onChangePlanIndicazioni?: (next: IndicazioniVersion) => void;
-  onImport: (selectedEntries: CurricoloCatalogEntry[]) => void;
+  onImport: (
+    selectedEntries: CurricoloCatalogEntry[],
+    usedIndicazioni?: IndicazioniVersion
+  ) => void;
   onClose: () => void;
 }
 
@@ -61,7 +76,6 @@ export function CurricoloCatalogSelector({
   planAnnoScolastico,
   planIndicazioni,
   planDisciplina,
-  planConoscenze = [],
   onChangePlanIndicazioni,
   onImport,
   onClose,
@@ -74,9 +88,33 @@ export function CurricoloCatalogSelector({
     () => planIndicazioni ?? getDefaultIndicazioniForClasseAndYear(planClasse, planAnnoScolastico)
   );
   const [manualIndicazioniOverride, setManualIndicazioniOverride] = useState<boolean>(false);
+
+  // Voci selezionate nella scheda (di default TUTTE selezionate)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [otherClassesExpanded, setOtherClassesExpanded] = useState<boolean>(false);
-  const [contentSourceMode, setContentSourceMode] = useState<'piano' | 'catalogo'>('piano');
+
+  // Voci aggiunte manualmente dentro la scheda ("Aggiungi") o importate da altri anni
+  const [customEntries, setCustomEntries] = useState<CurricoloCatalogEntry[]>([]);
+  const [extraYearEntries, setExtraYearEntries] = useState<CurricoloCatalogEntry[]>([]);
+
+  // Controllo apertura cassetto "Aggiungi da altri anni"
+  const [showOtherYearsDrawer, setShowOtherYearsDrawer] = useState<boolean>(false);
+  const [activeOtherClasse, setActiveOtherClasse] = useState<ClasseSecondaria | null>(null);
+
+  // Form inline per il tasto "Aggiungi"
+  const [addingCompOpen, setAddingCompOpen] = useState<boolean>(false);
+  const [newCompText, setNewCompText] = useState<string>('');
+
+  const [addingCellTarget, setAddingCellTarget] = useState<{
+    nucleoKey: string;
+    nucleoTematico: string;
+    side: 'left' | 'right';
+  } | null>(null);
+  const [newCellItemText, setNewCellItemText] = useState<string>('');
+
+  const [addingNucleoOpen, setAddingNucleoOpen] = useState<boolean>(false);
+  const [newNucleoName, setNewNucleoName] = useState<string>('');
+  const [newNucleoLeftText, setNewNucleoLeftText] = useState<string>('');
+  const [newNucleoRightText, setNewNucleoRightText] = useState<string>('');
 
   const recommendedIndicazioni = useMemo(
     () => getDefaultIndicazioniForClasseAndYear(selectedClasse, planAnnoScolastico),
@@ -94,95 +132,45 @@ export function CurricoloCatalogSelector({
     return base;
   }, [catalog, planDisciplina]);
 
-  const targetEntries = useMemo(() => {
-    const filtered = filterCatalogEntries(
-      catalog,
-      selectedClasse,
-      selectedDisciplina,
-      selectedIndicazioni
-    );
-    if (selectedIndicazioni === 'vecchie') {
-      const allClassDisc = filterCatalogEntries(catalog, selectedClasse, selectedDisciplina);
-      const additions: CurricoloCatalogEntry[] = [];
-      if (!filtered.some((e) => e.tipo === 'competenza')) {
-        additions.push(...allClassDisc.filter((e) => e.tipo === 'competenza'));
-      }
-      if (!filtered.some((e) => e.tipo === 'conoscenza')) {
-        additions.push(...allClassDisc.filter((e) => e.tipo === 'conoscenza'));
-      }
-      if (!filtered.some((e) => e.tipo === 'abilita')) {
-        additions.push(...allClassDisc.filter((e) => e.tipo === 'abilita'));
-      }
-      return [...additions, ...filtered];
-    }
-    return filtered;
-  }, [catalog, selectedClasse, selectedDisciplina, selectedIndicazioni]);
+  // Voci base del catalogo per classe, disciplina e curricolo selezionato
+  const baseEntries = useMemo(
+    () =>
+      resolveCatalogEntriesForCurriculum(
+        catalog,
+        selectedClasse,
+        selectedDisciplina,
+        selectedIndicazioni
+      ),
+    [catalog, selectedClasse, selectedDisciplina, selectedIndicazioni]
+  );
+
+  // Voci delle altre classi riferite SEMPRE allo stesso curricolo selezionato (selectedIndicazioni)
+  const otherYearsBuckets = useMemo(
+    () =>
+      resolveOtherClassesEntriesForCurriculum(
+        catalog,
+        selectedClasse,
+        selectedDisciplina,
+        selectedIndicazioni
+      ),
+    [catalog, selectedClasse, selectedDisciplina, selectedIndicazioni]
+  );
 
   const alternateIndicazioni: IndicazioniVersion =
     selectedIndicazioni === 'nuove' ? 'vecchie' : 'nuove';
 
   const alternateTargetCount = useMemo(
     () =>
-      filterCatalogEntries(catalog, selectedClasse, selectedDisciplina, alternateIndicazioni).length,
+      resolveCatalogEntriesForCurriculum(
+        catalog,
+        selectedClasse,
+        selectedDisciplina,
+        alternateIndicazioni
+      ).length,
     [catalog, selectedClasse, selectedDisciplina, alternateIndicazioni]
   );
 
-  const otherClassesData = useMemo(() => {
-    const otherClasses = CLASSI_SECONDARIA.filter((c) => c !== selectedClasse);
-    return otherClasses
-      .map((cls) => {
-        const entries = filterCatalogEntries(
-          catalog,
-          cls,
-          selectedDisciplina,
-          selectedIndicazioni
-        );
-        return {
-          classe: cls,
-          entries,
-          ids: entries.map((e) => e.id),
-          grouped: groupCatalogEntries(entries),
-        };
-      })
-      .filter((bucket) => bucket.entries.length > 0);
-  }, [catalog, selectedClasse, selectedDisciplina, selectedIndicazioni]);
-
-  const allDisciplineEntries = useMemo(
-    () => [...targetEntries, ...otherClassesData.flatMap((b) => b.entries)],
-    [targetEntries, otherClassesData]
-  );
-
-  const targetGrouped = useMemo(() => groupCatalogEntries(targetEntries), [targetEntries]);
-
-  const hasCompetenzeOrObiettivi = useMemo(
-    () => targetEntries.some((e) => e.tipo === 'competenza' || e.tipo === 'obiettivo_specifico'),
-    [targetEntries]
-  );
-
-  const hasPlanContentsForCurrentSelection =
-    selectedClasse === planClasse &&
-    selectedDisciplina.toLowerCase() === planDisciplina.toLowerCase() &&
-    planConoscenze.some((c) => c.trim().length > 0);
-
-  const preselectionResult = useMemo(
-    () =>
-      computePreselectedCatalogIds(
-        targetEntries,
-        selectedClasse,
-        hasPlanContentsForCurrentSelection && contentSourceMode === 'piano'
-          ? planConoscenze
-          : []
-      ),
-    [
-      targetEntries,
-      selectedClasse,
-      hasPlanContentsForCurrentSelection,
-      contentSourceMode,
-      planConoscenze,
-    ]
-  );
-
-  // All'apertura sincronizza classe/disciplina/indicazioni della programmazione corrente e chiude "Da altre classi"
+  // Sincronizzazione all'apertura della scheda
   useEffect(() => {
     if (!open) return;
     setSelectedClasse(planClasse);
@@ -191,15 +179,85 @@ export function CurricoloCatalogSelector({
       planIndicazioni ?? getDefaultIndicazioniForClasseAndYear(planClasse, planAnnoScolastico)
     );
     setManualIndicazioniOverride(false);
-    setOtherClassesExpanded(false);
-    setContentSourceMode('piano');
+    setShowOtherYearsDrawer(false);
+    setAddingCompOpen(false);
+    setAddingCellTarget(null);
+    setAddingNucleoOpen(false);
   }, [open, planClasse, planDisciplina, planIndicazioni, planAnnoScolastico]);
 
-  // Alla scelta di disciplina, classe e versione Indicazioni: preseleziona coerentemente le voci della classe
+  // Al cambio di classe, disciplina o curricolo: carica tutte le voci già preselezionate e azzera aggiunte temporanee incompatibili
   useEffect(() => {
     if (!open) return;
-    setSelectedIds(new Set(preselectionResult.selectedIds));
-  }, [open, preselectionResult]);
+    setCustomEntries([]);
+    setExtraYearEntries([]);
+    setSelectedIds(new Set(baseEntries.map((e) => e.id)));
+    setAddingCellTarget(null);
+    setAddingCompOpen(false);
+    setAddingNucleoOpen(false);
+  }, [open, baseEntries]);
+
+  // Aggiorna tab attiva di "altri anni" se cambia la classe principale
+  useEffect(() => {
+    if (otherYearsBuckets.length === 0) {
+      setActiveOtherClasse(null);
+      return;
+    }
+    if (!activeOtherClasse || !otherYearsBuckets.some((b) => b.classe === activeOtherClasse)) {
+      setActiveOtherClasse(otherYearsBuckets[0].classe);
+    }
+  }, [otherYearsBuckets, activeOtherClasse]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [open, onClose]);
+
+  const sheetEntries = useMemo(() => {
+    const byId = new Map<string, CurricoloCatalogEntry>();
+    for (const item of [...baseEntries, ...extraYearEntries, ...customEntries]) {
+      byId.set(item.id, item);
+    }
+    return Array.from(byId.values());
+  }, [baseEntries, extraYearEntries, customEntries]);
+
+  const sheetModel = useMemo(
+    () => buildCurriculumSheetModel(sheetEntries, selectedDisciplina, selectedIndicazioni),
+    [sheetEntries, selectedDisciplina, selectedIndicazioni]
+  );
+
+  const otherActiveBucket = useMemo(
+    () => otherYearsBuckets.find((b) => b.classe === activeOtherClasse) ?? otherYearsBuckets[0] ?? null,
+    [otherYearsBuckets, activeOtherClasse]
+  );
+
+  const otherBucketModel = useMemo(() => {
+    if (!otherActiveBucket) return null;
+    return buildCurriculumSheetModel(
+      otherActiveBucket.entries,
+      selectedDisciplina,
+      selectedIndicazioni
+    );
+  }, [otherActiveBucket, selectedDisciplina, selectedIndicazioni]);
+
+  if (!open) return null;
+
+  const leftVoiceType: CurricoloVoiceType =
+    selectedIndicazioni === 'nuove' ? 'obiettivo_specifico' : 'abilita';
+
+  const sheetIdsSet = new Set(sheetEntries.map((e) => e.id));
+  const selectedCount = sheetEntries.filter((e) => selectedIds.has(e.id)).length;
+  const totalCount = sheetEntries.length;
+
+  const compIds = sheetModel.competenze.map((c) => c.id);
+  const compSelectedCount = compIds.filter((id) => selectedIds.has(id)).length;
+  const compAllSelected = compIds.length > 0 && compSelectedCount === compIds.length;
+  const compIndeterminate = compSelectedCount > 0 && compSelectedCount < compIds.length;
+
+  const extraYearsAddedIds = new Set(extraYearEntries.map((e) => e.id));
 
   const handleSelectClasse = (nextClasse: ClasseSecondaria) => {
     setSelectedClasse(nextClasse);
@@ -228,27 +286,14 @@ export function CurricoloCatalogSelector({
     }
   };
 
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
-  const totalCount = allDisciplineEntries.length;
-  const selectedCount = allDisciplineEntries.filter((e) => selectedIds.has(e.id)).length;
-  const targetSelectedCount = targetEntries.filter((e) => selectedIds.has(e.id)).length;
-  const otherSelectedCount = otherClassesData
-    .flatMap((b) => b.entries)
-    .filter((e) => selectedIds.has(e.id)).length;
-
-  const sourcesPresent = Array.from(
-    new Set(targetEntries.map((e) => e.documentoProvenienza).filter(Boolean))
-  );
+  const toggleItem = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const selectAllIds = (ids: string[]) => {
     setSelectedIds((prev) => {
@@ -266,186 +311,135 @@ export function CurricoloCatalogSelector({
     });
   };
 
-  const selectEntireList = () => {
-    setSelectedIds(new Set(allDisciplineEntries.map((e) => e.id)));
+  const toggleGroupIds = (ids: string[]) => {
+    const allSelected = ids.length > 0 && ids.every((id) => selectedIds.has(id));
+    if (allSelected) deselectAllIds(ids);
+    else selectAllIds(ids);
   };
 
-  const deselectEntireList = () => {
-    setSelectedIds(new Set());
+  const handleAddCustomCompetenza = () => {
+    const text = newCompText.trim();
+    if (!text) return;
+    const entry: CurricoloCatalogEntry = {
+      id: `custom-comp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      classe: selectedClasse,
+      disciplina: selectedDisciplina,
+      tipo: 'competenza',
+      nucleoTematico: 'Competenze disciplinari',
+      testo: text,
+      documentoProvenienza:
+        selectedIndicazioni === 'nuove'
+          ? 'Aggiunta docente (Nuove Indicazioni)'
+          : 'Aggiunta docente (Vecchie Indicazioni)',
+    };
+    setCustomEntries((prev) => [...prev, entry]);
+    setSelectedIds((prev) => new Set(prev).add(entry.id));
+    setNewCompText('');
+    setAddingCompOpen(false);
   };
 
-  const toggleItem = (id: string) => {
+  const handleAddCustomCellItem = () => {
+    if (!addingCellTarget) return;
+    const text = newCellItemText.trim();
+    if (!text) return;
+    const tipo: CurricoloVoiceType =
+      addingCellTarget.side === 'left' ? leftVoiceType : 'conoscenza';
+    const entry: CurricoloCatalogEntry = {
+      id: `custom-cell-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      classe: selectedClasse,
+      disciplina: selectedDisciplina,
+      tipo,
+      nucleoTematico: addingCellTarget.nucleoTematico,
+      testo: text,
+      documentoProvenienza:
+        selectedIndicazioni === 'nuove'
+          ? 'Aggiunta docente (Nuove Indicazioni)'
+          : 'Aggiunta docente (Vecchie Indicazioni)',
+    };
+    setCustomEntries((prev) => [...prev, entry]);
+    setSelectedIds((prev) => new Set(prev).add(entry.id));
+    setNewCellItemText('');
+    setAddingCellTarget(null);
+  };
+
+  const handleAddCustomNucleo = () => {
+    const nucleo = newNucleoName.trim();
+    const leftTxt = newNucleoLeftText.trim();
+    const rightTxt = newNucleoRightText.trim();
+    if (!nucleo || (!leftTxt && !rightTxt)) return;
+
+    const created: CurricoloCatalogEntry[] = [];
+    const docSource =
+      selectedIndicazioni === 'nuove'
+        ? 'Aggiunta docente (Nuove Indicazioni)'
+        : 'Aggiunta docente (Vecchie Indicazioni)';
+
+    if (leftTxt) {
+      created.push({
+        id: `custom-nuc-l-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        classe: selectedClasse,
+        disciplina: selectedDisciplina,
+        tipo: leftVoiceType,
+        nucleoTematico: nucleo,
+        testo: leftTxt,
+        documentoProvenienza: docSource,
+      });
+    }
+    if (rightTxt) {
+      created.push({
+        id: `custom-nuc-r-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        classe: selectedClasse,
+        disciplina: selectedDisciplina,
+        tipo: 'conoscenza',
+        nucleoTematico: nucleo,
+        testo: rightTxt,
+        documentoProvenienza: docSource,
+      });
+    }
+
+    setCustomEntries((prev) => [...prev, ...created]);
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      for (const c of created) next.add(c.id);
+      return next;
+    });
+    setNewNucleoName('');
+    setNewNucleoLeftText('');
+    setNewNucleoRightText('');
+    setAddingNucleoOpen(false);
+  };
+
+  const handleIncludeFromOtherYear = (items: CurricoloCatalogEntry[]) => {
+    if (items.length === 0) return;
+    setExtraYearEntries((prev) => {
+      const existing = new Set(prev.map((p) => p.id));
+      const additions = items.filter((it) => !existing.has(it.id) && !sheetIdsSet.has(it.id));
+      return [...prev, ...additions];
+    });
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const it of items) next.add(it.id);
       return next;
     });
   };
 
-  const toggleGroupIds = (ids: string[]) => {
-    const allSelected = ids.every((id) => selectedIds.has(id));
-    if (allSelected) {
-      deselectAllIds(ids);
-    } else {
-      selectAllIds(ids);
-    }
-  };
-
   const handleConfirmImport = () => {
-    const chosen = allDisciplineEntries.filter((e) => selectedIds.has(e.id));
+    const chosen = sheetEntries.filter((e) => selectedIds.has(e.id));
     if (chosen.length === 0) return;
-    onImport(chosen);
+    onImport(chosen, selectedIndicazioni);
     onClose();
   };
 
-  const renderGroupedSections = (
-    grouped: CurricoloTypeGroup[],
-    isCrossClass: boolean,
-    keyPrefix: string
-  ) =>
-    grouped.map((typeGroup) => {
-      const typeSelectedCount = typeGroup.allIds.filter((id) => selectedIds.has(id)).length;
-      const typeAllSelected =
-        typeGroup.allIds.length > 0 && typeSelectedCount === typeGroup.allIds.length;
-      const typeIndeterminate =
-        typeSelectedCount > 0 && typeSelectedCount < typeGroup.allIds.length;
-
-      return (
-        <section
-          key={`${keyPrefix}-${typeGroup.tipo}`}
-          className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
-        >
-          {/* Intestazione gruppo Tipo con controlli Seleziona tutti / Deseleziona tutti */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-[#1F3864]/5 px-4 py-2.5 dark:border-slate-800 dark:bg-blue-950/25">
-            <label className="flex cursor-pointer items-center gap-2.5">
-              <GroupCheckbox
-                checked={typeAllSelected}
-                indeterminate={typeIndeterminate}
-                onChange={() => toggleGroupIds(typeGroup.allIds)}
-                label={`Seleziona o deseleziona tutto il gruppo ${typeGroup.label}`}
-              />
-              <span className="text-xs font-bold uppercase tracking-wide text-[#1F3864] dark:text-blue-300">
-                {typeGroup.label}
-              </span>
-            </label>
-            <div className="flex items-center gap-3 text-xs">
-              <span className="font-medium tabular-nums text-slate-600 dark:text-slate-400">
-                {typeSelectedCount}/{typeGroup.allIds.length}
-              </span>
-              <button
-                type="button"
-                onClick={() => selectAllIds(typeGroup.allIds)}
-                className="font-semibold text-[#1F3864] hover:underline dark:text-blue-300"
-              >
-                Seleziona tutti
-              </button>
-              <button
-                type="button"
-                onClick={() => deselectAllIds(typeGroup.allIds)}
-                className="font-medium text-slate-600 hover:underline dark:text-slate-400"
-              >
-                Deseleziona tutti
-              </button>
-            </div>
-          </div>
-
-          {/* Sottogruppi per Nucleo Tematico */}
-          <div className="divide-y divide-slate-200 dark:divide-slate-800">
-            {typeGroup.nuclei.map((nucleoGroup) => {
-              const nucleoIds = nucleoGroup.entries.map((e) => e.id);
-              const nucleoSelectedCount = nucleoIds.filter((id) => selectedIds.has(id)).length;
-              const nucleoAllSelected =
-                nucleoIds.length > 0 && nucleoSelectedCount === nucleoIds.length;
-              const nucleoIndeterminate =
-                nucleoSelectedCount > 0 && nucleoSelectedCount < nucleoIds.length;
-
-              return (
-                <div key={`${keyPrefix}-${typeGroup.tipo}-${nucleoGroup.nucleoTematico}`} className="p-3.5">
-                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md bg-slate-50 px-2.5 py-1.5 dark:bg-slate-800/60">
-                    <label className="flex cursor-pointer items-center gap-2">
-                      <GroupCheckbox
-                        checked={nucleoAllSelected}
-                        indeterminate={nucleoIndeterminate}
-                        onChange={() => toggleGroupIds(nucleoIds)}
-                        label={`Seleziona o deseleziona nucleo ${nucleoGroup.nucleoTematico}`}
-                      />
-                      <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
-                        Nucleo: {nucleoGroup.nucleoTematico}
-                      </span>
-                    </label>
-                    <div className="flex items-center gap-2.5 text-[11px]">
-                      <span className="tabular-nums text-slate-500 dark:text-slate-400">
-                        {nucleoSelectedCount}/{nucleoIds.length}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => selectAllIds(nucleoIds)}
-                        className="font-semibold text-[#1F3864] hover:underline dark:text-blue-300"
-                      >
-                        Seleziona tutti
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => deselectAllIds(nucleoIds)}
-                        className="font-medium text-slate-600 hover:underline dark:text-slate-400"
-                      >
-                        Deseleziona tutti
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 pl-2 sm:pl-6">
-                    {nucleoGroup.entries.map((entry) => {
-                      const checked = selectedIds.has(entry.id);
-                      return (
-                        <label
-                          key={entry.id}
-                          className={`flex cursor-pointer items-start gap-2.5 rounded-lg border p-2.5 transition ${
-                            checked
-                              ? 'border-[#1F3864]/40 bg-blue-50/40 dark:border-blue-700/60 dark:bg-blue-950/20'
-                              : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800/40'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggleItem(entry.id)}
-                            className="mt-0.5 h-4 w-4 shrink-0 accent-[#1F3864]"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm leading-snug text-slate-800 dark:text-slate-100">
-                              {entry.testo}
-                            </p>
-                            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                              {isCrossClass
-                                ? `Provenienza: Classe ${entry.classe}`
-                                : `Classe ${entry.classe}`}{' '}
-                              · {entry.documentoProvenienza}
-                            </p>
-                          </div>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      );
-    });
-
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-xs sm:p-5"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/65 p-2 backdrop-blur-xs sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="curricolo-selector-title"
     >
-      <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+      <div className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+        {/* Intestazione Scheda */}
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-3.5 dark:border-slate-800">
           <div className="flex items-start gap-2.5">
             <BookMarked className="mt-0.5 h-5 w-5 shrink-0 text-[#1F3864] dark:text-blue-400" />
             <div>
@@ -453,28 +447,28 @@ export function CurricoloCatalogSelector({
                 id="curricolo-selector-title"
                 className="text-base font-bold text-slate-900 dark:text-slate-100"
               >
-                Catalogo Curricolo Verticale — Scuola Secondaria di I Grado
+                Scheda importazione curricolo — Anteprima tabella di output
               </h2>
               <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">
-                Catalogo precaricato da <code>curricolo_secondaria.json</code>.{' '}
-                {selectedClasse === 'Prima' && hasCompetenzeOrObiettivi
-                  ? 'Per la Classe Prima competenze e obiettivi (formulati al termine della Terza) sono preselezionati in funzione dei contenuti della classe.'
-                  : 'Le voci della classe e della versione di Indicazioni selezionate sono già spuntate; quelle delle altre classi sono disponibili in «Da altre classi».'}
+                Tutte le competenze,{' '}
+                {selectedIndicazioni === 'nuove' ? 'gli obiettivi specifici' : 'le abilità'} e le
+                conoscenze del curricolo selezionato sono già inserite e spuntate: deseleziona ciò
+                che non serve, aggiungi nuove voci o integra da altri anni.
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Chiudi catalogo curricolo"
+            aria-label="Chiudi scheda importazione curricolo"
             className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Selettori Disciplina / Classe / Indicazioni Nazionali e Barra Selezione globale */}
-        <div className="space-y-3 border-b border-slate-200 bg-slate-50 px-5 py-3.5 dark:border-slate-800 dark:bg-slate-950/60">
+        {/* Barra Selettori & Controlli */}
+        <div className="space-y-3 border-b border-slate-200 bg-slate-50 px-5 py-3 dark:border-slate-800 dark:bg-slate-950/60">
           <div className="grid gap-3 sm:grid-cols-3">
             <label className="block">
               <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
@@ -483,7 +477,7 @@ export function CurricoloCatalogSelector({
               <select
                 value={selectedDisciplina}
                 onChange={(e) => setSelectedDisciplina(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               >
                 {disciplineOptions.map((d) => (
                   <option key={d} value={d}>
@@ -495,17 +489,17 @@ export function CurricoloCatalogSelector({
 
             <label className="block">
               <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Classe di destinazione
+                Classe (anno curricolare)
               </span>
               <select
                 value={selectedClasse}
                 onChange={(e) => handleSelectClasse(e.target.value as ClasseSecondaria)}
-                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               >
                 {CLASSI_SECONDARIA.map((c) => (
                   <option key={c} value={c}>
                     Classe {c}
-                    {c === planClasse ? ' (classe corrente del piano)' : ''}
+                    {c === planClasse ? ' (classe del piano)' : ''}
                   </option>
                 ))}
               </select>
@@ -514,7 +508,7 @@ export function CurricoloCatalogSelector({
             <div>
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  Indicazioni Nazionali
+                  Curricolo di riferimento
                 </span>
                 {selectedIndicazioni !== recommendedIndicazioni && (
                   <button
@@ -530,149 +524,238 @@ export function CurricoloCatalogSelector({
                 aria-label="Indicazioni Nazionali"
                 value={selectedIndicazioni}
                 onChange={(e) => handleSelectIndicazioni(e.target.value as IndicazioniVersion)}
-                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               >
                 <option value="nuove">
-                  {INDICAZIONI_LABELS.nuove}
-                  {recommendedIndicazioni === 'nuove' ? ' (predefinite)' : ''}
+                  {INDICAZIONI_LABELS.nuove} (Obiettivi)
                 </option>
                 <option value="vecchie">
-                  {INDICAZIONI_LABELS.vecchie}
-                  {recommendedIndicazioni === 'vecchie' ? ' (predefinite)' : ''}
+                  {INDICAZIONI_LABELS.vecchie} (Abilità)
                 </option>
               </select>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2 text-xs">
               <span
                 aria-live="polite"
                 className="rounded-md border border-slate-300 bg-white px-2.5 py-1 font-semibold tabular-nums text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               >
-                {selectedCount} di {totalCount} selezionati
+                {selectedCount} di {totalCount} voci selezionate
               </span>
-              {otherSelectedCount > 0 && (
-                <span className="font-medium text-amber-800 dark:text-amber-300">
-                  ({targetSelectedCount} classe {selectedClasse} · {otherSelectedCount} da altre classi)
-                </span>
-              )}
-              {sourcesPresent.length > 0 && (
-                <span className="text-slate-600 dark:text-slate-400">
-                  Fonte: <strong className="font-semibold">{sourcesPresent.join(' · ')}</strong>
+              {extraYearEntries.length > 0 && (
+                <span className="rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 font-medium text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                  +{extraYearEntries.length} da altri anni ({INDICAZIONI_LABELS[selectedIndicazioni]})
                 </span>
               )}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {otherYearsBuckets.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowOtherYearsDrawer((v) => !v)}
+                  className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+                    showOtherYearsDrawer
+                      ? 'border-[#1F3864] bg-[#1F3864] text-white'
+                      : 'border-[#1F3864] bg-white text-[#1F3864] hover:bg-blue-50 dark:border-blue-400 dark:bg-slate-900 dark:text-blue-300 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <CalendarPlus className="h-3.5 w-3.5" />
+                  {showOtherYearsDrawer
+                    ? 'Chiudi aggiunta da altri anni'
+                    : `Aggiungi da altri anni (${INDICAZIONI_LABELS[selectedIndicazioni]})`}
+                </button>
+              )}
+
               <button
                 type="button"
-                onClick={selectEntireList}
+                onClick={() => selectAllIds(sheetEntries.map((e) => e.id))}
                 disabled={totalCount === 0 || selectedCount === totalCount}
-                className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
               >
                 <CheckSquare className="h-3.5 w-3.5" />
-                Seleziona tutti
+                Seleziona tutto
               </button>
               <button
                 type="button"
-                onClick={deselectEntireList}
+                onClick={() => setSelectedIds(new Set())}
                 disabled={selectedCount === 0}
-                className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
               >
                 <Square className="h-3.5 w-3.5" />
-                Deseleziona tutti
+                Deseleziona tutto
               </button>
             </div>
           </div>
         </div>
 
-        {/* Lista classe di destinazione + sezione espandibile "Da altre classi" */}
+        {/* Corpo Scheda */}
         <div className="flex-1 space-y-5 overflow-y-auto p-5">
-          {/* Classe di destinazione */}
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-sm font-bold text-[#1F3864] dark:text-blue-300">
-                Classe di destinazione: Classe {selectedClasse} ({targetSelectedCount} di{' '}
-                {targetEntries.length} selezionati)
-              </h3>
-              {targetEntries.length > 0 && (
-                <div className="flex flex-wrap items-center gap-3 text-xs">
-                  {selectedClasse === 'Prima' && hasCompetenzeOrObiettivi && (
-                    <button
-                      type="button"
-                      onClick={() => setSelectedIds(new Set(preselectionResult.selectedIds))}
-                      className="font-semibold text-emerald-700 hover:underline dark:text-emerald-400"
-                    >
-                      Preseleziona per contenuti Prima ({preselectionResult.selectedIds.size})
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => selectAllIds(targetEntries.map((e) => e.id))}
-                    className="font-semibold text-[#1F3864] hover:underline dark:text-blue-300"
-                  >
-                    Seleziona tutti ({selectedClasse})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => deselectAllIds(targetEntries.map((e) => e.id))}
-                    className="font-medium text-slate-600 hover:underline dark:text-slate-400"
-                  >
-                    Deseleziona tutti ({selectedClasse})
-                  </button>
+          {/* Cassetto opzionale: Aggiungi da altri anni (sempre nello stesso curricolo selezionato!) */}
+          {showOtherYearsDrawer && otherYearsBuckets.length > 0 && otherActiveBucket && otherBucketModel && (
+            <div className="rounded-xl border-2 border-[#1F3864]/35 bg-blue-50/40 p-4 dark:border-blue-800 dark:bg-blue-950/20">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-[#1F3864] dark:text-blue-300">
+                    Aggiungi voci da altri anni · {selectedDisciplina}
+                  </h3>
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    Riferimento rigoroso al curricolo selezionato:{' '}
+                    <strong>{INDICAZIONI_LABELS[selectedIndicazioni]}</strong> (
+                    {selectedIndicazioni === 'nuove' ? 'Obiettivi e Conoscenze' : 'Abilità e Conoscenze'}).
+                  </p>
                 </div>
-              )}
-            </div>
 
-            {selectedClasse === 'Prima' && targetEntries.length > 0 && hasCompetenzeOrObiettivi && (
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-blue-200 bg-blue-50/70 px-3 py-2 text-xs text-slate-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-slate-200">
-                <div className="flex items-start gap-2">
-                  <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#1F3864] dark:text-blue-300" />
-                  <span>
-                    Competenze e obiettivi specifici del curricolo sono espressi <strong>al termine della terza</strong>: per la <strong>Prima</strong> sono preselezionati automaticamente quelli coerenti con{' '}
-                    {preselectionResult.usedPlanContents
-                      ? 'i contenuti già presenti nel piano della classe'
-                      : 'i contenuti (conoscenze) previsti per la Prima'}
-                    {' '}({preselectionResult.alignedCompetenceIds.size} competenze e {preselectionResult.alignedObjectiveIds.size} obiettivi).
-                  </span>
+                <div className="flex items-center gap-2">
+                  <div className="inline-flex rounded-lg border border-slate-300 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-900">
+                    {otherYearsBuckets.map((bucket) => (
+                      <button
+                        key={bucket.classe}
+                        type="button"
+                        onClick={() => setActiveOtherClasse(bucket.classe)}
+                        className={`rounded-md px-3 py-1 text-xs font-semibold ${
+                          otherActiveBucket.classe === bucket.classe
+                            ? 'bg-[#1F3864] text-white'
+                            : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300'
+                        }`}
+                      >
+                        Classe {bucket.classe} ({bucket.entries.length})
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowOtherYearsDrawer(false)}
+                    className="rounded-lg p-1 text-slate-500 hover:bg-white dark:hover:bg-slate-800"
+                    aria-label="Chiudi pannello altri anni"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
                 </div>
-                {hasPlanContentsForCurrentSelection && (
-                  <div className="inline-flex rounded-md border border-slate-300 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-900">
-                    <button
-                      type="button"
-                      onClick={() => setContentSourceMode('piano')}
-                      className={`rounded px-2 py-0.5 text-[11px] font-semibold ${
-                        contentSourceMode === 'piano'
-                          ? 'bg-[#1F3864] text-white'
-                          : 'text-slate-600 dark:text-slate-300'
-                      }`}
-                    >
-                      Contenuti del piano
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setContentSourceMode('catalogo')}
-                      className={`rounded px-2 py-0.5 text-[11px] font-semibold ${
-                        contentSourceMode === 'catalogo'
-                          ? 'bg-[#1F3864] text-white'
-                          : 'text-slate-600 dark:text-slate-300'
-                      }`}
-                    >
-                      Contenuti catalogo Prima
-                    </button>
+              </div>
+
+              <div className="mt-3 max-h-72 space-y-3 overflow-y-auto pr-1">
+                {otherBucketModel.competenze.length > 0 && (
+                  <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold uppercase text-[#1F3864] dark:text-blue-300">
+                        Competenze attese — Classe {otherActiveBucket.classe}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleIncludeFromOtherYear(otherBucketModel.competenze)}
+                        className="text-xs font-semibold text-[#1F3864] hover:underline dark:text-blue-300"
+                      >
+                        + Aggiungi tutte ({otherBucketModel.competenze.length})
+                      </button>
+                    </div>
+                    <div className="space-y-1.5">
+                      {otherBucketModel.competenze.map((comp) => {
+                        const alreadyAdded = extraYearsAddedIds.has(comp.id) || sheetIdsSet.has(comp.id);
+                        return (
+                          <div
+                            key={comp.id}
+                            className="flex items-start justify-between gap-2 rounded border border-slate-100 px-2.5 py-1.5 text-xs dark:border-slate-800"
+                          >
+                            <span className="text-slate-800 dark:text-slate-200">{comp.testo}</span>
+                            <button
+                              type="button"
+                              disabled={alreadyAdded}
+                              onClick={() => handleIncludeFromOtherYear([comp])}
+                              className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-semibold ${
+                                alreadyAdded
+                                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                  : 'bg-[#1F3864] text-white hover:bg-[#172b4d]'
+                              }`}
+                            >
+                              {alreadyAdded ? 'Aggiunta ✓' : '+ Aggiungi'}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
-              </div>
-            )}
 
-            {targetGrouped.length === 0 ? (
-              <div className="space-y-3 rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-600 dark:border-slate-700 dark:text-slate-400">
-                <p>
-                  Nessuna voce presente nel catalogo per <strong>{selectedDisciplina}</strong> —{' '}
-                  <strong>Classe {selectedClasse}</strong> in{' '}
-                  <strong>{INDICAZIONI_LABELS[selectedIndicazioni]}</strong>.
-                </p>
+                {otherBucketModel.rows.map((row) => {
+                  const rowAll = [...row.leftItems, ...row.rightItems];
+                  return (
+                    <div
+                      key={`${otherActiveBucket.classe}-${row.nucleoKey}`}
+                      className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"
+                    >
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                          {row.nucleoTematico} · Classe {otherActiveBucket.classe}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleIncludeFromOtherYear(rowAll)}
+                          className="text-xs font-semibold text-[#1F3864] hover:underline dark:text-blue-300"
+                        >
+                          + Aggiungi tutto il nucleo ({rowAll.length})
+                        </button>
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        {[
+                          { label: otherBucketModel.leftColumnLabel, items: row.leftItems },
+                          { label: otherBucketModel.rightColumnLabel, items: row.rightItems },
+                        ].map((col) => (
+                          <div key={col.label} className="space-y-1.5">
+                            <p className="text-[11px] font-bold uppercase text-slate-500">
+                              {col.label}
+                            </p>
+                            {col.items.length === 0 ? (
+                              <p className="text-[11px] italic text-slate-400">Nessuna voce</p>
+                            ) : (
+                              col.items.map((item) => {
+                                const alreadyAdded =
+                                  extraYearsAddedIds.has(item.id) || sheetIdsSet.has(item.id);
+                                return (
+                                  <div
+                                    key={item.id}
+                                    className="flex items-start justify-between gap-2 rounded border border-slate-100 px-2 py-1 text-xs dark:border-slate-800"
+                                  >
+                                    <span className="text-slate-800 dark:text-slate-200">
+                                      {item.testo}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      disabled={alreadyAdded}
+                                      onClick={() => handleIncludeFromOtherYear([item])}
+                                      className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-semibold ${
+                                        alreadyAdded
+                                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                          : 'bg-[#1F3864] text-white hover:bg-[#172b4d]'
+                                      }`}
+                                    >
+                                      {alreadyAdded ? 'Aggiunta ✓' : '+ Aggiungi'}
+                                    </button>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Stato vuoto */}
+          {sheetEntries.length === 0 ? (
+            <div className="space-y-3 rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-600 dark:border-slate-700 dark:text-slate-400">
+              <p>
+                Nessuna voce trovata per <strong>{selectedDisciplina}</strong> —{' '}
+                <strong>Classe {selectedClasse}</strong> ({INDICAZIONI_LABELS[selectedIndicazioni]}).
+              </p>
+              <div className="flex flex-wrap items-center justify-center gap-2">
                 {alternateTargetCount > 0 && (
                   <button
                     type="button"
@@ -682,93 +765,262 @@ export function CurricoloCatalogSelector({
                     Passa a {INDICAZIONI_LABELS[alternateIndicazioni]} ({alternateTargetCount} voci)
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => setAddingNucleoOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Aggiungi riga manualmente
+                </button>
               </div>
-            ) : (
-              <div className="space-y-4">
-                {renderGroupedSections(targetGrouped, false, `target-${selectedClasse}`)}
-              </div>
-            )}
-          </div>
-
-          {/* Sezione espandibile "Da altre classi" */}
-          {otherClassesData.length > 0 && (
-            <div className="overflow-hidden rounded-xl border border-slate-300 bg-slate-50/70 dark:border-slate-700 dark:bg-slate-950/40">
-              <button
-                type="button"
-                aria-expanded={otherClassesExpanded}
-                onClick={() => setOtherClassesExpanded((v) => !v)}
-                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-100/80 dark:hover:bg-slate-800/40"
-              >
-                <div className="flex items-center gap-2">
-                  {otherClassesExpanded ? (
-                    <ChevronDown className="h-4 w-4 text-slate-600 dark:text-slate-300" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4 text-slate-600 dark:text-slate-300" />
-                  )}
-                  <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                    Da altre classi
-                  </span>
-                  <span className="text-xs text-slate-600 dark:text-slate-400">
-                    ({otherClassesData.map((b) => `Classe ${b.classe}`).join(' · ')} — deselezionate di default)
-                  </span>
-                </div>
-                <span className="font-mono-num text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  {otherSelectedCount} selezionati
-                </span>
-              </button>
-
-              {otherClassesExpanded && (
-                <div className="space-y-5 border-t border-slate-200 p-4 dark:border-slate-800">
-                  <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-                    <Info className="mt-0.5 h-4 w-4 shrink-0" />
-                    <span>
-                      Le voci importate da altre classi mantengono sempre l’etichetta della classe di provenienza sia nell’editor sia nei documenti DOCX/PDF.
+            </div>
+          ) : (
+            <>
+              {/* 1. SEZIONE COMPETENZE ATTESE (in testa come nel documento finale) */}
+              <div className="overflow-hidden rounded-xl border border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-[#1F3864] px-4 py-2.5 text-white">
+                  <label className="flex cursor-pointer items-center gap-2.5">
+                    <GroupCheckbox
+                      checked={compAllSelected}
+                      indeterminate={compIndeterminate}
+                      onChange={() => toggleGroupIds(compIds)}
+                      label="Seleziona o deseleziona tutte le competenze"
+                    />
+                    <span className="text-xs font-bold uppercase tracking-wide">
+                      Competenze attese (dopo i Traguardi)
                     </span>
+                    <span className="font-mono-num text-xs opacity-90">
+                      ({compSelectedCount}/{compIds.length})
+                    </span>
+                  </label>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setAddingCompOpen((v) => !v)}
+                      className="inline-flex items-center gap-1 rounded-md bg-white/15 px-2.5 py-1 text-xs font-semibold text-white hover:bg-white/25"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Aggiungi competenza
+                    </button>
                   </div>
+                </div>
 
-                  {otherClassesData.map((bucket) => {
-                    const clsSelectedCount = bucket.ids.filter((id) => selectedIds.has(id)).length;
+                <div className="divide-y divide-slate-100 p-3 dark:divide-slate-800">
+                  {sheetModel.competenze.length === 0 && !addingCompOpen && (
+                    <p className="py-2 text-xs italic text-slate-500 dark:text-slate-400">
+                      Nessuna competenza specifica presente per questa selezione. Usa «Aggiungi competenza» per inserirne una nuova.
+                    </p>
+                  )}
+
+                  {sheetModel.competenze.map((comp) => {
+                    const checked = selectedIds.has(comp.id);
+                    const isOtherClass = comp.classe !== selectedClasse;
                     return (
-                      <div key={bucket.classe} className="space-y-3">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <h4 className="text-xs font-bold uppercase tracking-wide text-slate-800 dark:text-slate-200">
-                            Classe {bucket.classe} ({clsSelectedCount} di {bucket.entries.length}{' '}
-                            selezionati)
-                          </h4>
-                          <div className="flex items-center gap-3 text-xs">
-                            <button
-                              type="button"
-                              onClick={() => selectAllIds(bucket.ids)}
-                              className="font-semibold text-[#1F3864] hover:underline dark:text-blue-300"
-                            >
-                              Seleziona tutti
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => deselectAllIds(bucket.ids)}
-                              className="font-medium text-slate-600 hover:underline dark:text-slate-400"
-                            >
-                              Deseleziona tutti
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="space-y-4">
-                          {renderGroupedSections(bucket.grouped, true, `other-${bucket.classe}`)}
-                        </div>
-                      </div>
+                      <label
+                        key={comp.id}
+                        className={`flex cursor-pointer items-start gap-2.5 rounded-md px-2.5 py-2 transition ${
+                          checked
+                            ? 'hover:bg-blue-50/40 dark:hover:bg-blue-950/20'
+                            : 'opacity-55 hover:bg-slate-50 dark:hover:bg-slate-800/30'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleItem(comp.id)}
+                          className="mt-0.5 h-4 w-4 shrink-0 accent-[#1F3864]"
+                        />
+                        <span
+                          className={`flex-1 text-sm leading-snug ${
+                            checked
+                              ? 'text-slate-900 dark:text-slate-100'
+                              : 'line-through text-slate-500 dark:text-slate-400'
+                          }`}
+                        >
+                          {comp.testo}
+                        </span>
+                        {isOtherClass && (
+                          <span className="shrink-0 rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                            Da {comp.classe}
+                          </span>
+                        )}
+                      </label>
                     );
                   })}
+
+                  {addingCompOpen && (
+                    <div className="mt-2 flex flex-wrap items-center gap-2 pt-2">
+                      <input
+                        type="text"
+                        value={newCompText}
+                        onChange={(e) => setNewCompText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddCustomCompetenza();
+                          }
+                        }}
+                        placeholder="Scrivi una nuova competenza attesa..."
+                        autoFocus
+                        className="min-w-[240px] flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddCustomCompetenza}
+                        className="inline-flex items-center gap-1 rounded-lg bg-[#1F3864] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#172b4d]"
+                      >
+                        <Check className="h-3.5 w-3.5" />
+                        Aggiungi
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAddingCompOpen(false);
+                          setNewCompText('');
+                        }}
+                        className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300"
+                      >
+                        Annulla
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              </div>
+
+              {/* 2. TABELLA A 2 COLONNE IDENTICA A QUELLA DI OUTPUT */}
+              <div className="overflow-hidden rounded-xl border border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900">
+                <table className="w-full border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="bg-[#1F3864] text-white">
+                      <th className="w-1/2 border-b border-r border-white/20 px-4 py-2.5 text-xs font-bold uppercase tracking-wide">
+                        {sheetModel.leftColumnLabel}
+                      </th>
+                      <th className="w-1/2 border-b border-white/20 px-4 py-2.5 text-xs font-bold uppercase tracking-wide">
+                        {sheetModel.rightColumnLabel}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sheetModel.rows.map((row) => {
+                      const rowIds = [
+                        ...row.leftItems.map((i) => i.id),
+                        ...row.rightItems.map((i) => i.id),
+                      ];
+                      const rowSelected = rowIds.filter((id) => selectedIds.has(id)).length;
+                      const rowAllSelected = rowIds.length > 0 && rowSelected === rowIds.length;
+                      const rowIndeterminate = rowSelected > 0 && rowSelected < rowIds.length;
+
+                      return (
+                        <FragmentRow
+                          key={row.nucleoKey}
+                          row={row}
+                          selectedIds={selectedIds}
+                          selectedClasse={selectedClasse}
+                          rowAllSelected={rowAllSelected}
+                          rowIndeterminate={rowIndeterminate}
+                          rowSelectedCount={rowSelected}
+                          rowTotalCount={rowIds.length}
+                          leftLabel={
+                            selectedIndicazioni === 'nuove' ? 'obiettivo' : 'abilità'
+                          }
+                          onToggleGroup={() => toggleGroupIds(rowIds)}
+                          onToggleItem={toggleItem}
+                          addingCellTarget={addingCellTarget}
+                          newCellItemText={newCellItemText}
+                          onStartAddCell={(side) => {
+                            setAddingCellTarget({
+                              nucleoKey: row.nucleoKey,
+                              nucleoTematico: row.nucleoTematico,
+                              side,
+                            });
+                            setNewCellItemText('');
+                          }}
+                          onChangeNewCellText={setNewCellItemText}
+                          onConfirmAddCell={handleAddCustomCellItem}
+                          onCancelAddCell={() => {
+                            setAddingCellTarget(null);
+                            setNewCellItemText('');
+                          }}
+                        />
+                      );
+                    })}
+                  </tbody>
+                </table>
+
+                {/* Aggiunta nuovo nucleo nella tabella */}
+                <div className="border-t border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-950/50">
+                  {!addingNucleoOpen ? (
+                    <button
+                      type="button"
+                      onClick={() => setAddingNucleoOpen(true)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#1F3864] bg-white px-3 py-1.5 text-xs font-semibold text-[#1F3864] hover:bg-blue-50 dark:border-blue-400 dark:bg-slate-900 dark:text-blue-300"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Aggiungi nuovo nucleo / argomento alla tabella
+                    </button>
+                  ) : (
+                    <div className="space-y-2.5 rounded-lg border border-slate-300 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                      <p className="text-xs font-bold text-[#1F3864] dark:text-blue-300">
+                        Nuovo nucleo tematico nella tabella di programma
+                      </p>
+                      <div className="grid gap-2 md:grid-cols-3">
+                        <input
+                          type="text"
+                          value={newNucleoName}
+                          onChange={(e) => setNewNucleoName(e.target.value)}
+                          placeholder="Nome nucleo tematico (es. Numeri, Lettura...)"
+                          className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-950"
+                        />
+                        <input
+                          type="text"
+                          value={newNucleoLeftText}
+                          onChange={(e) => setNewNucleoLeftText(e.target.value)}
+                          placeholder={
+                            selectedIndicazioni === 'nuove'
+                              ? 'Primo obiettivo specifico...'
+                              : 'Prima abilità...'
+                          }
+                          className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-950"
+                        />
+                        <input
+                          type="text"
+                          value={newNucleoRightText}
+                          onChange={(e) => setNewNucleoRightText(e.target.value)}
+                          placeholder="Prima conoscenza / contenuto..."
+                          className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-950"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleAddCustomNucleo}
+                          className="inline-flex items-center gap-1 rounded-lg bg-[#1F3864] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#172b4d]"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                          Aggiungi alla scheda
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAddingNucleoOpen(false)}
+                          className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300"
+                        >
+                          Annulla
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
           )}
         </div>
 
         {/* Footer */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-3.5 dark:border-slate-800 dark:bg-slate-950/60">
           <p className="text-xs text-slate-600 dark:text-slate-400">
-            Le voci importate sono copie autonome: modificarle o eliminarle non altera il catalogo.
+            Le voci importate vengono inserite direttamente nelle competenze e nella tabella a 2 colonne della programmazione.
           </p>
           <div className="flex items-center gap-2.5">
             <button
@@ -784,11 +1036,259 @@ export function CurricoloCatalogSelector({
               disabled={selectedCount === 0}
               className="whitespace-nowrap shrink-0 rounded-lg bg-[#1F3864] px-4 py-2 text-xs font-semibold text-white hover:bg-[#172b4d] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Importa selezionati ({selectedCount})
+              Conferma e importa nella programmazione ({selectedCount})
             </button>
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+interface FragmentRowProps {
+  row: {
+    nucleoKey: string;
+    nucleoTematico: string;
+    leftItems: CurricoloCatalogEntry[];
+    rightItems: CurricoloCatalogEntry[];
+  };
+  selectedIds: Set<string>;
+  selectedClasse: ClasseSecondaria;
+  rowAllSelected: boolean;
+  rowIndeterminate: boolean;
+  rowSelectedCount: number;
+  rowTotalCount: number;
+  leftLabel: string;
+  onToggleGroup: () => void;
+  onToggleItem: (id: string) => void;
+  addingCellTarget: {
+    nucleoKey: string;
+    nucleoTematico: string;
+    side: 'left' | 'right';
+  } | null;
+  newCellItemText: string;
+  onStartAddCell: (side: 'left' | 'right') => void;
+  onChangeNewCellText: (val: string) => void;
+  onConfirmAddCell: () => void;
+  onCancelAddCell: () => void;
+}
+
+function FragmentRow({
+  row,
+  selectedIds,
+  selectedClasse,
+  rowAllSelected,
+  rowIndeterminate,
+  rowSelectedCount,
+  rowTotalCount,
+  leftLabel,
+  onToggleGroup,
+  onToggleItem,
+  addingCellTarget,
+  newCellItemText,
+  onStartAddCell,
+  onChangeNewCellText,
+  onConfirmAddCell,
+  onCancelAddCell,
+}: FragmentRowProps) {
+  const isAddingLeft =
+    addingCellTarget?.nucleoKey === row.nucleoKey && addingCellTarget.side === 'left';
+  const isAddingRight =
+    addingCellTarget?.nucleoKey === row.nucleoKey && addingCellTarget.side === 'right';
+
+  return (
+    <>
+      <tr className="border-t border-slate-300 bg-slate-100/90 dark:border-slate-700 dark:bg-slate-800/70">
+        <td colSpan={2} className="px-4 py-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <label className="flex cursor-pointer items-center gap-2">
+              <GroupCheckbox
+                checked={rowAllSelected}
+                indeterminate={rowIndeterminate}
+                onChange={onToggleGroup}
+                label={`Seleziona o deseleziona nucleo ${row.nucleoTematico}`}
+              />
+              <span className="text-xs font-bold text-[#1F3864] dark:text-blue-300">
+                Nucleo: {row.nucleoTematico}
+              </span>
+            </label>
+            <span className="font-mono-num text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+              {rowSelectedCount}/{rowTotalCount} selezionati
+            </span>
+          </div>
+        </td>
+      </tr>
+      <tr className="border-t border-slate-200 dark:border-slate-800">
+        {/* Colonna Sinistra: Obiettivi oppure Abilità */}
+        <td className="w-1/2 border-r border-slate-200 p-3 align-top dark:border-slate-800">
+          <div className="space-y-1.5">
+            {row.leftItems.map((item) => {
+              const checked = selectedIds.has(item.id);
+              const isOtherClass = item.classe !== selectedClasse;
+              return (
+                <label
+                  key={item.id}
+                  className={`flex cursor-pointer items-start gap-2 rounded-md p-1.5 transition ${
+                    checked
+                      ? 'hover:bg-blue-50/40 dark:hover:bg-blue-950/20'
+                      : 'opacity-55 hover:bg-slate-50 dark:hover:bg-slate-800/30'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => onToggleItem(item.id)}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-[#1F3864]"
+                  />
+                  <span
+                    className={`flex-1 text-xs leading-relaxed sm:text-[13px] ${
+                      checked
+                        ? 'text-slate-900 dark:text-slate-100'
+                        : 'line-through text-slate-500 dark:text-slate-400'
+                    }`}
+                  >
+                    {item.testo}
+                  </span>
+                  {isOtherClass && (
+                    <span className="shrink-0 rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                      Da {item.classe}
+                    </span>
+                  )}
+                </label>
+              );
+            })}
+
+            {isAddingLeft ? (
+              <div className="mt-2 space-y-1.5 rounded-md border border-slate-300 bg-slate-50 p-2 dark:border-slate-700 dark:bg-slate-950">
+                <input
+                  type="text"
+                  value={newCellItemText}
+                  onChange={(e) => onChangeNewCellText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      onConfirmAddCell();
+                    }
+                  }}
+                  placeholder={`Nuovo ${leftLabel} in ${row.nucleoTematico}...`}
+                  autoFocus
+                  className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
+                />
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={onConfirmAddCell}
+                    className="rounded bg-[#1F3864] px-2.5 py-1 text-[11px] font-semibold text-white"
+                  >
+                    Aggiungi
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onCancelAddCell}
+                    className="rounded border border-slate-300 px-2 py-1 text-[11px] text-slate-600 dark:border-slate-700 dark:text-slate-300"
+                  >
+                    Annulla
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onStartAddCell('left')}
+                className="mt-1 inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-semibold text-[#1F3864] hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-slate-800"
+              >
+                <Plus className="h-3 w-3" />
+                Aggiungi {leftLabel}
+              </button>
+            )}
+          </div>
+        </td>
+
+        {/* Colonna Destra: Conoscenze / Contenuti */}
+        <td className="w-1/2 p-3 align-top">
+          <div className="space-y-1.5">
+            {row.rightItems.map((item) => {
+              const checked = selectedIds.has(item.id);
+              const isOtherClass = item.classe !== selectedClasse;
+              return (
+                <label
+                  key={item.id}
+                  className={`flex cursor-pointer items-start gap-2 rounded-md p-1.5 transition ${
+                    checked
+                      ? 'hover:bg-blue-50/40 dark:hover:bg-blue-950/20'
+                      : 'opacity-55 hover:bg-slate-50 dark:hover:bg-slate-800/30'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => onToggleItem(item.id)}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-[#1F3864]"
+                  />
+                  <span
+                    className={`flex-1 text-xs leading-relaxed sm:text-[13px] ${
+                      checked
+                        ? 'text-slate-900 dark:text-slate-100'
+                        : 'line-through text-slate-500 dark:text-slate-400'
+                    }`}
+                  >
+                    {item.testo}
+                  </span>
+                  {isOtherClass && (
+                    <span className="shrink-0 rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                      Da {item.classe}
+                    </span>
+                  )}
+                </label>
+              );
+            })}
+
+            {isAddingRight ? (
+              <div className="mt-2 space-y-1.5 rounded-md border border-slate-300 bg-slate-50 p-2 dark:border-slate-700 dark:bg-slate-950">
+                <input
+                  type="text"
+                  value={newCellItemText}
+                  onChange={(e) => onChangeNewCellText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      onConfirmAddCell();
+                    }
+                  }}
+                  placeholder={`Nuova conoscenza in ${row.nucleoTematico}...`}
+                  autoFocus
+                  className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-900"
+                />
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={onConfirmAddCell}
+                    className="rounded bg-[#1F3864] px-2.5 py-1 text-[11px] font-semibold text-white"
+                  >
+                    Aggiungi
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onCancelAddCell}
+                    className="rounded border border-slate-300 px-2 py-1 text-[11px] text-slate-600 dark:border-slate-700 dark:text-slate-300"
+                  >
+                    Annulla
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onStartAddCell('right')}
+                className="mt-1 inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-semibold text-[#1F3864] hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-slate-800"
+              >
+                <Plus className="h-3 w-3" />
+                Aggiungi conoscenza
+              </button>
+            )}
+          </div>
+        </td>
+      </tr>
+    </>
   );
 }

@@ -36,6 +36,7 @@ import {
   createManualStudentEntry,
   moveStudentToFascia,
   parseItalianDecimal,
+  removeStudentFromFasce,
   restoreAutomaticFasce,
   updateStudentDetails,
 } from '../engine/gradebookImporter';
@@ -139,6 +140,7 @@ export function FasceLivelloBoard({
   const [dropTargetBand, setDropTargetBand] = useState<FasciaLivelloKey | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [confirmRestore, setConfirmRestore] = useState(false);
+  const [confirmClearAll, setConfirmClearAll] = useState(false);
   const [tableActionStatus, setTableActionStatus] = useState<string | null>(null);
   const [tableActionError, setTableActionError] = useState<string | null>(null);
   const [copiedRecently, setCopiedRecently] = useState(false);
@@ -219,8 +221,14 @@ export function FasceLivelloBoard({
   };
 
   const handleRemoveStudent = (studentId: string) => {
-    onChangeEntries(entries.filter((e) => e.id !== studentId));
+    const next = removeStudentFromFasce(entries, studentId);
+    onChangeEntries(next);
     if (expandedId === studentId) setExpandedId(null);
+    if (keyboardGrabbedId === studentId) setKeyboardGrabbedId(null);
+    setTableActionError(null);
+    if (next.length === 0) {
+      setTableActionStatus('Tutti gli alunni sono stati rimossi dall’elenco.');
+    }
   };
 
   const resolvedClasseLabel = tableExportContext?.classeLabel || classeRilevata || '';
@@ -359,6 +367,17 @@ export function FasceLivelloBoard({
             <RotateCcw className="h-3.5 w-3.5" />
             Ripristina fasce automatiche
           </button>
+
+          {entries.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setConfirmClearAll(true)}
+              className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 dark:border-red-900/60 dark:bg-slate-900 dark:text-red-400 dark:hover:bg-red-950/30"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Rimuovi tutti ({entries.length})
+            </button>
+          )}
         </div>
       </div>
 
@@ -700,6 +719,16 @@ export function FasceLivelloBoard({
                               <ChevronDown className="h-3 w-3" />
                             )}
                           </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveStudent(entry.id)}
+                            aria-label={`Rimuovi ${displayName}`}
+                            title={`Rimuovi ${displayName} dall’elenco`}
+                            className="rounded border border-slate-300 bg-white p-1 text-slate-500 hover:border-red-300 hover:bg-red-50 hover:text-red-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:border-red-900 dark:hover:bg-red-950/30 dark:hover:text-red-400"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
                         </div>
 
                         {isExpanded && (
@@ -850,6 +879,25 @@ export function FasceLivelloBoard({
         onConfirm={() => {
           onChangeEntries(restoreAutomaticFasce(entries, soglie));
           setConfirmRestore(false);
+        }}
+      />
+
+      <ConfirmModal
+        open={confirmClearAll}
+        title="Rimuovere tutti gli alunni importati?"
+        description="Tutti gli alunni presenti nelle fasce di livello verranno rimossi e i relativi conteggi saranno azzerati (operazione utile se hai importato il file sbagliato)."
+        confirmLabel="Rimuovi tutti gli alunni"
+        destructive
+        onCancel={() => setConfirmClearAll(false)}
+        onConfirm={() => {
+          onChangeEntries([]);
+          setExpandedId(null);
+          setKeyboardGrabbedId(null);
+          setConfirmClearAll(false);
+          setTableActionError(null);
+          setTableActionStatus(
+            'Elenco alunni svuotato: ora puoi importare un nuovo registro o inserire gli alunni manualmente.'
+          );
         }}
       />
     </div>

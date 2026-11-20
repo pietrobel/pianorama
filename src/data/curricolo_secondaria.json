@@ -3613,7 +3613,7 @@
     "classe": "Prima",
     "disciplina": "Arte e Immagine",
     "tipo": "obiettivo_specifico",
-    "nucleoTematico": "Analizzare un testo visivo (es",
+    "nucleoTematico": "Comprendere e apprezzare le opere d’arte",
     "testo": "Analizzare un testo visivo (es. dipinto rinascimentale, video contemporaneo) per il suo contesto storico, per rafforzarne la comprensione e arricchire i propri linguaggi espressivi",
     "documentoProvenienza": "Curricolo verticale nuovo"
   },
@@ -3757,7 +3757,7 @@
     "classe": "Seconda",
     "disciplina": "Arte e Immagine",
     "tipo": "obiettivo_specifico",
-    "nucleoTematico": "Analizzare un testo visivo (es",
+    "nucleoTematico": "Comprendere e apprezzare le opere d’arte",
     "testo": "Analizzare un testo visivo (es. dipinto rinascimentale, video contemporaneo) per il suo contesto storico, per rafforzarne la comprensione e arricchire i propri linguaggi espressivi",
     "documentoProvenienza": "Curricolo verticale nuovo"
   },
@@ -3901,7 +3901,7 @@
     "classe": "Terza",
     "disciplina": "Arte e Immagine",
     "tipo": "obiettivo_specifico",
-    "nucleoTematico": "Analizzare un testo visivo (es",
+    "nucleoTematico": "Comprendere e apprezzare le opere d’arte",
     "testo": "Analizzare un testo visivo (es. dipinto rinascimentale, video contemporaneo) per il suo contesto storico, per rafforzarne la comprensione e arricchire i propri linguaggi espressivi",
     "documentoProvenienza": "Curricolo verticale nuovo"
   },
@@ -14595,6 +14595,2256 @@
     "tipo": "conoscenza",
     "nucleoTematico": "Dio e l’uomo",
     "testo": "Cristianesimo e sessualit à.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvn-matematica-prima-ext-1",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "obiettivo_specifico",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Riconoscere e descrivere gli enti geometrici fondamentali (punto, retta, semiretta, segmento, piano) e rappresentarli correttamente.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-matematica-prima-ext-2",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Gli enti geometrici fondamentali, posizioni reciproche di rette nel piano (incidenti, perpendicolari, parallele).",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvv-matematica-prima-ext-3",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "abilita",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Riconoscere e descrivere gli enti geometrici fondamentali (punto, retta, semiretta, segmento, piano) e rappresentarli correttamente.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-matematica-prima-ext-4",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Gli enti geometrici fondamentali, posizioni reciproche di rette nel piano (incidenti, perpendicolari, parallele).",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvn-matematica-prima-ext-5",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "obiettivo_specifico",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Operare con segmenti e angoli, eseguendone il confronto, la somma, la differenza e la misurazione con riga, squadra e goniometro.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-matematica-prima-ext-6",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Segmenti consecutivi, adiacenti e punto medio; angoli e loro classificazione; misure di ampiezza nel sistema sessagesimale.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvv-matematica-prima-ext-7",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "abilita",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Operare con segmenti e angoli, eseguendone il confronto, la somma, la differenza e la misurazione con riga, squadra e goniometro.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-matematica-prima-ext-8",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Segmenti consecutivi, adiacenti e punto medio; angoli e loro classificazione; misure di ampiezza nel sistema sessagesimale.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvn-matematica-prima-ext-9",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "obiettivo_specifico",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Riprodurre e classificare poligoni, triangoli e quadrilateri in base alle proprietà di lati e angoli, calcolandone il perimetro.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-matematica-prima-ext-10",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "I poligoni e le loro proprietà generali; classificazione dei triangoli e punti notevoli; classificazione e proprietà dei quadrilateri.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvv-matematica-prima-ext-11",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "abilita",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Riprodurre e classificare poligoni, triangoli e quadrilateri in base alle proprietà di lati e angoli, calcolandone il perimetro.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-matematica-prima-ext-12",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "I poligoni e le loro proprietà generali; classificazione dei triangoli e punti notevoli; classificazione e proprietà dei quadrilateri.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvn-matematica-prima-ext-13",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "obiettivo_specifico",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Effettuare misure dirette di grandezze geometriche ed equivalenze tra unità del Sistema Internazionale.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-matematica-prima-ext-14",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Grandezze fondamentali e derivate, unità di misura di lunghezza, massa, capacità e tempo; calcolo del perimetro.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvv-matematica-prima-ext-15",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "abilita",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Effettuare misure dirette di grandezze geometriche ed equivalenze tra unità del Sistema Internazionale.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-matematica-prima-ext-16",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Grandezze fondamentali e derivate, unità di misura di lunghezza, massa, capacità e tempo; calcolo del perimetro.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvn-matematica-prima-ext-17",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "obiettivo_specifico",
+    "nucleoTematico": "Relazioni e funzioni",
+    "testo": "Rappresentare punti, segmenti e semplici figure geometriche nel primo quadrante del piano cartesiano.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-matematica-prima-ext-18",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Relazioni e funzioni",
+    "testo": "Il piano cartesiano (primo quadrante): coordinate dei punti e rappresentazione di figure elementari.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvv-matematica-prima-ext-19",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "abilita",
+    "nucleoTematico": "Relazioni e funzioni",
+    "testo": "Rappresentare punti, segmenti e semplici figure geometriche nel primo quadrante del piano cartesiano.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-matematica-prima-ext-20",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Relazioni e funzioni",
+    "testo": "Il piano cartesiano (primo quadrante): coordinate dei punti e rappresentazione di figure elementari.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvn-matematica-prima-ext-21",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "obiettivo_specifico",
+    "nucleoTematico": "Relazioni e funzioni",
+    "testo": "Interpretare relazioni tra grandezze ed esprimere semplici regolarità numeriche e geometriche tramite tabelle e schemi grafici.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-matematica-prima-ext-22",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Relazioni e funzioni",
+    "testo": "Metodo grafico a segmenti per la risoluzione di problemi; tabelle a doppia entrata e corrispondenze.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvv-matematica-prima-ext-23",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "abilita",
+    "nucleoTematico": "Relazioni e funzioni",
+    "testo": "Interpretare relazioni tra grandezze ed esprimere semplici regolarità numeriche e geometriche tramite tabelle e schemi grafici.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-matematica-prima-ext-24",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Relazioni e funzioni",
+    "testo": "Metodo grafico a segmenti per la risoluzione di problemi; tabelle a doppia entrata e corrispondenze.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvn-matematica-prima-ext-25",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "obiettivo_specifico",
+    "nucleoTematico": "Dati e previsioni",
+    "testo": "Raccogliere, ordinare e rappresentare dati statistici mediante tabelle di frequenza, ortogrammi e ideogrammi.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-matematica-prima-ext-26",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Dati e previsioni",
+    "testo": "Indagini statistiche di base: frequenze assolute, lettura e costruzione di istogrammi, ortogrammi e ideogrammi.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvv-matematica-prima-ext-27",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "abilita",
+    "nucleoTematico": "Dati e previsioni",
+    "testo": "Raccogliere, ordinare e rappresentare dati statistici mediante tabelle di frequenza, ortogrammi e ideogrammi.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-matematica-prima-ext-28",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Dati e previsioni",
+    "testo": "Indagini statistiche di base: frequenze assolute, lettura e costruzione di istogrammi, ortogrammi e ideogrammi.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvn-matematica-prima-ext-29",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "obiettivo_specifico",
+    "nucleoTematico": "Digitale e STEAM",
+    "testo": "Utilizzare software di geometria dinamica e fogli di calcolo per costruire figure piane e semplici grafici statistici.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-matematica-prima-ext-30",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Digitale e STEAM",
+    "testo": "Ambienti di geometria dinamica (es. GeoGebra) e primi grafici con il foglio di calcolo.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvv-matematica-prima-ext-31",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "abilita",
+    "nucleoTematico": "Digitale e STEAM",
+    "testo": "Utilizzare software di geometria dinamica e fogli di calcolo per costruire figure piane e semplici grafici statistici.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-matematica-prima-ext-32",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Digitale e STEAM",
+    "testo": "Ambienti di geometria dinamica (es. GeoGebra) e primi grafici con il foglio di calcolo.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-matematica-prima-ext-33",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Numeri",
+    "testo": "Sistema di numerazione decimale, operazioni in N e loro proprietà.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-matematica-prima-ext-34",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Numeri",
+    "testo": "Potenze con esponente naturale e proprietà delle potenze; espressioni aritmetiche.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-matematica-prima-ext-35",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Numeri",
+    "testo": "Criteri di divisibilità, numeri primi, scomposizione in fattori primi, MCD e mcm.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-matematica-prima-ext-36",
+    "classe": "Prima",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Numeri",
+    "testo": "Il concetto di frazione come operatore e prime operazioni con frazioni e numeri decimali.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvn-matematica-seconda-ext-37",
+    "classe": "Seconda",
+    "disciplina": "Matematica",
+    "tipo": "obiettivo_specifico",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Applicare il concetto di equivalenza ed equiscomponibilità per determinare il perimetro e l’area dei principali poligoni.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-matematica-seconda-ext-38",
+    "classe": "Seconda",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Equiscomponibilità delle figure piane, formule dirette e inverse per l’area di quadrilateri e triangoli.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvv-matematica-seconda-ext-39",
+    "classe": "Seconda",
+    "disciplina": "Matematica",
+    "tipo": "abilita",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Applicare il concetto di equivalenza ed equiscomponibilità per determinare il perimetro e l’area dei principali poligoni.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-matematica-seconda-ext-40",
+    "classe": "Seconda",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Equiscomponibilità delle figure piane, formule dirette e inverse per l’area di quadrilateri e triangoli.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvn-matematica-seconda-ext-41",
+    "classe": "Seconda",
+    "disciplina": "Matematica",
+    "tipo": "obiettivo_specifico",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Enunciare, comprendere e applicare il Teorema di Pitagora per risolvere problemi su triangoli rettangoli e figure piane.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-matematica-seconda-ext-42",
+    "classe": "Seconda",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Il Teorema di Pitagora, terne pitagoriche e applicazioni ai principali poligoni.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvv-matematica-seconda-ext-43",
+    "classe": "Seconda",
+    "disciplina": "Matematica",
+    "tipo": "abilita",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Enunciare, comprendere e applicare il Teorema di Pitagora per risolvere problemi su triangoli rettangoli e figure piane.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-matematica-seconda-ext-44",
+    "classe": "Seconda",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Il Teorema di Pitagora, terne pitagoriche e applicazioni ai principali poligoni.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvn-matematica-seconda-ext-45",
+    "classe": "Seconda",
+    "disciplina": "Matematica",
+    "tipo": "obiettivo_specifico",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Riconoscere e applicare le principali trasformazioni isometriche (traslazione, rotazione, simmetria) e il concetto di similitudine.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-matematica-seconda-ext-46",
+    "classe": "Seconda",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Isometrie nel piano (simmetria assiale e centrale, traslazione, rotazione) e introduzione alla similitudine.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvv-matematica-seconda-ext-47",
+    "classe": "Seconda",
+    "disciplina": "Matematica",
+    "tipo": "abilita",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Riconoscere e applicare le principali trasformazioni isometriche (traslazione, rotazione, simmetria) e il concetto di similitudine.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-matematica-seconda-ext-48",
+    "classe": "Seconda",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Isometrie nel piano (simmetria assiale e centrale, traslazione, rotazione) e introduzione alla similitudine.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvn-matematica-seconda-ext-49",
+    "classe": "Seconda",
+    "disciplina": "Matematica",
+    "tipo": "obiettivo_specifico",
+    "nucleoTematico": "Relazioni e funzioni",
+    "testo": "Impostare e risolvere proporzioni applicandone le proprietà e risolvere problemi del tre semplice diretto e inverso.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-matematica-seconda-ext-50",
+    "classe": "Seconda",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Relazioni e funzioni",
+    "testo": "Rapporti tra grandezze, proporzioni e proprietà fondamentale, del comporre e dello scomporre.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvv-matematica-seconda-ext-51",
+    "classe": "Seconda",
+    "disciplina": "Matematica",
+    "tipo": "abilita",
+    "nucleoTematico": "Relazioni e funzioni",
+    "testo": "Impostare e risolvere proporzioni applicandone le proprietà e risolvere problemi del tre semplice diretto e inverso.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-matematica-seconda-ext-52",
+    "classe": "Seconda",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Relazioni e funzioni",
+    "testo": "Rapporti tra grandezze, proporzioni e proprietà fondamentale, del comporre e dello scomporre.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvn-matematica-seconda-ext-53",
+    "classe": "Seconda",
+    "disciplina": "Matematica",
+    "tipo": "obiettivo_specifico",
+    "nucleoTematico": "Relazioni e funzioni",
+    "testo": "Riconoscere funzioni di proporzionalità diretta e inversa e rappresentarle graficamente nel piano cartesiano.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-matematica-seconda-ext-54",
+    "classe": "Seconda",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Relazioni e funzioni",
+    "testo": "Grandezze direttamente e inversamente proporzionali e loro rappresentazione grafica nel piano cartesiano.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvv-matematica-seconda-ext-55",
+    "classe": "Seconda",
+    "disciplina": "Matematica",
+    "tipo": "abilita",
+    "nucleoTematico": "Relazioni e funzioni",
+    "testo": "Riconoscere funzioni di proporzionalità diretta e inversa e rappresentarle graficamente nel piano cartesiano.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-matematica-seconda-ext-56",
+    "classe": "Seconda",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Relazioni e funzioni",
+    "testo": "Grandezze direttamente e inversamente proporzionali e loro rappresentazione grafica nel piano cartesiano.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvn-matematica-seconda-ext-57",
+    "classe": "Seconda",
+    "disciplina": "Matematica",
+    "tipo": "obiettivo_specifico",
+    "nucleoTematico": "Dati e previsioni",
+    "testo": "Elaborare dati statistici calcolando frequenze relative, percentuali e indici di posizione centrale (media, moda, mediana).",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-matematica-seconda-ext-58",
+    "classe": "Seconda",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Dati e previsioni",
+    "testo": "Statistica descrittiva: frequenze percentuali, areogrammi, media aritmetica, moda e mediana.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvv-matematica-seconda-ext-59",
+    "classe": "Seconda",
+    "disciplina": "Matematica",
+    "tipo": "abilita",
+    "nucleoTematico": "Dati e previsioni",
+    "testo": "Elaborare dati statistici calcolando frequenze relative, percentuali e indici di posizione centrale (media, moda, mediana).",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-matematica-seconda-ext-60",
+    "classe": "Seconda",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Dati e previsioni",
+    "testo": "Statistica descrittiva: frequenze percentuali, areogrammi, media aritmetica, moda e mediana.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvn-matematica-seconda-ext-61",
+    "classe": "Seconda",
+    "disciplina": "Matematica",
+    "tipo": "obiettivo_specifico",
+    "nucleoTematico": "Digitale e STEAM",
+    "testo": "Utilizzare il foglio di calcolo per calcolare percentuali, proporzioni e rappresentare funzioni di proporzionalità; verificare proprietà geometriche con software dinamici.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-matematica-seconda-ext-62",
+    "classe": "Seconda",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Digitale e STEAM",
+    "testo": "Fogli di calcolo per tabelle e grafici di proporzionalità; ambienti di geometria dinamica.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvv-matematica-seconda-ext-63",
+    "classe": "Seconda",
+    "disciplina": "Matematica",
+    "tipo": "abilita",
+    "nucleoTematico": "Digitale e STEAM",
+    "testo": "Utilizzare il foglio di calcolo per calcolare percentuali, proporzioni e rappresentare funzioni di proporzionalità; verificare proprietà geometriche con software dinamici.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-matematica-seconda-ext-64",
+    "classe": "Seconda",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Digitale e STEAM",
+    "testo": "Fogli di calcolo per tabelle e grafici di proporzionalità; ambienti di geometria dinamica.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvn-matematica-terza-ext-65",
+    "classe": "Terza",
+    "disciplina": "Matematica",
+    "tipo": "obiettivo_specifico",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Calcolare la lunghezza della circonferenza, l’area del cerchio e le misure di archi e settori circolari.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-matematica-terza-ext-66",
+    "classe": "Terza",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Circonferenza e cerchio, posizioni reciproche di rette e circonferenze, angoli al centro e alla circonferenza.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvv-matematica-terza-ext-67",
+    "classe": "Terza",
+    "disciplina": "Matematica",
+    "tipo": "abilita",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Calcolare la lunghezza della circonferenza, l’area del cerchio e le misure di archi e settori circolari.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-matematica-terza-ext-68",
+    "classe": "Terza",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Circonferenza e cerchio, posizioni reciproche di rette e circonferenze, angoli al centro e alla circonferenza.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvn-matematica-terza-ext-69",
+    "classe": "Terza",
+    "disciplina": "Matematica",
+    "tipo": "obiettivo_specifico",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Rappresentare nello spazio e nel piano i principali poliedri e solidi di rotazione, calcolandone superfici, volumi e peso.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-matematica-terza-ext-70",
+    "classe": "Terza",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Poliedri (prismi, parallelepipedo, cubo, piramide) e solidi di rotazione (cilindro, cono, sfera): superfici, volumi e peso specifico.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvv-matematica-terza-ext-71",
+    "classe": "Terza",
+    "disciplina": "Matematica",
+    "tipo": "abilita",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Rappresentare nello spazio e nel piano i principali poliedri e solidi di rotazione, calcolandone superfici, volumi e peso.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-matematica-terza-ext-72",
+    "classe": "Terza",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Poliedri (prismi, parallelepipedo, cubo, piramide) e solidi di rotazione (cilindro, cono, sfera): superfici, volumi e peso specifico.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvn-matematica-terza-ext-73",
+    "classe": "Terza",
+    "disciplina": "Matematica",
+    "tipo": "obiettivo_specifico",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Calcolare distanza tra due punti, punto medio e area di figure geometriche nel piano cartesiano completo.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-matematica-terza-ext-74",
+    "classe": "Terza",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Il piano cartesiano nei quattro quadranti: coordinate, distanza tra due punti e studio analitico di poligoni.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvv-matematica-terza-ext-75",
+    "classe": "Terza",
+    "disciplina": "Matematica",
+    "tipo": "abilita",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Calcolare distanza tra due punti, punto medio e area di figure geometriche nel piano cartesiano completo.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-matematica-terza-ext-76",
+    "classe": "Terza",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Spazio e figure",
+    "testo": "Il piano cartesiano nei quattro quadranti: coordinate, distanza tra due punti e studio analitico di poligoni.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvn-matematica-terza-ext-77",
+    "classe": "Terza",
+    "disciplina": "Matematica",
+    "tipo": "obiettivo_specifico",
+    "nucleoTematico": "Relazioni e funzioni",
+    "testo": "Eseguire espressioni con monomi, polinomi e semplici prodotti notevoli; modellizzare problemi mediante equazioni di primo grado.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-matematica-terza-ext-78",
+    "classe": "Terza",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Relazioni e funzioni",
+    "testo": "Il calcolo letterale: monomi, polinomi, prodotti notevoli ed equazioni lineari a un’incognita.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvv-matematica-terza-ext-79",
+    "classe": "Terza",
+    "disciplina": "Matematica",
+    "tipo": "abilita",
+    "nucleoTematico": "Relazioni e funzioni",
+    "testo": "Eseguire espressioni con monomi, polinomi e semplici prodotti notevoli; modellizzare problemi mediante equazioni di primo grado.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-matematica-terza-ext-80",
+    "classe": "Terza",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Relazioni e funzioni",
+    "testo": "Il calcolo letterale: monomi, polinomi, prodotti notevoli ed equazioni lineari a un’incognita.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvn-matematica-terza-ext-81",
+    "classe": "Terza",
+    "disciplina": "Matematica",
+    "tipo": "obiettivo_specifico",
+    "nucleoTematico": "Relazioni e funzioni",
+    "testo": "Rappresentare nel piano cartesiano l’equazione della retta e funzioni empiriche, interpretando coefficiente angolare e intercetta.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-matematica-terza-ext-82",
+    "classe": "Terza",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Relazioni e funzioni",
+    "testo": "Funzione lineare nel piano cartesiano (y = mx + q), rette parallele e perpendicolari, proporzionalità quadratica.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvv-matematica-terza-ext-83",
+    "classe": "Terza",
+    "disciplina": "Matematica",
+    "tipo": "abilita",
+    "nucleoTematico": "Relazioni e funzioni",
+    "testo": "Rappresentare nel piano cartesiano l’equazione della retta e funzioni empiriche, interpretando coefficiente angolare e intercetta.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-matematica-terza-ext-84",
+    "classe": "Terza",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Relazioni e funzioni",
+    "testo": "Funzione lineare nel piano cartesiano (y = mx + q), rette parallele e perpendicolari, proporzionalità quadratica.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvn-matematica-terza-ext-85",
+    "classe": "Terza",
+    "disciplina": "Matematica",
+    "tipo": "obiettivo_specifico",
+    "nucleoTematico": "Dati e previsioni",
+    "testo": "Calcolare la probabilità classica e frequentista di eventi aleatori semplici e composti e analizzare serie di dati reali.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-matematica-terza-ext-86",
+    "classe": "Terza",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Dati e previsioni",
+    "testo": "Calcolo delle probabilità: spazio campionario, eventi compatibili e incompatibili, probabilità totale e composta.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvv-matematica-terza-ext-87",
+    "classe": "Terza",
+    "disciplina": "Matematica",
+    "tipo": "abilita",
+    "nucleoTematico": "Dati e previsioni",
+    "testo": "Calcolare la probabilità classica e frequentista di eventi aleatori semplici e composti e analizzare serie di dati reali.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-matematica-terza-ext-88",
+    "classe": "Terza",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Dati e previsioni",
+    "testo": "Calcolo delle probabilità: spazio campionario, eventi compatibili e incompatibili, probabilità totale e composta.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvn-matematica-terza-ext-89",
+    "classe": "Terza",
+    "disciplina": "Matematica",
+    "tipo": "obiettivo_specifico",
+    "nucleoTematico": "Digitale e STEAM",
+    "testo": "Impiegare fogli di calcolo e strumenti di geometria analitica digitale per verificare equazioni, rette e modelli statistici.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-matematica-terza-ext-90",
+    "classe": "Terza",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Digitale e STEAM",
+    "testo": "Foglio elettronico e software matematici per grafici di funzioni e simulazioni probabilistiche.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvv-matematica-terza-ext-91",
+    "classe": "Terza",
+    "disciplina": "Matematica",
+    "tipo": "abilita",
+    "nucleoTematico": "Digitale e STEAM",
+    "testo": "Impiegare fogli di calcolo e strumenti di geometria analitica digitale per verificare equazioni, rette e modelli statistici.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-matematica-terza-ext-92",
+    "classe": "Terza",
+    "disciplina": "Matematica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Digitale e STEAM",
+    "testo": "Foglio elettronico e software matematici per grafici di funzioni e simulazioni probabilistiche.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-arte-e-immagine-prima-ext-93",
+    "classe": "Prima",
+    "disciplina": "Arte e Immagine",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Esprimersi e comunicare",
+    "testo": "Elementi fondamentali del linguaggio visivo: punto, linea, colore, superficie, composizione e tecniche grafiche di base.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-arte-e-immagine-prima-ext-94",
+    "classe": "Prima",
+    "disciplina": "Arte e Immagine",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Osservare e leggere le immagini",
+    "testo": "Regole di lettura dell’immagine: inquadratura, piani, luce-ombra e primi concetti di profondità.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-arte-e-immagine-prima-ext-95",
+    "classe": "Prima",
+    "disciplina": "Arte e Immagine",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Comprendere e apprezzare le opere d’arte",
+    "testo": "Principali testimonianze artistiche dalla Preistoria all’arte greco-romana e paleocristiana.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvn-arte-e-immagine-terza-ext-96",
+    "classe": "Terza",
+    "disciplina": "Arte e Immagine",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Esprimersi e comunicare",
+    "testo": "Tecniche grafico-pittoriche, plastiche e multimediali avanzate per la rielaborazione creativa personale.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-arte-e-immagine-terza-ext-97",
+    "classe": "Terza",
+    "disciplina": "Arte e Immagine",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Osservare e leggere le immagini",
+    "testo": "Linguaggi visivi complessi: fotografia, cinema, manifesto pubblicitario e analisi compositiva dell’opera.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-arte-e-immagine-terza-ext-98",
+    "classe": "Terza",
+    "disciplina": "Arte e Immagine",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Comprendere e apprezzare le opere d’arte",
+    "testo": "Storia dell’arte dal Neoclassicismo e Romanticismo alle Avanguardie del Novecento e all’arte contemporanea; tutela del patrimonio.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-arte-e-immagine-terza-ext-99",
+    "classe": "Terza",
+    "disciplina": "Arte e Immagine",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Digitale e STEAM",
+    "testo": "Strumenti digitali per il fotoritocco, l’impaginazione grafica e la fruizione virtuale di musei e beni culturali.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-educazione-civica-terza-ext-100",
+    "classe": "Terza",
+    "disciplina": "Educazione Civica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Legalità",
+    "testo": "Costituzione Italiana, principi fondamentali, ordinamento della Repubblica e contrasto alle mafie.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-educazione-civica-terza-ext-101",
+    "classe": "Terza",
+    "disciplina": "Educazione Civica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Etica",
+    "testo": "Etica pubblica, responsabilità individuale e collettiva, dignità della persona e solidarietà.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-educazione-civica-terza-ext-102",
+    "classe": "Terza",
+    "disciplina": "Educazione Civica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Società e comunità",
+    "testo": "Istituzioni nazionali ed europee, cittadinanza attiva, volontariato e convivenza democratica.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-educazione-civica-terza-ext-103",
+    "classe": "Terza",
+    "disciplina": "Educazione Civica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Innovazione sociale",
+    "testo": "Economia circolare, consumo responsabile, uso consapevole degli strumenti digitali e contrasto al cyberbullismo.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-educazione-civica-terza-ext-104",
+    "classe": "Terza",
+    "disciplina": "Educazione Civica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Ecologia",
+    "testo": "Obiettivi dell’Agenda 2030, transizione ecologica, biodiversità e tutela climatica.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-educazione-civica-terza-ext-105",
+    "classe": "Terza",
+    "disciplina": "Educazione Civica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Territorio",
+    "testo": "Valorizzazione del patrimonio culturale, paesaggistico e civico locale e nazionale.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-educazione-civica-terza-ext-106",
+    "classe": "Terza",
+    "disciplina": "Educazione Civica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Salute",
+    "testo": "Prevenzione delle dipendenze, stili di vita sani, sicurezza stradale e primo soccorso.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvv-educazione-civica-prima-ext-107",
+    "classe": "Prima",
+    "disciplina": "Educazione Civica",
+    "tipo": "abilita",
+    "nucleoTematico": "Costituzione, diritto e legalità",
+    "testo": "Comprendere e applicare nella vita scolastica i principi di convivenza civile, legalità, rispetto delle regole e diritti-doveri della Costituzione.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-civica-prima-ext-108",
+    "classe": "Prima",
+    "disciplina": "Educazione Civica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Costituzione, diritto e legalità",
+    "testo": "La Costituzione Italiana, i diritti e doveri dei cittadini, le regole della convivenza democratica e il valore della legalità.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-civica-prima-ext-109",
+    "classe": "Prima",
+    "disciplina": "Educazione Civica",
+    "tipo": "abilita",
+    "nucleoTematico": "Sviluppo sostenibile e territorio",
+    "testo": "Adottare comportamenti sostenibili di tutela ambientale, valorizzazione del territorio e promozione della salute.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-civica-prima-ext-110",
+    "classe": "Prima",
+    "disciplina": "Educazione Civica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Sviluppo sostenibile e territorio",
+    "testo": "Agenda 2030 per lo sviluppo sostenibile, educazione ambientale, beni culturali locali e stili di vita sani.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-civica-prima-ext-111",
+    "classe": "Prima",
+    "disciplina": "Educazione Civica",
+    "tipo": "abilita",
+    "nucleoTematico": "Cittadinanza digitale",
+    "testo": "Utilizzare la rete e gli strumenti digitali in modo critico, sicuro e rispettoso della privacy altrui.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-civica-prima-ext-112",
+    "classe": "Prima",
+    "disciplina": "Educazione Civica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Cittadinanza digitale",
+    "testo": "Netiquette, sicurezza informatica, tutela dei dati personali, verifica delle fonti e prevenzione del cyberbullismo.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-civica-seconda-ext-113",
+    "classe": "Seconda",
+    "disciplina": "Educazione Civica",
+    "tipo": "abilita",
+    "nucleoTematico": "Costituzione, diritto e legalità",
+    "testo": "Comprendere e applicare nella vita scolastica i principi di convivenza civile, legalità, rispetto delle regole e diritti-doveri della Costituzione.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-civica-seconda-ext-114",
+    "classe": "Seconda",
+    "disciplina": "Educazione Civica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Costituzione, diritto e legalità",
+    "testo": "La Costituzione Italiana, i diritti e doveri dei cittadini, le regole della convivenza democratica e il valore della legalità.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-civica-seconda-ext-115",
+    "classe": "Seconda",
+    "disciplina": "Educazione Civica",
+    "tipo": "abilita",
+    "nucleoTematico": "Sviluppo sostenibile e territorio",
+    "testo": "Adottare comportamenti sostenibili di tutela ambientale, valorizzazione del territorio e promozione della salute.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-civica-seconda-ext-116",
+    "classe": "Seconda",
+    "disciplina": "Educazione Civica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Sviluppo sostenibile e territorio",
+    "testo": "Agenda 2030 per lo sviluppo sostenibile, educazione ambientale, beni culturali locali e stili di vita sani.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-civica-seconda-ext-117",
+    "classe": "Seconda",
+    "disciplina": "Educazione Civica",
+    "tipo": "abilita",
+    "nucleoTematico": "Cittadinanza digitale",
+    "testo": "Utilizzare la rete e gli strumenti digitali in modo critico, sicuro e rispettoso della privacy altrui.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-civica-seconda-ext-118",
+    "classe": "Seconda",
+    "disciplina": "Educazione Civica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Cittadinanza digitale",
+    "testo": "Netiquette, sicurezza informatica, tutela dei dati personali, verifica delle fonti e prevenzione del cyberbullismo.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-civica-terza-ext-119",
+    "classe": "Terza",
+    "disciplina": "Educazione Civica",
+    "tipo": "abilita",
+    "nucleoTematico": "Costituzione, diritto e legalità",
+    "testo": "Comprendere e applicare nella vita scolastica i principi di convivenza civile, legalità, rispetto delle regole e diritti-doveri della Costituzione.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-civica-terza-ext-120",
+    "classe": "Terza",
+    "disciplina": "Educazione Civica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Costituzione, diritto e legalità",
+    "testo": "La Costituzione Italiana, i diritti e doveri dei cittadini, le regole della convivenza democratica e il valore della legalità.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-civica-terza-ext-121",
+    "classe": "Terza",
+    "disciplina": "Educazione Civica",
+    "tipo": "abilita",
+    "nucleoTematico": "Sviluppo sostenibile e territorio",
+    "testo": "Adottare comportamenti sostenibili di tutela ambientale, valorizzazione del territorio e promozione della salute.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-civica-terza-ext-122",
+    "classe": "Terza",
+    "disciplina": "Educazione Civica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Sviluppo sostenibile e territorio",
+    "testo": "Agenda 2030 per lo sviluppo sostenibile, educazione ambientale, beni culturali locali e stili di vita sani.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-civica-terza-ext-123",
+    "classe": "Terza",
+    "disciplina": "Educazione Civica",
+    "tipo": "abilita",
+    "nucleoTematico": "Cittadinanza digitale",
+    "testo": "Utilizzare la rete e gli strumenti digitali in modo critico, sicuro e rispettoso della privacy altrui.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-civica-terza-ext-124",
+    "classe": "Terza",
+    "disciplina": "Educazione Civica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Cittadinanza digitale",
+    "testo": "Netiquette, sicurezza informatica, tutela dei dati personali, verifica delle fonti e prevenzione del cyberbullismo.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-fisica-prima-ext-125",
+    "classe": "Prima",
+    "disciplina": "Educazione Fisica",
+    "tipo": "abilita",
+    "nucleoTematico": "Il corpo e la sua relazione con lo spazio e il tempo",
+    "testo": "Utilizzare e coordinare schemi motori di base, capacità condizionali ed equilibrio adattandoli a situazioni spaziali e temporali diverse.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-fisica-prima-ext-126",
+    "classe": "Prima",
+    "disciplina": "Educazione Fisica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Il corpo e la sua relazione con lo spazio e il tempo",
+    "testo": "Apparato locomotore, coordinazione oculo-manuale e dinamica generale, percezione spazio-temporale e capacità motorie.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-fisica-prima-ext-127",
+    "classe": "Prima",
+    "disciplina": "Educazione Fisica",
+    "tipo": "abilita",
+    "nucleoTematico": "Il linguaggio del corpo",
+    "testo": "Utilizzare il movimento, il gesto e la postura per esprimere stati d’animo ed eseguire sequenze ritmiche individuali o di gruppo.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-fisica-prima-ext-128",
+    "classe": "Prima",
+    "disciplina": "Educazione Fisica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Il linguaggio del corpo",
+    "testo": "Comunicazione non verbale, gestualità espressiva, ritmo e composizione corporea.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-fisica-prima-ext-129",
+    "classe": "Prima",
+    "disciplina": "Educazione Fisica",
+    "tipo": "abilita",
+    "nucleoTematico": "Il gioco, lo sport, le regole e il fair play",
+    "testo": "Partecipare attivamente a giochi sportivi e discipline di squadra applicando regolamenti, tattiche di base e principi di fair play.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-fisica-prima-ext-130",
+    "classe": "Prima",
+    "disciplina": "Educazione Fisica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Il gioco, lo sport, le regole e il fair play",
+    "testo": "Regolamenti essenziali degli sport individuali e di squadra, ruoli di gioco, etica sportiva e collaborazione.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-fisica-prima-ext-131",
+    "classe": "Prima",
+    "disciplina": "Educazione Fisica",
+    "tipo": "abilita",
+    "nucleoTematico": "Salute, benessere, sicurezza e prevenzione",
+    "testo": "Adottare comportamenti corretti per la sicurezza in palestra, l’igiene personale, la postura e la prevenzione degli infortuni.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-fisica-prima-ext-132",
+    "classe": "Prima",
+    "disciplina": "Educazione Fisica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Salute, benessere, sicurezza e prevenzione",
+    "testo": "Norme di sicurezza negli ambienti sportivi, alimentazione equilibrata, educazione posturale e benefici del movimento.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-fisica-seconda-ext-133",
+    "classe": "Seconda",
+    "disciplina": "Educazione Fisica",
+    "tipo": "abilita",
+    "nucleoTematico": "Il corpo e la sua relazione con lo spazio e il tempo",
+    "testo": "Utilizzare e coordinare schemi motori di base, capacità condizionali ed equilibrio adattandoli a situazioni spaziali e temporali diverse.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-fisica-seconda-ext-134",
+    "classe": "Seconda",
+    "disciplina": "Educazione Fisica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Il corpo e la sua relazione con lo spazio e il tempo",
+    "testo": "Apparato locomotore, coordinazione oculo-manuale e dinamica generale, percezione spazio-temporale e capacità motorie.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-fisica-seconda-ext-135",
+    "classe": "Seconda",
+    "disciplina": "Educazione Fisica",
+    "tipo": "abilita",
+    "nucleoTematico": "Il linguaggio del corpo",
+    "testo": "Utilizzare il movimento, il gesto e la postura per esprimere stati d’animo ed eseguire sequenze ritmiche individuali o di gruppo.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-fisica-seconda-ext-136",
+    "classe": "Seconda",
+    "disciplina": "Educazione Fisica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Il linguaggio del corpo",
+    "testo": "Comunicazione non verbale, gestualità espressiva, ritmo e composizione corporea.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-fisica-seconda-ext-137",
+    "classe": "Seconda",
+    "disciplina": "Educazione Fisica",
+    "tipo": "abilita",
+    "nucleoTematico": "Il gioco, lo sport, le regole e il fair play",
+    "testo": "Partecipare attivamente a giochi sportivi e discipline di squadra applicando regolamenti, tattiche di base e principi di fair play.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-fisica-seconda-ext-138",
+    "classe": "Seconda",
+    "disciplina": "Educazione Fisica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Il gioco, lo sport, le regole e il fair play",
+    "testo": "Regolamenti essenziali degli sport individuali e di squadra, ruoli di gioco, etica sportiva e collaborazione.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-fisica-seconda-ext-139",
+    "classe": "Seconda",
+    "disciplina": "Educazione Fisica",
+    "tipo": "abilita",
+    "nucleoTematico": "Salute, benessere, sicurezza e prevenzione",
+    "testo": "Adottare comportamenti corretti per la sicurezza in palestra, l’igiene personale, la postura e la prevenzione degli infortuni.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-fisica-seconda-ext-140",
+    "classe": "Seconda",
+    "disciplina": "Educazione Fisica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Salute, benessere, sicurezza e prevenzione",
+    "testo": "Norme di sicurezza negli ambienti sportivi, alimentazione equilibrata, educazione posturale e benefici del movimento.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-fisica-terza-ext-141",
+    "classe": "Terza",
+    "disciplina": "Educazione Fisica",
+    "tipo": "abilita",
+    "nucleoTematico": "Il corpo e la sua relazione con lo spazio e il tempo",
+    "testo": "Utilizzare e coordinare schemi motori di base, capacità condizionali ed equilibrio adattandoli a situazioni spaziali e temporali diverse.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-fisica-terza-ext-142",
+    "classe": "Terza",
+    "disciplina": "Educazione Fisica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Il corpo e la sua relazione con lo spazio e il tempo",
+    "testo": "Apparato locomotore, coordinazione oculo-manuale e dinamica generale, percezione spazio-temporale e capacità motorie.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-fisica-terza-ext-143",
+    "classe": "Terza",
+    "disciplina": "Educazione Fisica",
+    "tipo": "abilita",
+    "nucleoTematico": "Il linguaggio del corpo",
+    "testo": "Utilizzare il movimento, il gesto e la postura per esprimere stati d’animo ed eseguire sequenze ritmiche individuali o di gruppo.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-fisica-terza-ext-144",
+    "classe": "Terza",
+    "disciplina": "Educazione Fisica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Il linguaggio del corpo",
+    "testo": "Comunicazione non verbale, gestualità espressiva, ritmo e composizione corporea.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-fisica-terza-ext-145",
+    "classe": "Terza",
+    "disciplina": "Educazione Fisica",
+    "tipo": "abilita",
+    "nucleoTematico": "Il gioco, lo sport, le regole e il fair play",
+    "testo": "Partecipare attivamente a giochi sportivi e discipline di squadra applicando regolamenti, tattiche di base e principi di fair play.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-fisica-terza-ext-146",
+    "classe": "Terza",
+    "disciplina": "Educazione Fisica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Il gioco, lo sport, le regole e il fair play",
+    "testo": "Regolamenti essenziali degli sport individuali e di squadra, ruoli di gioco, etica sportiva e collaborazione.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-fisica-terza-ext-147",
+    "classe": "Terza",
+    "disciplina": "Educazione Fisica",
+    "tipo": "abilita",
+    "nucleoTematico": "Salute, benessere, sicurezza e prevenzione",
+    "testo": "Adottare comportamenti corretti per la sicurezza in palestra, l’igiene personale, la postura e la prevenzione degli infortuni.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-educazione-fisica-terza-ext-148",
+    "classe": "Terza",
+    "disciplina": "Educazione Fisica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Salute, benessere, sicurezza e prevenzione",
+    "testo": "Norme di sicurezza negli ambienti sportivi, alimentazione equilibrata, educazione posturale e benefici del movimento.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvn-latino-lel--prima-ext-149",
+    "classe": "Prima",
+    "disciplina": "Latino (LEL)",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Alfabeto, pronuncia e lessico",
+    "testo": "Alfabeto e pronuncia scolastica/classica, famiglie lessicali latino-italiane ed etimologia delle parole di uso quotidiano.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-latino-lel--prima-ext-150",
+    "classe": "Prima",
+    "disciplina": "Latino (LEL)",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Cultura latina e comparazione linguistica",
+    "testo": "Aspetti fondamentali della civiltà romana, miti delle origini e confronto tra strutture linguistiche latine e romanze.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvv-latino-lel--prima-ext-151",
+    "classe": "Prima",
+    "disciplina": "Latino (LEL)",
+    "tipo": "abilita",
+    "nucleoTematico": "Alfabeto, pronuncia e lessico",
+    "testo": "Leggere correttamente testi semplici in lingua latina e riconoscere l’origine latina del lessico italiano ed europeo.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-latino-lel--prima-ext-152",
+    "classe": "Prima",
+    "disciplina": "Latino (LEL)",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Alfabeto, pronuncia e lessico",
+    "testo": "Fonetica, regole dell’accento, prestiti e continuità lessicale dal latino all’italiano.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-latino-lel--prima-ext-153",
+    "classe": "Prima",
+    "disciplina": "Latino (LEL)",
+    "tipo": "abilita",
+    "nucleoTematico": "Morfologia e strutture linguistiche",
+    "testo": "Riconoscere la funzione logica dei casi e analizzare e tradurre brevi frasi con nomi della prima/seconda declinazione e tempi verbali fondamentali.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-latino-lel--prima-ext-154",
+    "classe": "Prima",
+    "disciplina": "Latino (LEL)",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Morfologia e strutture linguistiche",
+    "testo": "Il sistema dei casi e delle declinazioni, concordanze nome-aggettivo e strutture elementari della proposizione latina.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-latino-lel--prima-ext-155",
+    "classe": "Prima",
+    "disciplina": "Latino (LEL)",
+    "tipo": "abilita",
+    "nucleoTematico": "Cultura latina e comparazione linguistica",
+    "testo": "Cogliere nessi fra lingua latina, storia e civiltà romana in chiave comparativa e interdisciplinare.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-latino-lel--prima-ext-156",
+    "classe": "Prima",
+    "disciplina": "Latino (LEL)",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Cultura latina e comparazione linguistica",
+    "testo": "Vita quotidiana, istituzioni e patrimonio culturale dell’antica Roma nella memoria linguistica contemporanea.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvn-latino-lel--seconda-ext-157",
+    "classe": "Seconda",
+    "disciplina": "Latino (LEL)",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Alfabeto, pronuncia e lessico",
+    "testo": "Alfabeto e pronuncia scolastica/classica, famiglie lessicali latino-italiane ed etimologia delle parole di uso quotidiano.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-latino-lel--seconda-ext-158",
+    "classe": "Seconda",
+    "disciplina": "Latino (LEL)",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Cultura latina e comparazione linguistica",
+    "testo": "Aspetti fondamentali della civiltà romana, miti delle origini e confronto tra strutture linguistiche latine e romanze.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvv-latino-lel--seconda-ext-159",
+    "classe": "Seconda",
+    "disciplina": "Latino (LEL)",
+    "tipo": "abilita",
+    "nucleoTematico": "Alfabeto, pronuncia e lessico",
+    "testo": "Leggere correttamente testi semplici in lingua latina e riconoscere l’origine latina del lessico italiano ed europeo.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-latino-lel--seconda-ext-160",
+    "classe": "Seconda",
+    "disciplina": "Latino (LEL)",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Alfabeto, pronuncia e lessico",
+    "testo": "Fonetica, regole dell’accento, prestiti e continuità lessicale dal latino all’italiano.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-latino-lel--seconda-ext-161",
+    "classe": "Seconda",
+    "disciplina": "Latino (LEL)",
+    "tipo": "abilita",
+    "nucleoTematico": "Morfologia e strutture linguistiche",
+    "testo": "Riconoscere la funzione logica dei casi e analizzare e tradurre brevi frasi con nomi della prima/seconda declinazione e tempi verbali fondamentali.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-latino-lel--seconda-ext-162",
+    "classe": "Seconda",
+    "disciplina": "Latino (LEL)",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Morfologia e strutture linguistiche",
+    "testo": "Il sistema dei casi e delle declinazioni, concordanze nome-aggettivo e strutture elementari della proposizione latina.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-latino-lel--seconda-ext-163",
+    "classe": "Seconda",
+    "disciplina": "Latino (LEL)",
+    "tipo": "abilita",
+    "nucleoTematico": "Cultura latina e comparazione linguistica",
+    "testo": "Cogliere nessi fra lingua latina, storia e civiltà romana in chiave comparativa e interdisciplinare.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-latino-lel--seconda-ext-164",
+    "classe": "Seconda",
+    "disciplina": "Latino (LEL)",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Cultura latina e comparazione linguistica",
+    "testo": "Vita quotidiana, istituzioni e patrimonio culturale dell’antica Roma nella memoria linguistica contemporanea.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvn-latino-lel--terza-ext-165",
+    "classe": "Terza",
+    "disciplina": "Latino (LEL)",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Alfabeto, pronuncia e lessico",
+    "testo": "Alfabeto e pronuncia scolastica/classica, famiglie lessicali latino-italiane ed etimologia delle parole di uso quotidiano.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-latino-lel--terza-ext-166",
+    "classe": "Terza",
+    "disciplina": "Latino (LEL)",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Cultura latina e comparazione linguistica",
+    "testo": "Aspetti fondamentali della civiltà romana, miti delle origini e confronto tra strutture linguistiche latine e romanze.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-latino-lel--terza-ext-167",
+    "classe": "Terza",
+    "disciplina": "Latino (LEL)",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Morfologia e strutture linguistiche",
+    "testo": "Sistema flessivo dei casi, principali declinazioni nominali e coniugazione regolare del verbo latino nella frase semplice.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvv-latino-lel--terza-ext-168",
+    "classe": "Terza",
+    "disciplina": "Latino (LEL)",
+    "tipo": "abilita",
+    "nucleoTematico": "Alfabeto, pronuncia e lessico",
+    "testo": "Leggere correttamente testi semplici in lingua latina e riconoscere l’origine latina del lessico italiano ed europeo.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-latino-lel--terza-ext-169",
+    "classe": "Terza",
+    "disciplina": "Latino (LEL)",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Alfabeto, pronuncia e lessico",
+    "testo": "Fonetica, regole dell’accento, prestiti e continuità lessicale dal latino all’italiano.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-latino-lel--terza-ext-170",
+    "classe": "Terza",
+    "disciplina": "Latino (LEL)",
+    "tipo": "abilita",
+    "nucleoTematico": "Morfologia e strutture linguistiche",
+    "testo": "Riconoscere la funzione logica dei casi e analizzare e tradurre brevi frasi con nomi della prima/seconda declinazione e tempi verbali fondamentali.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-latino-lel--terza-ext-171",
+    "classe": "Terza",
+    "disciplina": "Latino (LEL)",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Morfologia e strutture linguistiche",
+    "testo": "Il sistema dei casi e delle declinazioni, concordanze nome-aggettivo e strutture elementari della proposizione latina.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-latino-lel--terza-ext-172",
+    "classe": "Terza",
+    "disciplina": "Latino (LEL)",
+    "tipo": "abilita",
+    "nucleoTematico": "Cultura latina e comparazione linguistica",
+    "testo": "Cogliere nessi fra lingua latina, storia e civiltà romana in chiave comparativa e interdisciplinare.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-latino-lel--terza-ext-173",
+    "classe": "Terza",
+    "disciplina": "Latino (LEL)",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Cultura latina e comparazione linguistica",
+    "testo": "Vita quotidiana, istituzioni e patrimonio culturale dell’antica Roma nella memoria linguistica contemporanea.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-italiano-prima-ext-174",
+    "classe": "Prima",
+    "disciplina": "Italiano",
+    "tipo": "abilita",
+    "nucleoTematico": "Lettura",
+    "testo": "Leggere ad alta voce e silenziosamente testi narrativi (fiaba, favola, mito, epica) individuando informazioni esplicite, implicite e sequenze.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-italiano-prima-ext-175",
+    "classe": "Prima",
+    "disciplina": "Italiano",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Lettura",
+    "testo": "Struttura e generi del testo narrativo (fiaba, favola, racconto, mito ed epica classica); strategie di comprensione.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-italiano-prima-ext-176",
+    "classe": "Prima",
+    "disciplina": "Italiano",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Scrittura",
+    "testo": "Pianificazione e revisione del testo narrativo e descrittivo; convenzioni ortografiche e punteggiatura.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-italiano-prima-ext-177",
+    "classe": "Prima",
+    "disciplina": "Italiano",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Ascolto e parlato",
+    "testo": "Regole della comunicazione orale, esposizione chiara di esperienze e contenuti disciplinari, ascolto attivo.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-italiano-prima-ext-178",
+    "classe": "Prima",
+    "disciplina": "Italiano",
+    "tipo": "abilita",
+    "nucleoTematico": "Comprensione, produzione e lingua",
+    "testo": "Riconoscere le parti variabili e invariabili del discorso e applicare le regole ortografiche e morfologiche.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-italiano-prima-ext-179",
+    "classe": "Prima",
+    "disciplina": "Italiano",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Comprensione, produzione e lingua",
+    "testo": "Fonetica, ortografia e morfologia: nome, articolo, aggettivo, pronome, verbo e parti invariabili.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-italiano-seconda-ext-180",
+    "classe": "Seconda",
+    "disciplina": "Italiano",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Scrittura",
+    "testo": "Struttura del testo espositivo, informativo e regolativo; tecniche di sintesi e riassunto.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-italiano-terza-ext-181",
+    "classe": "Terza",
+    "disciplina": "Italiano",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Scrittura",
+    "testo": "Il testo argomentativo, la relazione e la lettera formale; strategie di coesione e coerenza testuale.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-italiano-terza-ext-182",
+    "classe": "Terza",
+    "disciplina": "Italiano",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Comprensione, produzione e lingua",
+    "testo": "Sintassi della frase complessa (analisi del periodo) e principali autori della letteratura italiana tra Ottocento e Novecento.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvn-storia-terza-ext-183",
+    "classe": "Terza",
+    "disciplina": "Storia",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Il primo Novecento e la Grande Guerra",
+    "testo": "La Belle Époque, le tensioni europee, la Prima guerra mondiale e la Rivoluzione russa.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-storia-terza-ext-184",
+    "classe": "Terza",
+    "disciplina": "Storia",
+    "tipo": "conoscenza",
+    "nucleoTematico": "L’età dei totalitarismi",
+    "testo": "La crisi del 1929 e l’ascesa di fascismo, nazismo e stalinismo.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-storia-terza-ext-185",
+    "classe": "Terza",
+    "disciplina": "Storia",
+    "tipo": "conoscenza",
+    "nucleoTematico": "La Seconda guerra mondiale e la Resistenza",
+    "testo": "Cause, fasi ed esiti della Seconda guerra mondiale, la Shoah, la Resistenza in Italia e la nascita della Repubblica.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-storia-terza-ext-186",
+    "classe": "Terza",
+    "disciplina": "Storia",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Il mondo contemporaneo e la Costituzione",
+    "testo": "La Guerra Fredda, la decolonizzazione, l’integrazione europea e i principi della Costituzione Repubblicana.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvn-storia-terza-ext-187",
+    "classe": "Terza",
+    "disciplina": "Storia",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Digitale e STEAM",
+    "testo": "Ricerca e analisi critica di archivi storici digitali, carte interattive e fonti multimediali del Novecento.",
+    "documentoProvenienza": "Curricolo verticale nuovo"
+  },
+  {
+    "id": "cvv-storia-prima-ext-188",
+    "classe": "Prima",
+    "disciplina": "Storia",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Strumenti concettuali e conoscenza storica",
+    "testo": "Linea del tempo, fonti storiche primarie e secondarie, periodizzazione dell’età tardoantica e medievale.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-storia-prima-ext-189",
+    "classe": "Prima",
+    "disciplina": "Storia",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Organizzazione delle informazioni",
+    "testo": "I regni romano-barbarici, il feudalesimo, i Comuni, le Crociate e la crisi del Trecento.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-storia-seconda-ext-190",
+    "classe": "Seconda",
+    "disciplina": "Storia",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Organizzazione delle informazioni",
+    "testo": "Umanesimo e Rinascimento, scoperte geografiche, Riforma protestante, Illuminismo, rivoluzioni del Settecento e Risorgimento italiano.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-storia-terza-ext-191",
+    "classe": "Terza",
+    "disciplina": "Storia",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Organizzazione delle informazioni",
+    "testo": "Prima e Seconda guerra mondiale, i totalitarismi, la Resistenza, la Costituzione italiana, la Guerra Fredda e l’Unione Europea.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-scienze-prima-ext-192",
+    "classe": "Prima",
+    "disciplina": "Scienze",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Scienze sperimentali e materiali",
+    "testo": "Le fasi del metodo scientifico sperimentale e le grandezze fisiche fondamentali con le relative unità di misura.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-scienze-prima-ext-193",
+    "classe": "Prima",
+    "disciplina": "Scienze",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Fisica e materia",
+    "testo": "Struttura della materia, stati di aggregazione (solido, liquido, gassoso), passaggi di stato, calore e temperatura.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-scienze-prima-ext-194",
+    "classe": "Prima",
+    "disciplina": "Scienze",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Biologia e viventi",
+    "testo": "La cellula animale e vegetale, i cinque regni dei viventi, la classificazione biologica e gli ecosistemi.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-scienze-prima-ext-195",
+    "classe": "Prima",
+    "disciplina": "Scienze",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Astronomia e Scienze della Terra",
+    "testo": "Atmosfera, idrosfera, litosfera e fenomeni atmosferici e geologici elementari.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-scienze-terza-ext-196",
+    "classe": "Terza",
+    "disciplina": "Scienze",
+    "tipo": "abilita",
+    "nucleoTematico": "Biologia e viventi",
+    "testo": "Descrivere l’organizzazione e il funzionamento del sistema nervoso, degli apparati di controllo e comprendere le leggi dell’ereditarietà (genetica di Mendel) e l’evoluzione.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-scienze-terza-ext-197",
+    "classe": "Terza",
+    "disciplina": "Scienze",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Biologia e viventi",
+    "testo": "Sistema nervoso ed endocrino, apparato riproduttore, DNA, leggi di Mendel ed evoluzione dei viventi.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-religione-prima-ext-198",
+    "classe": "Prima",
+    "disciplina": "Religione",
+    "tipo": "abilita",
+    "nucleoTematico": "Dio e l’uomo",
+    "testo": "Riflettere sulle domande fondamentali dell’uomo e sul messaggio cristiano nella storia.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-religione-prima-ext-199",
+    "classe": "Prima",
+    "disciplina": "Religione",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Dio e l’uomo",
+    "testo": "Il dialogo tra fede e ragione, le grandi religioni monoteistiche e la figura storica di Gesù.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-religione-prima-ext-200",
+    "classe": "Prima",
+    "disciplina": "Religione",
+    "tipo": "abilita",
+    "nucleoTematico": "La Bibbia e le altre fonti",
+    "testo": "Leggere e interpretare brani biblici fondamentali distinguendo generi letterari e contesti storici.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-religione-prima-ext-201",
+    "classe": "Prima",
+    "disciplina": "Religione",
+    "tipo": "conoscenza",
+    "nucleoTematico": "La Bibbia e le altre fonti",
+    "testo": "Struttura dell’Antico e Nuovo Testamento, contesti storici e fonti cristiane.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-religione-prima-ext-202",
+    "classe": "Prima",
+    "disciplina": "Religione",
+    "tipo": "abilita",
+    "nucleoTematico": "Il linguaggio religioso",
+    "testo": "Riconoscere i segni, i simboli e le espressioni artistiche e liturgiche della tradizione cristiana.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-religione-prima-ext-203",
+    "classe": "Prima",
+    "disciplina": "Religione",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Il linguaggio religioso",
+    "testo": "Simboli religiosi, patrimonio artistico cristiano e significato delle principali festività.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-religione-prima-ext-204",
+    "classe": "Prima",
+    "disciplina": "Religione",
+    "tipo": "abilita",
+    "nucleoTematico": "I valori etici e religiosi",
+    "testo": "Confrontarsi su scelte etiche, solidarietà, pace, legalità e rispetto della dignità umana.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-religione-prima-ext-205",
+    "classe": "Prima",
+    "disciplina": "Religione",
+    "tipo": "conoscenza",
+    "nucleoTematico": "I valori etici e religiosi",
+    "testo": "I diritti umani, la responsabilità verso il creato e i valori dell’etica evangelica nella società contemporanea.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-religione-terza-ext-206",
+    "classe": "Terza",
+    "disciplina": "Religione",
+    "tipo": "abilita",
+    "nucleoTematico": "Dio e l’uomo",
+    "testo": "Riflettere sulle domande fondamentali dell’uomo e sul messaggio cristiano nella storia.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-religione-terza-ext-207",
+    "classe": "Terza",
+    "disciplina": "Religione",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Dio e l’uomo",
+    "testo": "Il dialogo tra fede e ragione, le grandi religioni monoteistiche e la figura storica di Gesù.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-religione-terza-ext-208",
+    "classe": "Terza",
+    "disciplina": "Religione",
+    "tipo": "abilita",
+    "nucleoTematico": "La Bibbia e le altre fonti",
+    "testo": "Leggere e interpretare brani biblici fondamentali distinguendo generi letterari e contesti storici.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-religione-terza-ext-209",
+    "classe": "Terza",
+    "disciplina": "Religione",
+    "tipo": "conoscenza",
+    "nucleoTematico": "La Bibbia e le altre fonti",
+    "testo": "Struttura dell’Antico e Nuovo Testamento, contesti storici e fonti cristiane.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-religione-terza-ext-210",
+    "classe": "Terza",
+    "disciplina": "Religione",
+    "tipo": "abilita",
+    "nucleoTematico": "Il linguaggio religioso",
+    "testo": "Riconoscere i segni, i simboli e le espressioni artistiche e liturgiche della tradizione cristiana.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-religione-terza-ext-211",
+    "classe": "Terza",
+    "disciplina": "Religione",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Il linguaggio religioso",
+    "testo": "Simboli religiosi, patrimonio artistico cristiano e significato delle principali festività.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-religione-terza-ext-212",
+    "classe": "Terza",
+    "disciplina": "Religione",
+    "tipo": "abilita",
+    "nucleoTematico": "I valori etici e religiosi",
+    "testo": "Confrontarsi su scelte etiche, solidarietà, pace, legalità e rispetto della dignità umana.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-religione-terza-ext-213",
+    "classe": "Terza",
+    "disciplina": "Religione",
+    "tipo": "conoscenza",
+    "nucleoTematico": "I valori etici e religiosi",
+    "testo": "I diritti umani, la responsabilità verso il creato e i valori dell’etica evangelica nella società contemporanea.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-tecnologia-prima-ext-214",
+    "classe": "Prima",
+    "disciplina": "Tecnologia",
+    "tipo": "abilita",
+    "nucleoTematico": "Disegno tecnico e rappresentazione grafica",
+    "testo": "Eseguire costruzioni geometriche elementari, proiezioni ortogonali o assonometriche utilizzando correttamente gli strumenti da disegno.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-tecnologia-prima-ext-215",
+    "classe": "Prima",
+    "disciplina": "Tecnologia",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Disegno tecnico e rappresentazione grafica",
+    "testo": "Norme del disegno tecnico, scale di rappresentazione, costruzioni geometriche e metodi di proiezione.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-tecnologia-prima-ext-216",
+    "classe": "Prima",
+    "disciplina": "Tecnologia",
+    "tipo": "abilita",
+    "nucleoTematico": "Progettazione e produzione",
+    "testo": "Progettare semplici oggetti o modelli organizzando sequenze operative, materiali e strumenti in sicurezza.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-tecnologia-prima-ext-217",
+    "classe": "Prima",
+    "disciplina": "Tecnologia",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Progettazione e produzione",
+    "testo": "Fasi della progettazione tecnologica, analisi funzionale degli oggetti e norme di sicurezza.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-tecnologia-prima-ext-218",
+    "classe": "Prima",
+    "disciplina": "Tecnologia",
+    "tipo": "abilita",
+    "nucleoTematico": "Informatica e competenze digitali",
+    "testo": "Utilizzare programmi di videoscrittura, fogli di calcolo e strumenti digitali per produrre elaborati tecnici e presentazioni.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-tecnologia-prima-ext-219",
+    "classe": "Prima",
+    "disciplina": "Tecnologia",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Informatica e competenze digitali",
+    "testo": "Componenti del computer, gestione sicura dei file, applicativi d’ufficio e cittadinanza digitale.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-tecnologia-seconda-ext-220",
+    "classe": "Seconda",
+    "disciplina": "Tecnologia",
+    "tipo": "abilita",
+    "nucleoTematico": "Disegno tecnico e rappresentazione grafica",
+    "testo": "Eseguire costruzioni geometriche elementari, proiezioni ortogonali o assonometriche utilizzando correttamente gli strumenti da disegno.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-tecnologia-seconda-ext-221",
+    "classe": "Seconda",
+    "disciplina": "Tecnologia",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Disegno tecnico e rappresentazione grafica",
+    "testo": "Norme del disegno tecnico, scale di rappresentazione, costruzioni geometriche e metodi di proiezione.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-tecnologia-seconda-ext-222",
+    "classe": "Seconda",
+    "disciplina": "Tecnologia",
+    "tipo": "abilita",
+    "nucleoTematico": "Progettazione e produzione",
+    "testo": "Progettare semplici oggetti o modelli organizzando sequenze operative, materiali e strumenti in sicurezza.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-tecnologia-seconda-ext-223",
+    "classe": "Seconda",
+    "disciplina": "Tecnologia",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Progettazione e produzione",
+    "testo": "Fasi della progettazione tecnologica, analisi funzionale degli oggetti e norme di sicurezza.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-tecnologia-seconda-ext-224",
+    "classe": "Seconda",
+    "disciplina": "Tecnologia",
+    "tipo": "abilita",
+    "nucleoTematico": "Informatica e competenze digitali",
+    "testo": "Utilizzare programmi di videoscrittura, fogli di calcolo e strumenti digitali per produrre elaborati tecnici e presentazioni.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-tecnologia-seconda-ext-225",
+    "classe": "Seconda",
+    "disciplina": "Tecnologia",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Informatica e competenze digitali",
+    "testo": "Componenti del computer, gestione sicura dei file, applicativi d’ufficio e cittadinanza digitale.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-tecnologia-terza-ext-226",
+    "classe": "Terza",
+    "disciplina": "Tecnologia",
+    "tipo": "abilita",
+    "nucleoTematico": "Disegno tecnico e rappresentazione grafica",
+    "testo": "Eseguire costruzioni geometriche elementari, proiezioni ortogonali o assonometriche utilizzando correttamente gli strumenti da disegno.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-tecnologia-terza-ext-227",
+    "classe": "Terza",
+    "disciplina": "Tecnologia",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Disegno tecnico e rappresentazione grafica",
+    "testo": "Norme del disegno tecnico, scale di rappresentazione, costruzioni geometriche e metodi di proiezione.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-tecnologia-terza-ext-228",
+    "classe": "Terza",
+    "disciplina": "Tecnologia",
+    "tipo": "abilita",
+    "nucleoTematico": "Progettazione e produzione",
+    "testo": "Progettare semplici oggetti o modelli organizzando sequenze operative, materiali e strumenti in sicurezza.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-tecnologia-terza-ext-229",
+    "classe": "Terza",
+    "disciplina": "Tecnologia",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Progettazione e produzione",
+    "testo": "Fasi della progettazione tecnologica, analisi funzionale degli oggetti e norme di sicurezza.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-tecnologia-terza-ext-230",
+    "classe": "Terza",
+    "disciplina": "Tecnologia",
+    "tipo": "abilita",
+    "nucleoTematico": "Informatica e competenze digitali",
+    "testo": "Utilizzare programmi di videoscrittura, fogli di calcolo e strumenti digitali per produrre elaborati tecnici e presentazioni.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-tecnologia-terza-ext-231",
+    "classe": "Terza",
+    "disciplina": "Tecnologia",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Informatica e competenze digitali",
+    "testo": "Componenti del computer, gestione sicura dei file, applicativi d’ufficio e cittadinanza digitale.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-tecnologia-prima-ext-232",
+    "classe": "Prima",
+    "disciplina": "Tecnologia",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Materiali, energia e trasformazioni",
+    "testo": "Origine, proprietà fisico-meccaniche e lavorazione dei principali materiali (legno, carta, fibre tessili, metalli).",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-tecnologia-prima-ext-233",
+    "classe": "Prima",
+    "disciplina": "Tecnologia",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Vedere, osservare e sperimentare",
+    "testo": "Analisi di oggetti d’uso quotidiano, strumenti di misura e cicli produttivi semplici.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-francese-prima-ext-234",
+    "classe": "Prima",
+    "disciplina": "Francese",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Ascolto (comprensione orale)",
+    "testo": "Lessico di base, saluti, espressioni quotidiane, suoni e intonazione della lingua francese.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-francese-prima-ext-235",
+    "classe": "Prima",
+    "disciplina": "Francese",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Lettura (comprensione scritta)",
+    "testo": "Brevi testi descrittivi e dialoghi su famiglia, scuola e routine quotidiana.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-francese-prima-ext-236",
+    "classe": "Prima",
+    "disciplina": "Francese",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Riflessione sulla lingua e cultura",
+    "testo": "Pronomi personali soggetto, articoli determinativi/indeterminativi, verbi être, avoir e del 1° gruppo al presente.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-francese-prima-ext-237",
+    "classe": "Prima",
+    "disciplina": "Francese",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Scrittura (produzione scritta)",
+    "testo": "Frasi semplici di presentazione personale e descrizione di oggetti e persone.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-inglese-prima-ext-238",
+    "classe": "Prima",
+    "disciplina": "Inglese",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Ascolto (comprensione orale)",
+    "testo": "Istruzioni scolastiche, saluti, dialoghi elementari su dati personali, numeri, giorni e orari.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-inglese-prima-ext-239",
+    "classe": "Prima",
+    "disciplina": "Inglese",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Parlato (produzione e interazione orale)",
+    "testo": "Funzioni comunicative di base (livello A1): presentarsi, chiedere informazioni su famiglia, gusti e routine.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-inglese-prima-ext-240",
+    "classe": "Prima",
+    "disciplina": "Inglese",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Lettura (comprensione scritta)",
+    "testo": "Brevi messaggi, schede personali e testi descrittivi di uso quotidiano.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-inglese-prima-ext-241",
+    "classe": "Prima",
+    "disciplina": "Inglese",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Scrittura (produzione scritta)",
+    "testo": "Ortografia di base, brevi paragrafi ed e-mail semplici (present simple, to be, have got, can).",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-geografia-prima-ext-242",
+    "classe": "Prima",
+    "disciplina": "Geografia",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Orientamento e geo-graficità",
+    "testo": "Punti cardinali, reticolato geografico, coordinate, scala e principali tipologie di carte geografiche.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-geografia-prima-ext-243",
+    "classe": "Prima",
+    "disciplina": "Geografia",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Paesaggio e ambiente",
+    "testo": "I grandi ambienti naturali, climi ed elementi fisici del paesaggio italiano ed europeo.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-geografia-prima-ext-244",
+    "classe": "Prima",
+    "disciplina": "Geografia",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Regioni, società e sfide globali",
+    "testo": "Le regioni fisiche e amministrative dell’Italia, popolazione, settori economici e tutela del territorio.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-musica-prima-ext-245",
+    "classe": "Prima",
+    "disciplina": "Musica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Ascolto, percezione e analisi",
+    "testo": "Parametri del suono (altezza, intensità, durata, timbro) e classificazione degli strumenti musicali.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-musica-prima-ext-246",
+    "classe": "Prima",
+    "disciplina": "Musica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Teoria e notazione musicale",
+    "testo": "Pentagramma, chiave di violino, figure e pause musicali, cellule ritmiche fondamentali.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-musica-prima-ext-247",
+    "classe": "Prima",
+    "disciplina": "Musica",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Pratica vocale e strumentale",
+    "testo": "Postura, respirazione, intonazione vocale ed esecuzione di semplici brani ritmici e melodici.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-strumento-musicale-prima-ext-248",
+    "classe": "Prima",
+    "disciplina": "Strumento Musicale",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Tecnica e prassi esecutiva",
+    "testo": "Impostazione posturale, respirazione o articolazione sullo strumento e controllo dell’emissione del suono.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-strumento-musicale-prima-ext-249",
+    "classe": "Prima",
+    "disciplina": "Strumento Musicale",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Percezione, ascolto e lettura musicale",
+    "testo": "Notazione musicale di base, lettura ritmico-melodica a prima vista ed estensione elementare.",
+    "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
+  },
+  {
+    "id": "cvv-strumento-musicale-prima-ext-250",
+    "classe": "Prima",
+    "disciplina": "Strumento Musicale",
+    "tipo": "conoscenza",
+    "nucleoTematico": "Interpretazione e musica d’insieme",
+    "testo": "Prime forme di esecuzione collettiva, rispetto della pulsazione comune e segni dinamici essenziali.",
     "documentoProvenienza": "Curricolo verticale vecchio (A.S. 2025/2026)"
   }
 ]

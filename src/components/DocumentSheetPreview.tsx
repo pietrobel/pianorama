@@ -816,7 +816,10 @@ export function DocumentSheetPreview({
               {plan.curricolo.righeAbilitaConoscenze.length > 0 ? (
                 plan.curricolo.righeAbilitaConoscenze.map((row) => {
                   const renderCell = (text: string, hint?: string) => {
-                    const clean = (text ?? '').trim();
+                    const clean = (text ?? '')
+                      .replace(/([^\n])\s*([☐☑☒□■▢•])\s*/g, '$1\n$2 ')
+                      .replace(/^\s*[☐☑☒□■▢]\s*/gm, '• ')
+                      .trim();
                     if (!clean) return '—';
                     const normHint = (hint ?? '').trim();
                     const effective =
@@ -831,7 +834,7 @@ export function DocumentSheetPreview({
                         !t.startsWith('•') &&
                         !t.startsWith('-') &&
                         ((normHint.length > 0 && t.toLowerCase() === normHint.toLowerCase()) ||
-                          lines.length > 1);
+                          (lines.length > 1 && t.length <= 65 && !/[.!?]$/.test(t)));
                       return (
                         <div key={idx} className={isNucleo ? 'font-bold' : undefined}>
                           {line}
@@ -910,7 +913,10 @@ export function DocumentSheetPreview({
                 {plan.curricolo.righeAbilitaConoscenze.length > 0 ? (
                   plan.curricolo.righeAbilitaConoscenze.map((row) => {
                     const renderCell = (text: string, hint?: string) => {
-                      const clean = (text ?? '').trim();
+                      const clean = (text ?? '')
+                        .replace(/([^\n])\s*([☐☑☒□■▢•])\s*/g, '$1\n$2 ')
+                        .replace(/^\s*[☐☑☒□■▢]\s*/gm, '• ')
+                        .trim();
                       if (!clean) return '—';
                       const normHint = (hint ?? '').trim();
                       const effective =
@@ -925,7 +931,7 @@ export function DocumentSheetPreview({
                           !t.startsWith('•') &&
                           !t.startsWith('-') &&
                           ((normHint.length > 0 && t.toLowerCase() === normHint.toLowerCase()) ||
-                            lines.length > 1);
+                            (lines.length > 1 && t.length <= 65 && !/[.!?]$/.test(t)));
                         return (
                           <div key={idx} className={isNucleo ? 'font-bold' : undefined}>
                             {line}
@@ -1193,7 +1199,7 @@ export function DocumentSheetPreview({
           {plan.verificheValutazione.criteriValutazione}
         </p>
         <div
-          className={`mt-8 text-right ${isOriginal ? 'font-normal' : 'font-bold'}`}
+          className={`mt-8 whitespace-pre-line text-right ${isOriginal ? 'font-normal' : 'font-bold'}`}
           style={{ color: accentColor }}
         >
           {firmaDocente}

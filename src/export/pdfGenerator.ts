@@ -330,7 +330,10 @@ export function generateProgrammazionePdfBytes(
         const wrapped = doc.splitTextToSize(pdfSafeText(raw), widths[0] - pad * 2) as string[];
         return wrapped.map((t) => ({ text: t, bold: true }));
       }
-      const clean = (raw ?? '').trim();
+      const clean = (raw ?? '')
+        .replace(/([^\n])\s*([☐☑☒□■▢•])\s*/g, '$1\n$2 ')
+        .replace(/^\s*[☐☑☒□■▢]\s*/gm, '• ')
+        .trim();
       const hint = (opts?.nucleoHint ?? '').trim();
       const effectiveText =
         clean && hint && !clean.toLowerCase().startsWith(hint.toLowerCase())
@@ -345,7 +348,7 @@ export function generateProgrammazionePdfBytes(
           !trimmed.startsWith('•') &&
           !trimmed.startsWith('-') &&
           ((hint.length > 0 && trimmed.toLowerCase() === hint.toLowerCase()) ||
-            logicalLines.length > 1);
+            (logicalLines.length > 1 && trimmed.length <= 65 && !/[.!?]$/.test(trimmed)));
         doc.setFont(fontFamily, isNucleoTitle ? 'bold' : 'normal');
         doc.setFontSize(fontSize);
         const wrapped = doc.splitTextToSize(
@@ -1453,6 +1456,7 @@ export function generateProgrammazionePdfBytes(
     lineFactor: isOriginal ? 0.56 : 0.44,
   });
   y += 6;
+  ensureSpace(12);
   drawParagraph(firmaDocente, {
     bold: !isOriginal,
     size: 10.5,
