@@ -8,16 +8,19 @@ import {
   Layers,
   SlidersHorizontal,
 } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { DocumentImportReviewModal } from '../components/DocumentImportReviewModal';
 import { PlessoSelect } from '../components/PlessoSelect';
+import { SimpleClassDescriptionBuilder } from '../components/SimpleClassDescriptionBuilder';
 import { DISCIPLINE_SECONDARIA, createEmptyProgrammazione } from '../domain/defaults';
 import type {
   ClasseSecondaria,
+  ComposizioneClasse,
   DocenteGenere,
   DocumentLayoutStyle,
   IndicazioniVersion,
   Programmazione,
+  QuickClassModeSelection,
   SchoolSettings,
   SectionCopyOptions,
 } from '../domain/types';
@@ -34,6 +37,12 @@ import {
   getSectionOptionsForPreset,
   type ClonePreset,
 } from '../engine/planCloning';
+import {
+  DEFAULT_QUICK_CLASS_SELECTION,
+  deriveSuggestedSituazioneFromQuick,
+  generateQuickClassDescription,
+  normalizeQuickClassSelection,
+} from '../engine/quickClassDescriptionEngine';
 
 interface NewPlanPageProps {
   existingPlans: Programmazione[];
@@ -129,6 +138,17 @@ export function NewPlanPage({
   );
   const [saveAsTemplate, setSaveAsTemplate] = useState<boolean>(false);
   const [templateNome, setTemplateNome] = useState<string>('');
+  const [alunniInput, setAlunniInput] = useState<string>('');
+  const [maschiInput, setMaschiInput] = useState<string>('');
+  const [femmineInput, setFemmineInput] = useState<string>('');
+  const [ripetentiInput, setRipetentiInput] = useState<string>('0');
+  const [besInput, setBesInput] = useState<string>('0');
+  const [disabilitaInput, setDisabilitaInput] = useState<string>('0');
+  const [descriptionMode, setDescriptionMode] = useState<'rapida' | 'dettagliata'>('rapida');
+  const [quickSelection, setQuickSelection] = useState<QuickClassModeSelection>(
+    DEFAULT_QUICK_CLASS_SELECTION
+  );
+  const [quickCustomized, setQuickCustomized] = useState<boolean>(false);
   const [saving, setSaving] = useState(false);
 
   const recommendedIndicazioni = getDefaultIndicazioniForClasseAndYear(classe, annoScolastico);
@@ -154,6 +174,67 @@ export function NewPlanPage({
     setSections(getSectionOptionsForPreset(nextPreset));
   };
 
+  const parseOptionalInt = (raw: string): number | undefined => {
+    const trimmed = raw.trim();
+    if (!trimmed) return undefined;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : undefined;
+  };
+
+  const buildComposizioneFromInputs = (): ComposizioneClasse => ({
+    alunni: parseOptionalInt(alunniInput),
+    maschi: parseOptionalInt(maschiInput),
+    femmine: parseOptionalInt(femmineInput),
+    ripetenti: parseOptionalInt(ripetentiInput) ?? 0,
+    bes: parseOptionalInt(besInput) ?? 0,
+    disabilita: parseOptionalInt(disabilitaInput) ?? 0,
+  });
+
+  const previewSimplePlan = useMemo(
+    () =>
+      createEmptyProgrammazione(settings, {
+        disciplina,
+        classe,
+        sezione,
+        annoScolastico,
+        plesso,
+        docente,
+        docenteGenere,
+        layoutDocumento,
+        indicazioniVersione,
+        composizione: {
+          alunni: parseOptionalInt(alunniInput),
+          maschi: parseOptionalInt(maschiInput),
+          femmine: parseOptionalInt(femmineInput),
+          ripetenti: parseOptionalInt(ripetentiInput) ?? 0,
+          bes: parseOptionalInt(besInput) ?? 0,
+          disabilita: parseOptionalInt(disabilitaInput) ?? 0,
+        },
+        modalitaCompilazione: descriptionMode,
+        modalitaRapida: quickSelection,
+      }),
+    [
+      settings,
+      disciplina,
+      classe,
+      sezione,
+      annoScolastico,
+      plesso,
+      docente,
+      docenteGenere,
+      layoutDocumento,
+      indicazioniVersione,
+      alunniInput,
+      maschiInput,
+      femmineInput,
+      ripetentiInput,
+      besInput,
+      disabilitaInput,
+      descriptionMode,
+      quickSelection,
+    ]
+  );
+
   const syncFormFieldsFromPlan = (plan: Programmazione) => {
     setDisciplina(plan.datiGenerali.disciplina);
     setClasse(plan.datiGenerali.classe);
@@ -162,6 +243,18 @@ export function NewPlanPage({
     setPlesso(plan.datiGenerali.plesso);
     setDocente(plan.datiGenerali.docente);
     setDocenteGenere(plan.datiGenerali.docenteGenere ?? settings.defaultDocenteGenere ?? 'F');
+    setAlunniInput(
+      typeof plan.composizione.alunni === 'number' ? String(plan.composizione.alunni) : ''
+    );
+    setMaschiInput(
+      typeof plan.composizione.maschi === 'number' ? String(plan.composizione.maschi) : ''
+    );
+    setFemmineInput(
+      typeof plan.composizione.femmine === 'number' ? String(plan.composizione.femmine) : ''
+    );
+    setRipetentiInput(String(plan.composizione.ripetenti ?? 0));
+    setBesInput(String(plan.composizione.bes ?? 0));
+    setDisabilitaInput(String(plan.composizione.disabilita ?? 0));
     setIndicazioniVersione(
       plan.curricolo.indicazioniVersione ??
         getDefaultIndicazioniForClasseAndYear(
@@ -202,12 +295,21 @@ export function NewPlanPage({
       let plan: Programmazione;
       const source = existingPlans.find((p) => p.id === sourceId);
 
+      const userComposizione = buildComposizioneFromInputs();
+      const normalizedQuick = normalizeQuickClassSelection(quickSelection);
+      const suggestedSit = deriveSuggestedSituazioneFromQuick(normalizedQuick);
+      const simpleGeneratedText =
+        descriptionMode === 'rapida'
+          ? generateQuickClassDescription(previewSimplePlan, normalizedQuick)
+          : undefined;
+
       if (baseType === 'import_doc' && importedResult) {
         const cleanDocente = docente.trim();
         plan = {
           ...importedResult.plan,
           isTemplate: saveAsTemplate,
           templateNome: saveAsTemplate ? templateNome.trim() || `${disciplina} ${classe}` : undefined,
+          composizione: userComposizione,
           datiGenerali: {
             ...importedResult.plan.datiGenerali,
             disciplina,
@@ -223,6 +325,18 @@ export function NewPlanPage({
             docenteGenere,
             layoutDocumento,
           },
+          analisiPartenza: {
+            ...importedResult.plan.analisiPartenza,
+            questionario: {
+              risposte: importedResult.plan.analisiPartenza.questionario?.risposte ?? {},
+              modalitaGenerazione:
+                importedResult.plan.analisiPartenza.questionario?.modalitaGenerazione ?? 'completa',
+              ultimoAggiornamento:
+                importedResult.plan.analisiPartenza.questionario?.ultimoAggiornamento ?? null,
+              modalitaCompilazione: descriptionMode,
+              modalitaRapida: normalizedQuick,
+            },
+          },
           verificheValutazione: {
             ...importedResult.plan.verificheValutazione,
             firmaDocente: cleanDocente,
@@ -233,6 +347,15 @@ export function NewPlanPage({
           },
         };
       } else if (baseType === 'reuse' && source) {
+        const hasManualComp =
+          userComposizione.alunni !== undefined ||
+          userComposizione.maschi !== undefined ||
+          userComposizione.femmine !== undefined ||
+          userComposizione.ripetenti > 0 ||
+          userComposizione.bes > 0 ||
+          (userComposizione.disabilita ?? 0) > 0;
+        const shouldApplySimpleDesc =
+          descriptionMode === 'rapida' && (!sections.analisiEQuestionario || quickCustomized);
         plan = cloneProgrammazioneWithOptions({
           source,
           settings,
@@ -250,6 +373,20 @@ export function NewPlanPage({
             indicazioniVersione,
             isTemplate: saveAsTemplate,
             templateNome: saveAsTemplate ? templateNome.trim() || `${disciplina} ${classe}` : undefined,
+            composizione:
+              hasManualComp || !sections.composizioneESituazione ? userComposizione : undefined,
+            modalitaCompilazione: descriptionMode,
+            modalitaRapida: normalizedQuick,
+            ...(shouldApplySimpleDesc && simpleGeneratedText
+              ? {
+                  descrizioneDisciplinare: simpleGeneratedText,
+                  situazione: {
+                    ...createEmptyProgrammazione(settings, { disciplina }).situazione,
+                    tipologie: suggestedSit.tipologie,
+                    livello: suggestedSit.livello,
+                  },
+                }
+              : {}),
           },
         });
       } else {
@@ -265,6 +402,18 @@ export function NewPlanPage({
           indicazioniVersione,
           isTemplate: saveAsTemplate,
           templateNome: saveAsTemplate ? templateNome.trim() || `${disciplina} ${classe}` : undefined,
+          composizione: userComposizione,
+          modalitaCompilazione: descriptionMode,
+          modalitaRapida: normalizedQuick,
+          ...(descriptionMode === 'rapida' && simpleGeneratedText
+            ? {
+                descrizioneDisciplinare: simpleGeneratedText,
+                situazione: {
+                  tipologie: suggestedSit.tipologie,
+                  livello: suggestedSit.livello,
+                },
+              }
+            : {}),
         });
       }
       await onCreatePlan(plan);
@@ -714,6 +863,166 @@ export function NewPlanPage({
               Regola automatica: fino al 2026/27 Nuove per la Prima e Vecchie per Seconda/Terza; nel 2027/28 Nuove per Prima e Seconda; dal 2028/29 Nuove per tutte le classi.
             </p>
           </div>
+        </div>
+
+        <div className="space-y-2.5 rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              Composizione della classe (opzionale ora, modificabile nell’editor)
+            </h2>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+              Alunni, maschi e femmine partono vuoti senza valori predefiniti
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-6">
+            <label className="block">
+              <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                Alunni totali
+              </span>
+              <input
+                type="number"
+                min={0}
+                max={40}
+                value={alunniInput}
+                onChange={(e) => setAlunniInput(e.target.value)}
+                placeholder="—"
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-mono-num text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                Maschi
+              </span>
+              <input
+                type="number"
+                min={0}
+                max={40}
+                value={maschiInput}
+                onChange={(e) => setMaschiInput(e.target.value)}
+                placeholder="—"
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-mono-num text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                Femmine
+              </span>
+              <input
+                type="number"
+                min={0}
+                max={40}
+                value={femmineInput}
+                onChange={(e) => setFemmineInput(e.target.value)}
+                placeholder="—"
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-mono-num text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                Ripetenti
+              </span>
+              <input
+                type="number"
+                min={0}
+                max={40}
+                value={ripetentiInput}
+                onChange={(e) => setRipetentiInput(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-mono-num text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                Con BES
+              </span>
+              <input
+                type="number"
+                min={0}
+                max={40}
+                value={besInput}
+                onChange={(e) => setBesInput(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-mono-num text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                Con disabilità
+              </span>
+              <input
+                type="number"
+                min={0}
+                max={40}
+                value={disabilitaInput}
+                onChange={(e) => setDisabilitaInput(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-mono-num text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              />
+            </label>
+          </div>
+        </div>
+
+        {/* Scelta modalità composizione descrizione della classe nel menu iniziale */}
+        <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-800/30">
+          <div className="space-y-1">
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              Composizione e descrizione della classe: scegli la modalità
+            </h2>
+            <p className="text-xs text-slate-600 dark:text-slate-400">
+              La <strong>Modalità semplice</strong> è predefinita: rispondi alle 5 domande chiuse e l’app genera una descrizione completa dalla libreria integrando i numeri di BES (PDP) e disabilità (PEI) inseriti sopra. Puoi sempre passare alla <strong>Modalità avanzata</strong>.
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => setDescriptionMode('rapida')}
+              className={`rounded-lg border p-3.5 text-left transition ${
+                descriptionMode === 'rapida'
+                  ? 'border-[#1F3864] bg-white ring-1 ring-[#1F3864]/30 dark:border-blue-500 dark:bg-slate-900'
+                  : 'border-slate-200 bg-white/70 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900/50'
+              }`}
+            >
+              <p className="text-xs font-bold text-[#1F3864] dark:text-blue-300">
+                Modalità semplice (predefinita)
+              </p>
+              <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                5 domande chiuse (eterogeneità, livello generale, socializzazione, rispetto regole/vivacità, motivazione) con descrizione completa dalla libreria + riferimento automatico a PEI/PDP.
+              </p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDescriptionMode('dettagliata')}
+              className={`rounded-lg border p-3.5 text-left transition ${
+                descriptionMode === 'dettagliata'
+                  ? 'border-[#1F3864] bg-white ring-1 ring-[#1F3864]/30 dark:border-blue-500 dark:bg-slate-900'
+                  : 'border-slate-200 bg-white/70 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900/50'
+              }`}
+            >
+              <p className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                Modalità avanzata
+              </p>
+              <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                Configurazione dettagliata nell’editor tramite barre percentuali per sottogruppi e questionario analitico a 17 indicatori personalizzabili.
+              </p>
+            </button>
+          </div>
+
+          {descriptionMode === 'rapida' && baseType !== 'import_doc' && (
+            <SimpleClassDescriptionBuilder
+              plan={previewSimplePlan}
+              selection={quickSelection}
+              compact
+              onChangeSelection={(next) => {
+                setQuickSelection(next);
+                setQuickCustomized(true);
+              }}
+            />
+          )}
+
+          {descriptionMode === 'dettagliata' && (
+            <p className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+              Alla creazione della programmazione si apriranno direttamente gli strumenti della <strong>Modalità avanzata</strong> (distribuzione percentuale per sottogruppi e questionario analitico a 17 indicatori).
+            </p>
+          )}
         </div>
 
         <div className="space-y-3 rounded-lg border border-slate-200 p-3.5 dark:border-slate-800">

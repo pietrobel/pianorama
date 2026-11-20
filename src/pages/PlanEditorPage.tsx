@@ -28,6 +28,7 @@ import { DocumentSheetPreview } from '../components/DocumentSheetPreview';
 import { FasceLivelloBoard } from '../components/FasceLivelloBoard';
 import { PlessoSelect } from '../components/PlessoSelect';
 import { PrivacyNoticeBanner } from '../components/PrivacyNoticeBanner';
+import { SimpleClassDescriptionBuilder } from '../components/SimpleClassDescriptionBuilder';
 import {
   DEFAULT_BES_INTERVENTI_TEXT,
   DISCIPLINE_SECONDARIA,
@@ -88,6 +89,11 @@ import {
   createManualStudentEntry,
   parseGradebookBuffer,
 } from '../engine/gradebookImporter';
+import {
+  DEFAULT_QUICK_CLASS_SELECTION,
+  deriveSuggestedSituazioneFromQuick,
+  normalizeQuickClassSelection,
+} from '../engine/quickClassDescriptionEngine';
 import { applySuggestionAction, evaluateSuggestionRules } from '../engine/suggestionEngine';
 
 interface PlanEditorPageProps {
@@ -114,8 +120,8 @@ type SectionKey =
 
 const SECTIONS: { key: SectionKey; label: string; shortLabel: string }[] = [
   { key: 'dati', label: '1. Dati generali', shortLabel: 'Dati' },
-  { key: 'composizione', label: '2. Composizione e situazione', shortLabel: 'Classe' },
-  { key: 'analisi', label: '3. Analisi e questionario', shortLabel: 'Analisi' },
+  { key: 'composizione', label: '2. Composizione e descrizione', shortLabel: 'Classe' },
+  { key: 'analisi', label: '3. Analisi e fasce di livello', shortLabel: 'Analisi' },
   { key: 'interventi', label: '4. Strategie e BES', shortLabel: 'Strategie' },
   { key: 'curricolo', label: '5. Curricolo e abilità', shortLabel: 'Curricolo' },
   { key: 'metodi', label: '6. Metodi, strumenti e DDI', shortLabel: 'Metodi' },
@@ -169,6 +175,7 @@ export function PlanEditorPage({
   const [pendingProgramDocImport, setPendingProgramDocImport] =
     useState<DocumentImportResult | null>(null);
   const [catalogImportError, setCatalogImportError] = useState<string | null>(null);
+  const [simpleDescAppliedFeedback, setSimpleDescAppliedFeedback] = useState<boolean>(false);
 
   const isFirstRender = useRef(true);
   const latestPlanId = useRef(initialPlan.id);
@@ -505,7 +512,10 @@ export function PlanEditorPage({
     });
   };
 
-  const sumSex = draft.composizione.maschi + draft.composizione.femmine;
+  const hasAllSexCounts =
+    typeof draft.composizione.maschi === 'number' &&
+    typeof draft.composizione.femmine === 'number';
+  const sumSex = (draft.composizione.maschi ?? 0) + (draft.composizione.femmine ?? 0);
   const sumLevels =
     draft.analisiPartenza.livelli.bassoAlunni +
     draft.analisiPartenza.livelli.medioBassoAlunni +
@@ -1272,14 +1282,14 @@ export function PlanEditorPage({
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-6">
                 {(
                   [
-                    ['alunni', 'Alunni totali'],
-                    ['maschi', 'Maschi'],
-                    ['femmine', 'Femmine'],
-                    ['ripetenti', 'Ripetenti'],
-                    ['bes', 'Con BES'],
-                    ['disabilita', 'Con disabilità'],
+                    ['alunni', 'Alunni totali', true],
+                    ['maschi', 'Maschi', true],
+                    ['femmine', 'Femmine', true],
+                    ['ripetenti', 'Ripetenti', false],
+                    ['bes', 'Con BES', false],
+                    ['disabilita', 'Con disabilità', false],
                   ] as const
-                ).map(([field, label]) => (
+                ).map(([field, label, isOptional]) => (
                   <label key={field} className="block">
                     <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                       {label}
@@ -1288,9 +1298,20 @@ export function PlanEditorPage({
                       type="number"
                       min={0}
                       max={40}
-                      value={draft.composizione[field] ?? 0}
+                      value={
+                        isOptional
+                          ? draft.composizione[field] ?? ''
+                          : draft.composizione[field] ?? 0
+                      }
+                      placeholder={isOptional ? '—' : undefined}
                       onChange={(e) => {
-                        const nextValue = Math.max(0, Number(e.target.value) || 0);
+                        const rawVal = e.target.value.trim();
+                        const nextValue =
+                          rawVal === ''
+                            ? isOptional
+                              ? undefined
+                              : 0
+                            : Math.max(0, Number(rawVal) || 0);
                         setDraft((prev) => ({
                           ...prev,
                           composizione: {
@@ -1303,8 +1324,8 @@ export function PlanEditorPage({
                                   ...prev.situazione,
                                   caratteristicheDimensioni: reconcileDimensionsWithTotalStudents(
                                     prev.situazione.caratteristicheDimensioni,
-                                    prev.composizione.alunni,
-                                    nextValue
+                                    prev.composizione.alunni ?? 0,
+                                    nextValue ?? 0
                                   ),
                                 },
                               }
@@ -1321,134 +1342,299 @@ export function PlanEditorPage({
                 La descrizione unitaria della classe (composizione, caratteristiche e situazione disciplinare) viene stampata una sola volta dopo «Analisi della situazione di partenza». Modificando <strong>Alunni totali</strong>, la barra delle caratteristiche aggiorna prima lo spazio <em>non definito</em> e poi gli indicatori a destra.
               </p>
 
-              {sumSex !== draft.composizione.alunni && (
+              {typeof draft.composizione.alunni === 'number' &&
+                hasAllSexCounts &&
+                sumSex !== draft.composizione.alunni && (
                 <p className="text-xs text-amber-700 dark:text-amber-400">
                   Nota di controllo: Maschi + Femmine ({sumSex}) differisce dal totale Alunni (
                   {draft.composizione.alunni}).
                 </p>
               )}
 
-              <fieldset className="space-y-2 border-t border-slate-200 pt-4 dark:border-slate-800">
-                <legend className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  Tipologia della classe (selezione multipla)
-                </legend>
-                <div className="grid gap-2 sm:grid-cols-3">
-                  {TIPOLOGIE_CLASSE_OPTIONS.map((opt) => (
-                    <label
-                      key={opt}
-                      className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={draft.situazione.tipologie.includes(opt)}
-                        onChange={() =>
-                          setDraft((prev) => ({
-                            ...prev,
-                            situazione: {
-                              ...prev.situazione,
-                              tipologie: toggleArrayValue(
-                                prev.situazione.tipologie,
-                                opt
-                              ) as typeof prev.situazione.tipologie,
-                            },
-                          }))
-                        }
-                        className="h-4 w-4 accent-[#1F3864]"
-                      />
-                      <span>{opt}</span>
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
+              {(() => {
+                const qState = draft.analisiPartenza.questionario;
+                const compiledAdvancedCount = Object.values(qState?.risposte ?? {}).filter(
+                  (a) => Boolean(a && (a.selectedOption || a.notaEterogenea.trim()))
+                ).length;
+                const activeDescMode: 'rapida' | 'dettagliata' =
+                  qState?.modalitaCompilazione ??
+                  (compiledAdvancedCount > 0 ? 'dettagliata' : 'rapida');
+                const currentQuickSelection = normalizeQuickClassSelection(
+                  qState?.modalitaRapida ?? DEFAULT_QUICK_CLASS_SELECTION
+                );
 
-              <fieldset className="space-y-2 border-t border-slate-200 pt-4 dark:border-slate-800">
-                <legend className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  Livello complessivo della classe
-                </legend>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {LIVELLI_CLASSE_OPTIONS.map((opt) => (
-                    <label
-                      key={opt.value}
-                      className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50"
-                    >
-                      <input
-                        type="radio"
-                        name="situazione-livello"
-                        checked={draft.situazione.livello === opt.value}
-                        onChange={() =>
-                          setDraft((prev) => ({
-                            ...prev,
-                            situazione: { ...prev.situazione, livello: opt.value },
-                          }))
-                        }
-                        className="h-4 w-4 accent-[#1F3864]"
-                      />
-                      <span>{opt.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-
-              <fieldset className="space-y-2 border-t border-slate-200 pt-4 dark:border-slate-800">
-                <legend className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  Mezzi utilizzati per individuare le risorse ed i bisogni degli alunni
-                </legend>
-                <div className="space-y-2">
-                  {MEZZI_INDIVIDUAZIONE_OPTIONS.map((opt) => (
-                    <label
-                      key={opt}
-                      className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={draft.situazione.mezziIndividuazione.includes(opt)}
-                        onChange={() =>
-                          setDraft((prev) => ({
-                            ...prev,
-                            situazione: {
-                              ...prev.situazione,
-                              mezziIndividuazione: toggleArrayValue(
-                                prev.situazione.mezziIndividuazione,
-                                opt
-                              ) as typeof prev.situazione.mezziIndividuazione,
-                            },
-                          }))
-                        }
-                        className="h-4 w-4 accent-[#1F3864]"
-                      />
-                      <span>{opt}</span>
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-
-              <div className="border-t border-slate-200 pt-5 dark:border-slate-800">
-                <ClassCharacteristicsPanel
-                  dimensions={draft.situazione.caratteristicheDimensioni}
-                  alunniTotali={draft.composizione.alunni}
-                  soglieQuote={settings.soglieQuoteCaratteristiche}
-                  contextSeed={`${draft.id}|${draft.datiGenerali.classe}|${draft.datiGenerali.sezione}|${draft.datiGenerali.disciplina}`}
-                  variantePresentazione={draft.situazione.variantePresentazione}
-                  onChangeVariantePresentazione={(nextVal) =>
-                    setDraft((prev) => ({
-                      ...prev,
-                      situazione: {
-                        ...prev.situazione,
-                        variantePresentazione: nextVal,
+                const setClassDescriptionMode = (nextMode: 'rapida' | 'dettagliata') => {
+                  setSimpleDescAppliedFeedback(false);
+                  setDraft((prev) => ({
+                    ...prev,
+                    analisiPartenza: {
+                      ...prev.analisiPartenza,
+                      questionario: {
+                        risposte: prev.analisiPartenza.questionario?.risposte ?? {},
+                        modalitaGenerazione:
+                          prev.analisiPartenza.questionario?.modalitaGenerazione ?? 'completa',
+                        ultimoAggiornamento:
+                          prev.analisiPartenza.questionario?.ultimoAggiornamento ?? null,
+                        modalitaCompilazione: nextMode,
+                        modalitaRapida: normalizeQuickClassSelection(
+                          prev.analisiPartenza.questionario?.modalitaRapida ??
+                            DEFAULT_QUICK_CLASS_SELECTION
+                        ),
                       },
-                    }))
-                  }
-                  onChange={(nextDimensions) =>
-                    setDraft((prev) => ({
-                      ...prev,
-                      situazione: {
-                        ...prev.situazione,
-                        caratteristicheDimensioni: nextDimensions,
-                      },
-                    }))
-                  }
-                />
-              </div>
+                    },
+                  }));
+                };
+
+                const renderSituazioneGrids = () => (
+                  <div className="space-y-4">
+                    <fieldset className="space-y-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+                      <legend className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                        Tipologia della classe (selezione multipla)
+                      </legend>
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        {TIPOLOGIE_CLASSE_OPTIONS.map((opt) => (
+                          <label
+                            key={opt}
+                            className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={draft.situazione.tipologie.includes(opt)}
+                              onChange={() =>
+                                setDraft((prev) => ({
+                                  ...prev,
+                                  situazione: {
+                                    ...prev.situazione,
+                                    tipologie: toggleArrayValue(
+                                      prev.situazione.tipologie,
+                                      opt
+                                    ) as typeof prev.situazione.tipologie,
+                                  },
+                                }))
+                              }
+                              className="h-4 w-4 accent-[#1F3864]"
+                            />
+                            <span>{opt}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </fieldset>
+
+                    <fieldset className="space-y-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+                      <legend className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                        Livello complessivo della classe
+                      </legend>
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        {LIVELLI_CLASSE_OPTIONS.map((opt) => (
+                          <label
+                            key={opt.value}
+                            className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50"
+                          >
+                            <input
+                              type="radio"
+                              name="situazione-livello"
+                              checked={draft.situazione.livello === opt.value}
+                              onChange={() =>
+                                setDraft((prev) => ({
+                                  ...prev,
+                                  situazione: { ...prev.situazione, livello: opt.value },
+                                }))
+                              }
+                              className="h-4 w-4 accent-[#1F3864]"
+                            />
+                            <span>{opt.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </fieldset>
+
+                    <fieldset className="space-y-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+                      <legend className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                        Mezzi utilizzati per individuare le risorse ed i bisogni degli alunni
+                      </legend>
+                      <div className="space-y-2">
+                        {MEZZI_INDIVIDUAZIONE_OPTIONS.map((opt) => (
+                          <label
+                            key={opt}
+                            className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={draft.situazione.mezziIndividuazione.includes(opt)}
+                              onChange={() =>
+                                setDraft((prev) => ({
+                                  ...prev,
+                                  situazione: {
+                                    ...prev.situazione,
+                                    mezziIndividuazione: toggleArrayValue(
+                                      prev.situazione.mezziIndividuazione,
+                                      opt
+                                    ) as typeof prev.situazione.mezziIndividuazione,
+                                  },
+                                }))
+                              }
+                              className="h-4 w-4 accent-[#1F3864]"
+                            />
+                            <span>{opt}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </fieldset>
+                  </div>
+                );
+
+                return (
+                  <div className="space-y-5 border-t border-slate-200 pt-4 dark:border-slate-800">
+                    {/* Selettore Modalità semplice (predefinita) vs Modalità avanzata */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 dark:border-slate-800 dark:bg-slate-800/30">
+                      <div>
+                        <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                          Modalità di composizione della descrizione della classe
+                        </p>
+                        <p className="text-xs text-slate-600 dark:text-slate-400">
+                          Scegli tra la <strong>Modalità semplice</strong> (5 domande chiuse con libreria descrizioni complete + BES/PEI/PDP) o la <strong>Modalità avanzata</strong> (percentuali per sottogruppi e 17 indicatori).
+                        </p>
+                      </div>
+                      <div className="inline-flex rounded-lg border border-slate-300 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-900">
+                        <button
+                          type="button"
+                          onClick={() => setClassDescriptionMode('rapida')}
+                          className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                            activeDescMode === 'rapida'
+                              ? 'bg-[#1F3864] text-white'
+                              : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          Modalità semplice (predefinita)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setClassDescriptionMode('dettagliata')}
+                          className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                            activeDescMode === 'dettagliata'
+                              ? 'bg-[#1F3864] text-white'
+                              : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          Modalità avanzata
+                        </button>
+                      </div>
+                    </div>
+
+                    {activeDescMode === 'rapida' ? (
+                      <div className="space-y-4">
+                        <SimpleClassDescriptionBuilder
+                          plan={draft}
+                          selection={currentQuickSelection}
+                          appliedFeedback={simpleDescAppliedFeedback}
+                          applyButtonLabel="Applica nella descrizione della classe"
+                          onChangeSelection={(nextQuick) => {
+                            setSimpleDescAppliedFeedback(false);
+                            setDraft((prev) => ({
+                              ...prev,
+                              analisiPartenza: {
+                                ...prev.analisiPartenza,
+                                questionario: {
+                                  risposte: prev.analisiPartenza.questionario?.risposte ?? {},
+                                  modalitaGenerazione:
+                                    prev.analisiPartenza.questionario?.modalitaGenerazione ??
+                                    'completa',
+                                  ultimoAggiornamento: new Date().toISOString(),
+                                  modalitaCompilazione: 'rapida',
+                                  modalitaRapida: nextQuick,
+                                },
+                              },
+                            }));
+                          }}
+                          onApplyDescription={(text, usedSelection) => {
+                            const suggestedSit = deriveSuggestedSituazioneFromQuick(usedSelection);
+                            setSimpleDescAppliedFeedback(true);
+                            setDraft((prev) => ({
+                              ...prev,
+                              situazione: {
+                                ...prev.situazione,
+                                tipologie: suggestedSit.tipologie,
+                                livello: suggestedSit.livello,
+                              },
+                              analisiPartenza: {
+                                ...prev.analisiPartenza,
+                                descrizioneDisciplinare: text,
+                                questionario: {
+                                  risposte: prev.analisiPartenza.questionario?.risposte ?? {},
+                                  modalitaGenerazione: 'completa',
+                                  ultimoAggiornamento: new Date().toISOString(),
+                                  modalitaCompilazione: 'rapida',
+                                  modalitaRapida: usedSelection,
+                                },
+                              },
+                            }));
+                          }}
+                        />
+
+                        <label className="block">
+                          <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                            Descrizione della classe risultante (modificabile liberamente)
+                          </span>
+                          <textarea
+                            rows={6}
+                            value={draft.analisiPartenza.descrizioneDisciplinare}
+                            onChange={(e) =>
+                              setDraft((prev) => ({
+                                ...prev,
+                                analisiPartenza: {
+                                  ...prev.analisiPartenza,
+                                  descrizioneDisciplinare: e.target.value,
+                                },
+                              }))
+                            }
+                            placeholder="Rispondi alle 5 domande sopra e clicca «Applica nella descrizione della classe» oppure scrivi direttamente qui..."
+                            className="mt-1.5 w-full rounded-lg border border-slate-300 p-3 text-sm leading-relaxed dark:border-slate-700 dark:bg-slate-950"
+                          />
+                        </label>
+
+                        <details className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 dark:border-slate-800 dark:bg-slate-900/50">
+                          <summary className="cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300">
+                            Griglia ministeriale sintetica (Tipologia, Livello e Mezzi di individuazione — facoltativo)
+                          </summary>
+                          <div className="mt-3">{renderSituazioneGrids()}</div>
+                        </details>
+                      </div>
+                    ) : (
+                      <>
+                        {renderSituazioneGrids()}
+
+                        <div className="border-t border-slate-200 pt-5 dark:border-slate-800">
+                          <ClassCharacteristicsPanel
+                            dimensions={draft.situazione.caratteristicheDimensioni}
+                            alunniTotali={draft.composizione.alunni ?? 0}
+                            soglieQuote={settings.soglieQuoteCaratteristiche}
+                            contextSeed={`${draft.id}|${draft.datiGenerali.classe}|${draft.datiGenerali.sezione}|${draft.datiGenerali.disciplina}`}
+                            variantePresentazione={draft.situazione.variantePresentazione}
+                            onChangeVariantePresentazione={(nextVal) =>
+                              setDraft((prev) => ({
+                                ...prev,
+                                situazione: {
+                                  ...prev.situazione,
+                                  variantePresentazione: nextVal,
+                                },
+                              }))
+                            }
+                            onChange={(nextDimensions) =>
+                              setDraft((prev) => ({
+                                ...prev,
+                                situazione: {
+                                  ...prev.situazione,
+                                  caratteristicheDimensioni: nextDimensions,
+                                },
+                              }))
+                            }
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
             </section>
           )}
 
@@ -1456,7 +1642,7 @@ export function PlanEditorPage({
           {activeSection === 'analisi' && (
             <section className="space-y-5 rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
               <h2 className="text-base font-bold text-[#1F3864] dark:text-blue-300">
-                3. Analisi della situazione di partenza e questionario avanzato
+                3. Analisi della situazione di partenza e fasce di livello
               </h2>
 
               <ClassQuestionnairePanel
@@ -1667,7 +1853,8 @@ export function PlanEditorPage({
                     </label>
                   ))}
                 </div>
-                {sumLevels !== draft.composizione.alunni && (
+                {typeof draft.composizione.alunni === 'number' &&
+                  sumLevels !== draft.composizione.alunni && (
                   <p className="text-xs text-amber-700 dark:text-amber-400">
                     Nota: la somma delle fasce ({sumLevels}) differisce dal totale alunni (
                     {draft.composizione.alunni}).
@@ -1725,7 +1912,7 @@ export function PlanEditorPage({
                           ...prev.situazione,
                           caratteristicheDimensioni: reconcileDimensionsWithTotalStudents(
                             prev.situazione.caratteristicheDimensioni,
-                            prev.composizione.alunni,
+                            prev.composizione.alunni ?? 0,
                             totaleAlunni
                           ),
                         },

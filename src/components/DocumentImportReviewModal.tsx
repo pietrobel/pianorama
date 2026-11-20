@@ -447,22 +447,33 @@ export function DocumentImportReviewModal({
             <div className="grid grid-cols-3 gap-2 pt-1 text-xs sm:grid-cols-6">
               {(
                 [
-                  ['alunni', 'Alunni'],
-                  ['maschi', 'Maschi'],
-                  ['femmine', 'Femmine'],
-                  ['ripetenti', 'Ripetenti'],
-                  ['bes', 'BES'],
-                  ['disabilita', 'Con disabilità'],
+                  ['alunni', 'Alunni', true],
+                  ['maschi', 'Maschi', true],
+                  ['femmine', 'Femmine', true],
+                  ['ripetenti', 'Ripetenti', false],
+                  ['bes', 'BES', false],
+                  ['disabilita', 'Con disabilità', false],
                 ] as const
-              ).map(([fieldKey, label]) => (
+              ).map(([fieldKey, label, isOptional]) => (
                 <label key={fieldKey} className="block">
                   <span className="text-[11px] text-slate-600 dark:text-slate-400">{label}</span>
                   <input
                     type="number"
                     min={0}
-                    value={draftPlan.composizione[fieldKey] ?? 0}
+                    value={
+                      isOptional
+                        ? draftPlan.composizione[fieldKey] ?? ''
+                        : draftPlan.composizione[fieldKey] ?? 0
+                    }
+                    placeholder={isOptional ? '—' : undefined}
                     onChange={(e) => {
-                      const val = Math.max(0, Number(e.target.value) || 0);
+                      const raw = e.target.value.trim();
+                      const val =
+                        raw === ''
+                          ? isOptional
+                            ? undefined
+                            : 0
+                          : Math.max(0, Number(raw) || 0);
                       setDraftPlan((prev) =>
                         prev
                           ? {

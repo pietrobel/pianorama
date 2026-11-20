@@ -461,41 +461,45 @@ export default function App() {
 
           {/* Right: Primary CTA */}
           <div className="flex items-center gap-2 shrink-0">
-            {pwaUpdate.needRefresh ? (
-              <button
-                type="button"
-                onClick={() => void pwaUpdate.applyUpdate()}
-                disabled={pwaUpdate.status === 'updating'}
-                title="Nuova versione disponibile: clicca per aggiornare senza perdere i dati salvati"
-                className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-800 disabled:opacity-60"
-              >
-                <RefreshCw
-                  className={`h-3.5 w-3.5 ${pwaUpdate.status === 'updating' ? 'animate-spin' : ''}`}
-                />
-                <span>{pwaUpdate.status === 'updating' ? 'Aggiornamento...' : 'Aggiorna'}</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => void handleHeaderCheckUpdates()}
-                disabled={pwaUpdate.status === 'checking'}
-                title="Controlla aggiornamenti da pianorama.vercel.app"
-                aria-label="Controlla aggiornamenti"
-                className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-              >
-                <RefreshCw
-                  className={`h-3.5 w-3.5 ${pwaUpdate.status === 'checking' ? 'animate-spin' : ''}`}
-                />
-                <span className="hidden lg:inline">
-                  {pwaUpdate.status === 'checking' ? 'Controllo...' : 'Aggiornamenti'}
-                </span>
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => void handleHeaderCheckUpdates()}
+              disabled={pwaUpdate.status === 'checking' || pwaUpdate.status === 'updating'}
+              title="Controlla aggiornamenti da pianorama.vercel.app"
+              aria-label="Controlla aggiornamenti"
+              className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${pwaUpdate.status === 'checking' ? 'animate-spin' : ''}`}
+              />
+              <span className="xl:hidden">
+                {pwaUpdate.status === 'checking' ? 'Controllo...' : 'Controlla'}
+              </span>
+              <span className="hidden xl:inline">
+                {pwaUpdate.status === 'checking' ? 'Controllo...' : 'Controlla aggiornamenti'}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => void pwaUpdate.applyUpdate()}
+              disabled={pwaUpdate.status === 'checking' || pwaUpdate.status === 'updating'}
+              title="Aggiorna PIANORAMA da pianorama.vercel.app mantenendo i dati locali"
+              className={`inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-60 ${
+                pwaUpdate.needRefresh
+                  ? 'bg-emerald-700 hover:bg-emerald-800'
+                  : 'border border-emerald-700 bg-emerald-700 hover:bg-emerald-800'
+              }`}
+            >
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${pwaUpdate.status === 'updating' ? 'animate-spin' : ''}`}
+              />
+              <span>{pwaUpdate.status === 'updating' ? 'Aggiorno...' : 'Aggiorna'}</span>
+            </button>
             {canInstall && !isInstalled && (
               <button
                 type="button"
                 onClick={triggerInstall}
-                className="hidden items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 sm:inline-flex dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                className="hidden items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 sm:inline-flex dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
               >
                 <Download className="h-3.5 w-3.5" />
                 Installa
@@ -505,7 +509,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setShowIOSInstallGuide(true)}
-                className="hidden items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 sm:inline-flex dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                className="hidden items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 sm:inline-flex dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
               >
                 <Download className="h-3.5 w-3.5" />
                 Installa
@@ -514,7 +518,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => setRoute({ page: 'new' })}
-              className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg bg-[#1F3864] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#172b4d]"
+              className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg bg-[#1F3864] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#172b4d]"
             >
               <FilePlus2 className="h-3.5 w-3.5" />
               Nuova
@@ -527,10 +531,10 @@ export default function App() {
               }}
               title="Blocca l'accesso con password"
               aria-label="Blocca accesso"
-              className="inline-flex items-center gap-1 whitespace-nowrap shrink-0 rounded-lg border border-slate-300 px-2.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="inline-flex items-center gap-1 whitespace-nowrap shrink-0 rounded-lg border border-slate-300 px-2 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
             >
               <Lock className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Blocca</span>
+              <span className="hidden xl:inline">Blocca</span>
             </button>
           </div>
         </div>
@@ -643,6 +647,12 @@ export default function App() {
               <DashboardPage
                 programmazioni={programmazioni}
                 settings={settings}
+                pwaUpdateStatus={pwaUpdate.status}
+                pwaUpdateMessage={pwaUpdate.statusMessage}
+                pwaNeedRefresh={pwaUpdate.needRefresh}
+                pwaBuildId={pwaUpdate.currentBuildId}
+                onCheckPWAUpdates={pwaUpdate.checkForUpdates}
+                onApplyPWAUpdate={pwaUpdate.applyUpdate}
                 onCreateNew={() => setRoute({ page: 'new' })}
                 onImportDocument={handleCreatePlan}
                 onReusePlan={(sourceId) => setRoute({ page: 'new', sourceId })}

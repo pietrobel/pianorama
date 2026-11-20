@@ -9,10 +9,15 @@ import type {
   MetodoStudioStato,
   MezzoIndividuazione,
   Programmazione,
+  QuickClassModeSelection,
   SchoolSettings,
   SoglieQuoteCaratteristiche,
 } from './types';
 import { getDefaultIndicazioniForClasseAndYear } from '../engine/curricoloCatalogEngine';
+import {
+  DEFAULT_QUICK_CLASS_SELECTION,
+  normalizeQuickClassSelection,
+} from '../engine/quickClassDescriptionEngine';
 
 export const TIPOLOGIE_CLASSE_OPTIONS: ClassTipologia[] = [
   'tranquilla',
@@ -1486,6 +1491,11 @@ export function createEmptyProgrammazione(
     plesso: string;
     isTemplate: boolean;
     templateNome: string;
+    composizione: Partial<import('./types').ComposizioneClasse>;
+    situazione: Partial<import('./types').SituazioneClasse>;
+    descrizioneDisciplinare: string;
+    modalitaCompilazione: 'rapida' | 'dettagliata';
+    modalitaRapida: QuickClassModeSelection;
   }>
 ): Programmazione {
   const now = new Date().toISOString();
@@ -1529,21 +1539,23 @@ export function createEmptyProgrammazione(
       layoutDocumento,
     },
     composizione: {
-      alunni: 20,
-      maschi: 10,
-      femmine: 10,
-      ripetenti: 0,
-      bes: 0,
-      disabilita: 0,
+      alunni: overrides?.composizione?.alunni,
+      maschi: overrides?.composizione?.maschi,
+      femmine: overrides?.composizione?.femmine,
+      ripetenti: overrides?.composizione?.ripetenti ?? 0,
+      bes: overrides?.composizione?.bes ?? 0,
+      disabilita: overrides?.composizione?.disabilita ?? 0,
     },
     situazione: {
-      tipologie: ['collaborativa', 'motivata'],
-      livello: 'medio',
-      mezziIndividuazione: rilevazioneDefaults.mezziIndividuazione,
-      caratteristicheDimensioni: createDefaultClassDimensions(),
+      tipologie: overrides?.situazione?.tipologie ?? ['collaborativa', 'motivata'],
+      livello: overrides?.situazione?.livello ?? 'medio',
+      mezziIndividuazione:
+        overrides?.situazione?.mezziIndividuazione ?? rilevazioneDefaults.mezziIndividuazione,
+      caratteristicheDimensioni:
+        overrides?.situazione?.caratteristicheDimensioni ?? createDefaultClassDimensions(),
     },
     analisiPartenza: {
-      descrizioneDisciplinare: '',
+      descrizioneDisciplinare: overrides?.descrizioneDisciplinare ?? '',
       livelli: {
         bassoAlunni: 0,
         medioBassoAlunni: 0,
@@ -1555,7 +1567,11 @@ export function createEmptyProgrammazione(
       questionario: {
         risposte: {},
         modalitaGenerazione: 'completa',
-        ultimoAggiornamento: null,
+        ultimoAggiornamento: overrides?.descrizioneDisciplinare ? now : null,
+        modalitaCompilazione: overrides?.modalitaCompilazione ?? 'rapida',
+        modalitaRapida: normalizeQuickClassSelection(
+          overrides?.modalitaRapida ?? DEFAULT_QUICK_CLASS_SELECTION
+        ),
       },
     },
     interventi: {

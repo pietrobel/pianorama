@@ -18,6 +18,7 @@ import type {
 } from '../domain/types';
 import { ensureClassDimensions } from '../engine/classCharacteristicsEngine';
 import { getDefaultIndicazioniForClasseAndYear } from '../engine/curricoloCatalogEngine';
+import { normalizeQuickClassSelection } from '../engine/quickClassDescriptionEngine';
 import {
   computeMergedProgrammazioni,
   mergeItemsById,
@@ -42,6 +43,17 @@ function normalizeLoadedPlan(plan: Programmazione): Programmazione {
     situazione: {
       ...plan.situazione,
       caratteristicheDimensioni: ensureClassDimensions(plan.situazione?.caratteristicheDimensioni),
+    },
+    analisiPartenza: {
+      ...plan.analisiPartenza,
+      questionario: plan.analisiPartenza?.questionario
+        ? {
+            ...plan.analisiPartenza.questionario,
+            modalitaRapida: plan.analisiPartenza.questionario.modalitaRapida
+              ? normalizeQuickClassSelection(plan.analisiPartenza.questionario.modalitaRapida)
+              : undefined,
+          }
+        : undefined,
     },
     curricolo: {
       ...plan.curricolo,

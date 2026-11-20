@@ -28,9 +28,9 @@ export type FonteRilevazione =
   | "colloqui con i docenti della scuola dell'infanzia/primaria";
 
 export interface ComposizioneClasse {
-  alunni: number;
-  maschi: number;
-  femmine: number;
+  alunni?: number;
+  maschi?: number;
+  femmine?: number;
   ripetenti: number;
   bes: number;
   disabilita?: number;
@@ -106,6 +106,7 @@ export type RiferimentoPianoAlunno = '' | 'PDP' | 'PEI' | 'Osservazione';
 export interface AnonymousStudentBandEntry {
   id: string;
   ordine: number;
+  ordineRegistro?: number;
   labelAnonimo: string;
   nominativo?: string;
   media: number | null;
@@ -148,19 +149,28 @@ export interface QuestionnaireAnswer {
 }
 
 export type QuickEterogeneitaLevel = 'omogenea' | 'moderata' | 'elevata';
-export type QuickPreparazioneLevel = 'buono' | 'medio' | 'fragile';
+export type QuickLivelloGeneraleLevel = 'buono' | 'medio' | 'fragile';
+/** @deprecated Usare QuickLivelloGeneraleLevel */
+export type QuickPreparazioneLevel = QuickLivelloGeneraleLevel;
+export type QuickSocializzazioneLevel = 'positiva' | 'selettiva' | 'difficile';
+export type QuickRegoleVivacitaLevel = 'ordinata' | 'vivace' | 'irrequieta';
+/** @deprecated Usare QuickSocializzazioneLevel e QuickRegoleVivacitaLevel */
 export type QuickClimaLevel = 'sereno' | 'vivace' | 'complesso';
 export type QuickMotivazioneLevel = 'attiva' | 'selettiva' | 'debole';
 
 export type QuickClassModeKey =
-  `${QuickEterogeneitaLevel}|${QuickPreparazioneLevel}|${QuickClimaLevel}|${QuickMotivazioneLevel}`;
+  `${QuickEterogeneitaLevel}|${QuickLivelloGeneraleLevel}|${QuickSocializzazioneLevel}|${QuickRegoleVivacitaLevel}|${QuickMotivazioneLevel}`;
 
 export interface QuickClassModeSelection {
   eterogeneita: QuickEterogeneitaLevel;
-  preparazione: QuickPreparazioneLevel;
-  clima: QuickClimaLevel;
+  livelloGenerale: QuickLivelloGeneraleLevel;
+  socializzazione: QuickSocializzazioneLevel;
+  regoleVivacita: QuickRegoleVivacitaLevel;
   motivazione: QuickMotivazioneLevel;
   varianteSelezionata: 0 | 1 | 2;
+  /** Retrocompatibilità con piani salvati con versione precedente a 4 domande */
+  preparazione?: QuickLivelloGeneraleLevel;
+  clima?: QuickClimaLevel;
 }
 
 export interface ClassQuestionnaire {
@@ -492,6 +502,7 @@ export function sanitizePlanForOfficialExport(plan: Programmazione): Programmazi
     .map((entry) => ({
       id: entry.id,
       ordine: entry.ordine,
+      ordineRegistro: entry.ordineRegistro,
       labelAnonimo: entry.labelAnonimo,
       nominativo: entry.nominativo?.trim(),
       media: null,

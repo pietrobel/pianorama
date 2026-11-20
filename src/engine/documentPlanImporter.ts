@@ -27,6 +27,7 @@ import type {
   Programmazione,
   SchoolSettings,
 } from '../domain/types';
+import { extractRegisterOrderAndCleanName } from './gradebookImporter';
 
 export interface ImportedDocumentSummary {
   fileName: string;
@@ -394,6 +395,56 @@ function extractTablesFromPdfRowGroups(pageRowGroups: PdfTextToken[][][]): strin
       });
     }
   });
+
+  // 0. Ricostruisci tabella Composizione della classe (6 colonne, sia layout Originale 1-riga con eventuale a capo che Moderno 2-righe)
+  for (let i = 0; i < flatRows.length; i++) {
+    const r = flatRows[i];
+    if (
+      r.clusters.length >= 4 &&
+      r.clusters.some((c) => /\balunni\b/i.test(c.text)) &&
+      r.clusters.some((c) => /\bmaschi\b/i.test(c.text)) &&
+      r.clusters.some((c) => /\bfemmine\b/i.test(c.text))
+    ) {
+      const isKeyValueRow = r.clusters.some((c) => /:/.test(c.text));
+      if (isKeyValueRow) {
+        const cutoffs = r.clusters.slice(1).map((c) => c.startX - 4);
+        const cellsBuf = assignRowTokensToColumns(r.tokens, cutoffs);
+        let j = i + 1;
+        while (j < flatRows.length && flatRows[j].page === r.page && j <= i + 3) {
+          const nextJoined = flatRows[j].joined.trim();
+          if (
+            /^situazione della classe\b/i.test(nextJoined) ||
+            /^tipologia\b/i.test(nextJoined)
+          ) {
+            break;
+          }
+          const cont = assignRowTokensToColumns(flatRows[j].tokens, cutoffs);
+          for (let k = 0; k < cellsBuf.length; k++) {
+            if (cont[k]) {
+              cellsBuf[k] = `${cellsBuf[k]} ${cont[k]}`.trim();
+            }
+          }
+          j += 1;
+        }
+        tables.push([cellsBuf]);
+      } else {
+        const cutoffs = computePdfColumnCutoffs(r.clusters);
+        const headerRow = assignRowTokensToColumns(r.tokens, cutoffs);
+        const compRows: string[][] = [headerRow];
+        const next = flatRows[i + 1];
+        if (
+          next &&
+          next.page === r.page &&
+          !/^situazione della classe\b/i.test(next.joined.trim()) &&
+          !/^tipologia\b/i.test(next.joined.trim())
+        ) {
+          compRows.push(assignRowTokensToColumns(next.tokens, cutoffs));
+        }
+        tables.push(compRows);
+      }
+      break;
+    }
+  }
 
   // 1. Ricostruisci tabella Livelli di partenza (4 colonne: counts + eventuali nomi alunni)
   for (let i = 0; i < flatRows.length; i++) {
@@ -1836,22 +1887,28 @@ export async function importProgrammazioneFromBuffer(
       t[0]?.some((c) => /maschi/i.test(c))
   );
   if (compTable) {
-    const firstRowHasNums = compTable[0].filter((c) => /\d+/.test(c)).length >= 3;
+    const isSingleRowKeyValue =
+      compTable.length === 1 ||
+      compTable[0].filter((c) => /:\s*\d*/.test(c)).length >= 3 ||
+      compTable[0].filter((c) => /\d+/.test(c)).length >= 2;
     const headerRow = compTable[0];
-    const targetRow = firstRowHasNums ? compTable[0] : compTable[1];
+    const targetRow = isSingleRowKeyValue ? compTable[0] : compTable[1];
     if (targetRow && targetRow.length >= 4) {
       const extractInt = (cell: string) => {
         const m = cell.match(/\d+/);
         return m ? parseInt(m[0], 10) : NaN;
       };
       const matchCellByLabel = (rx: RegExp, fallbackIdx: number): number => {
+        let matchedByLabel = false;
         for (let idx = 0; idx < targetRow.length; idx++) {
-          const labelSource = firstRowHasNums ? targetRow[idx] : headerRow[idx] ?? '';
+          const labelSource = isSingleRowKeyValue ? targetRow[idx] : headerRow[idx] ?? '';
           if (rx.test(labelSource)) {
+            matchedByLabel = true;
             const val = extractInt(targetRow[idx]);
             if (!Number.isNaN(val)) return val;
           }
         }
+        if (matchedByLabel) return NaN;
         return fallbackIdx < targetRow.length ? extractInt(targetRow[fallbackIdx]) : NaN;
       };
 
@@ -1877,7 +1934,7 @@ export async function importProgrammazioneFromBuffer(
         'composizione',
         'Composizione classe',
         'Composizione',
-        `Alunni ${basePlan.composizione.alunni}, M ${basePlan.composizione.maschi}, F ${basePlan.composizione.femmine}, Rip. ${basePlan.composizione.ripetenti}, BES ${basePlan.composizione.bes}, Disabilità ${basePlan.composizione.disabilita ?? 0}`
+        `Alunni ${basePlan.composizione.alunni ?? '—'}, M ${basePlan.composizione.maschi ?? '—'}, F ${basePlan.composizione.femmine ?? '—'}, Rip. ${basePlan.composizione.ripetenti}, BES ${basePlan.composizione.bes}, Disabilità ${basePlan.composizione.disabilita ?? 0}`
       );
     }
   } else {
@@ -1909,7 +1966,7 @@ export async function importProgrammazioneFromBuffer(
       const femmineM = fullText.match(/\bFemmine\s*[:\-]\s*(\d{1,2})\b/i);
       const ripM = fullText.match(/\bRipetenti\s*[:\-]\s*(\d{1,2})\b/i);
       const besM = fullText.match(
-        /(?:Con Bisogni Educativi Speciali\s*\(BES\)|BES)\s*[:\-]\s*(\d{1,2})\b/i
+        /(?:Con\s+Bisogni\s+Educativi\s+Speciali(?:\s*\(BES\))?|Speciali\s*\(BES\)|\(BES\)|\bBES)\s*[:\-]\s*(\d{1,2})\b/i
       );
       const disM = fullText.match(
         /(?:^|\n|\||\s)(?:Con\s+disabilit[àa]|Alunni(?:\s+con)?\s+H|H)\s*[:\-]\s*(\d{1,2})\b/im
@@ -1926,7 +1983,7 @@ export async function importProgrammazioneFromBuffer(
           'composizione',
           'Composizione classe',
           'Composizione',
-          `Alunni ${basePlan.composizione.alunni}, M ${basePlan.composizione.maschi}, F ${basePlan.composizione.femmine}, Rip. ${basePlan.composizione.ripetenti}, BES ${basePlan.composizione.bes}, Disabilità ${basePlan.composizione.disabilita ?? 0}`
+          `Alunni ${basePlan.composizione.alunni ?? '—'}, M ${basePlan.composizione.maschi ?? '—'}, F ${basePlan.composizione.femmine ?? '—'}, Rip. ${basePlan.composizione.ripetenti}, BES ${basePlan.composizione.bes}, Disabilità ${basePlan.composizione.disabilita ?? 0}`
         );
       }
     }
@@ -2259,11 +2316,14 @@ export async function importProgrammazioneFromBuffer(
           .filter((n) => n.length > 1 && !isPlaceholderValue(n));
         for (const nom of names) {
           consumedSubstrings.push(nom);
+          const parsedName = extractRegisterOrderAndCleanName(nom);
+          if (!parsedName.cleanName) continue;
           importedStudents.push({
             id: makeId('imp-stud'),
             ordine: order,
+            ordineRegistro: parsedName.registerOrder ?? undefined,
             labelAnonimo: `Alunno ${order}`,
-            nominativo: nom,
+            nominativo: parsedName.cleanName,
             media: null,
             fasciaAutomatica: bandOrder[i],
             fasciaCorrente: bandOrder[i],

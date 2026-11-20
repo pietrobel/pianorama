@@ -270,13 +270,28 @@ export function DocumentSheetPreview({
               <tbody>
                 <tr>
                   <td className="w-[14%] border border-black px-2 py-1.5">
-                    Alunni: <strong>{plan.composizione.alunni}</strong>
+                    Alunni:{' '}
+                    <strong>
+                      {typeof plan.composizione.alunni === 'number'
+                        ? plan.composizione.alunni
+                        : ''}
+                    </strong>
                   </td>
                   <td className="w-[14%] border border-black px-2 py-1.5">
-                    Maschi: <strong>{plan.composizione.maschi}</strong>
+                    Maschi:{' '}
+                    <strong>
+                      {typeof plan.composizione.maschi === 'number'
+                        ? plan.composizione.maschi
+                        : ''}
+                    </strong>
                   </td>
                   <td className="w-[14%] border border-black px-2 py-1.5">
-                    Femmine: <strong>{plan.composizione.femmine}</strong>
+                    Femmine:{' '}
+                    <strong>
+                      {typeof plan.composizione.femmine === 'number'
+                        ? plan.composizione.femmine
+                        : ''}
+                    </strong>
                   </td>
                   <td className="w-[15%] border border-black px-2 py-1.5">
                     Ripetenti: <strong>{plan.composizione.ripetenti}</strong>
@@ -316,10 +331,16 @@ export function DocumentSheetPreview({
               <tbody className="tabular-nums">
                 <tr>
                   <td className={`${cellBorderClass} px-2 py-1.5 font-bold`}>
-                    {plan.composizione.alunni}
+                    {typeof plan.composizione.alunni === 'number' ? plan.composizione.alunni : '—'}
                   </td>
-                  <td className={`${cellBorderClass} px-2 py-1.5`}>{plan.composizione.maschi}</td>
-                  <td className={`${cellBorderClass} px-2 py-1.5`}>{plan.composizione.femmine}</td>
+                  <td className={`${cellBorderClass} px-2 py-1.5`}>
+                    {typeof plan.composizione.maschi === 'number' ? plan.composizione.maschi : '—'}
+                  </td>
+                  <td className={`${cellBorderClass} px-2 py-1.5`}>
+                    {typeof plan.composizione.femmine === 'number'
+                      ? plan.composizione.femmine
+                      : '—'}
+                  </td>
                   <td className={`${cellBorderClass} px-2 py-1.5`}>
                     {plan.composizione.ripetenti}
                   </td>

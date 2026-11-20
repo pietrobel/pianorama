@@ -766,7 +766,25 @@ export function buildClassCompositionIntro(
 
   const suffixConn = COMPOSITION_SUFFIX_CONNECTORS[idx % COMPOSITION_SUFFIX_CONNECTORS.length];
   const suffix = extraParts.length > 0 ? `${suffixConn}${extraParts.join(' e ')}` : '';
-  return COMPOSITION_INTRO_VARIANTS[idx](classeLabel, alunni, maschi, femmine, suffix).replace(
+
+  if (typeof alunni === 'number' && alunni > 0) {
+    if (typeof maschi === 'number' && typeof femmine === 'number') {
+      return COMPOSITION_INTRO_VARIANTS[idx](classeLabel, alunni, maschi, femmine, suffix).replace(
+        /\s+/g,
+        ' '
+      );
+    }
+    return `La classe ${classeLabel} è composta complessivamente da ${alunni} alunni${suffix}.`.replace(
+      /\s+/g,
+      ' '
+    );
+  }
+
+  if (extraParts.length > 0) {
+    return `La classe ${classeLabel} presenta una composizione varia${suffix}.`.replace(/\s+/g, ' ');
+  }
+
+  return `La classe ${classeLabel} viene esaminata nel suo assetto complessivo.`.replace(
     /\s+/g,
     ' '
   );

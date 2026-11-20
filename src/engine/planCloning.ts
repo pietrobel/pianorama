@@ -1,10 +1,13 @@
 import { createEmptyProgrammazione } from '../domain/defaults';
 import type {
   ClasseSecondaria,
+  ComposizioneClasse,
   IndicazioniVersion,
   Programmazione,
+  QuickClassModeSelection,
   SchoolSettings,
   SectionCopyOptions,
+  SituazioneClasse,
 } from '../domain/types';
 import { getDefaultIndicazioniForClasseAndYear } from './curricoloCatalogEngine';
 
@@ -72,6 +75,11 @@ export interface ClonePlanParams {
     indicazioniVersione?: IndicazioniVersion;
     isTemplate?: boolean;
     templateNome?: string;
+    composizione?: Partial<ComposizioneClasse>;
+    situazione?: Partial<SituazioneClasse>;
+    descrizioneDisciplinare?: string;
+    modalitaCompilazione?: 'rapida' | 'dettagliata';
+    modalitaRapida?: QuickClassModeSelection;
   };
 }
 
@@ -131,8 +139,42 @@ export function cloneProgrammazioneWithOptions(params: ClonePlanParams): Program
     cloned.situazione = structuredClone(source.situazione);
   }
 
+  if (overrides.composizione) {
+    cloned.composizione = {
+      ...cloned.composizione,
+      ...overrides.composizione,
+    };
+  }
+
   if (sections.analisiEQuestionario) {
     cloned.analisiPartenza = structuredClone(source.analisiPartenza);
+  }
+
+  if (overrides.situazione) {
+    cloned.situazione = {
+      ...cloned.situazione,
+      ...overrides.situazione,
+    };
+  }
+
+  if (overrides.modalitaCompilazione || overrides.modalitaRapida || overrides.descrizioneDisciplinare !== undefined) {
+    cloned.analisiPartenza = {
+      ...cloned.analisiPartenza,
+      ...(overrides.descrizioneDisciplinare !== undefined
+        ? { descrizioneDisciplinare: overrides.descrizioneDisciplinare }
+        : {}),
+      questionario: {
+        risposte: cloned.analisiPartenza.questionario?.risposte ?? {},
+        modalitaGenerazione: cloned.analisiPartenza.questionario?.modalitaGenerazione ?? 'completa',
+        ultimoAggiornamento: cloned.analisiPartenza.questionario?.ultimoAggiornamento ?? now,
+        modalitaCompilazione:
+          overrides.modalitaCompilazione ??
+          cloned.analisiPartenza.questionario?.modalitaCompilazione ??
+          'rapida',
+        modalitaRapida:
+          overrides.modalitaRapida ?? cloned.analisiPartenza.questionario?.modalitaRapida,
+      },
+    };
   }
 
   if (sections.interventi) {

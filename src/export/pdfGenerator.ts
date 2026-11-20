@@ -587,6 +587,13 @@ export function generateProgrammazionePdfBytes(
   // COMPOSIZIONE DELLA CLASSE
   // =========================================================================
   const disabilitaCount = plan.composizione.disabilita ?? 0;
+  const alunniVal =
+    typeof plan.composizione.alunni === 'number' ? String(plan.composizione.alunni) : '';
+  const maschiVal =
+    typeof plan.composizione.maschi === 'number' ? String(plan.composizione.maschi) : '';
+  const femmineVal =
+    typeof plan.composizione.femmine === 'number' ? String(plan.composizione.femmine) : '';
+
   drawSectionHeading('COMPOSIZIONE DELLA CLASSE', { highlightE6: isOriginal });
   if (isOriginal) {
     ensureSpace(14);
@@ -599,9 +606,9 @@ export function generateProgrammazionePdfBytes(
       contentWidth * 0.16,
     ];
     const labels = [
-      `Alunni: ${plan.composizione.alunni}`,
-      `Maschi: ${plan.composizione.maschi}`,
-      `Femmine: ${plan.composizione.femmine}`,
+      alunniVal ? `Alunni: ${alunniVal}` : 'Alunni:',
+      maschiVal ? `Maschi: ${maschiVal}` : 'Maschi:',
+      femmineVal ? `Femmine: ${femmineVal}` : 'Femmine:',
       `Ripetenti: ${plan.composizione.ripetenti}`,
       `Con Bisogni Educativi Speciali (BES): ${plan.composizione.bes}`,
       `Con disabilità: ${disabilitaCount}`,
@@ -623,9 +630,9 @@ export function generateProgrammazionePdfBytes(
   } else {
     ensureSpace(14);
     const compCols = [
-      { label: 'Alunni', val: String(plan.composizione.alunni), w: 24 },
-      { label: 'Maschi', val: String(plan.composizione.maschi), w: 24 },
-      { label: 'Femmine', val: String(plan.composizione.femmine), w: 24 },
+      { label: 'Alunni', val: alunniVal || '—', w: 24 },
+      { label: 'Maschi', val: maschiVal || '—', w: 24 },
+      { label: 'Femmine', val: femmineVal || '—', w: 24 },
       { label: 'Ripetenti', val: String(plan.composizione.ripetenti), w: 24 },
       { label: 'Con BES', val: String(plan.composizione.bes), w: contentWidth - 128 },
       { label: 'Con disabilità', val: String(disabilitaCount), w: 32 },

@@ -11,7 +11,13 @@ import type {
   SchoolSettings,
   SoglieQuoteCaratteristiche,
 } from '../domain/types';
-import { extractCognomeOnly } from './gradebookImporter';
+import {
+  extractCognomeOnly,
+  extractRegisterOrderAndCleanName,
+  formatStudentNameTitleCase,
+} from './gradebookImporter';
+
+export { extractRegisterOrderAndCleanName, formatStudentNameTitleCase };
 
 export interface DocumentCharacteristicParagraph {
   id: string;
@@ -1170,53 +1176,8 @@ export function computeStudentCountFromPct(pct: number, alunniTotali: number): n
 }
 
 /**
- * Formatta nome e cognome con la prima lettera di ciascuna parola in maiuscolo
- * e le successive in minuscolo (es. "ROSSI MARIO" -> "Rossi Mario", "D'ANGELO LUCA" -> "D'Angelo Luca").
- */
-export function formatStudentNameTitleCase(name: string): string {
-  const trimmed = (name ?? '').trim().replace(/\s+/g, ' ');
-  if (!trimmed) return '';
-  return trimmed
-    .toLocaleLowerCase('it-IT')
-    .replace(/(^|[\s\-’'])(\p{L})/giu, (_, sep: string, ch: string) => {
-      return `${sep}${ch.toLocaleUpperCase('it-IT')}`;
-    });
-}
-
-/**
- * Estrae eventuale numero di registro tra parentesi (es. "Rossi Mario (12)" o "(3) Bianchi Luca")
- * e restituisce il nominativo pulito privo di parentesi numeriche e formattato in Title Case.
- */
-export function extractRegisterOrderAndCleanName(rawName: string): {
-  cleanName: string;
-  registerOrder: number | null;
-} {
-  const trimmed = (rawName ?? '').trim().replace(/\s+/g, ' ');
-  if (!trimmed) return { cleanName: '', registerOrder: null };
-
-  let registerOrder: number | null = null;
-  const matches = [...trimmed.matchAll(/\(\s*(\d{1,3})\s*\)/g)];
-  if (matches.length > 0) {
-    const parsed = Number(matches[0][1]);
-    if (Number.isFinite(parsed)) {
-      registerOrder = parsed;
-    }
-  }
-
-  const withoutParens = trimmed
-    .replace(/\(\s*\d{1,3}\s*\)/g, '')
-    .replace(/\s+/g, ' ')
-    .replace(/\s+([,;:.])/g, '$1')
-    .trim();
-
-  const cleanName = formatStudentNameTitleCase(withoutParens);
-
-  return { cleanName, registerOrder };
-}
-
-/**
  * Ordina i nominativi all'interno di ciascuna fascia utilizzando prioritariamente il numero di registro
- * tra parentesi (ordine alfabetico dei cognomi nel registro) e rimuove i numeri tra parentesi dal testo esportabile.
+ * (estratto dal testo o salvato in ordineRegistro) e restituisce nomi privi di numeri in Title Case.
  */
 export function sortAndCleanStudentNamesForBands(
   entries: AnonymousStudentBandEntry[]
@@ -1236,13 +1197,14 @@ export function sortAndCleanStudentNamesForBands(
   };
 
   for (const entry of entries) {
-    const { cleanName, registerOrder } = extractRegisterOrderAndCleanName(entry.nominativo ?? '');
-    if (!cleanName) continue;
+    const parsed = extractRegisterOrderAndCleanName(entry.nominativo ?? '');
+    if (!parsed.cleanName) continue;
+    const registerOrder = parsed.registerOrder ?? entry.ordineRegistro ?? null;
     const key: FasciaLivelloKey = entry.fasciaCorrente;
     if (key === 'basso' || key === 'medio_basso' || key === 'medio' || key === 'alto') {
       buckets[key].push({
-        cleanName,
-        cognome: extractCognomeOnly(cleanName),
+        cleanName: parsed.cleanName,
+        cognome: extractCognomeOnly(parsed.cleanName),
         registerOrder,
         ordine: entry.ordine ?? 0,
       });

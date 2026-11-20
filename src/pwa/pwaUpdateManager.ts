@@ -222,18 +222,25 @@ export async function checkForAppUpdates(options?: {
     }
 
     const fetchFn = options?.fetchImpl ?? (typeof fetch !== 'undefined' ? fetch : undefined);
-    const origin =
+    const primaryOrigin =
       options?.origin ??
       (typeof window !== 'undefined' ? window.location.origin : OFFICIAL_PWA_URL);
+    const candidateOrigins =
+      options?.origin || primaryOrigin === OFFICIAL_PWA_URL
+        ? [primaryOrigin]
+        : [primaryOrigin, OFFICIAL_PWA_URL];
 
-    if (fetchFn && origin) {
-      const res = await fetchFn(`${origin}/version.json?ts=${Date.now()}`, {
-        cache: 'no-store',
-        headers: { Accept: 'application/json' },
-      });
-      if (res.ok) {
-        const contentType = res.headers.get('content-type') ?? '';
-        if (contentType.includes('application/json')) {
+    if (fetchFn) {
+      for (const candidateOrigin of candidateOrigins) {
+        if (!candidateOrigin) continue;
+        try {
+          const res = await fetchFn(`${candidateOrigin}/version.json?ts=${Date.now()}`, {
+            cache: 'no-store',
+            headers: { Accept: 'application/json' },
+          });
+          if (!res.ok) continue;
+          const contentType = res.headers.get('content-type') ?? '';
+          if (!contentType.includes('application/json')) continue;
           const payload = (await res.json()) as VersionPayload;
           if (payload?.buildId && payload.buildId !== state.currentBuildId) {
             if (swRegistration) {
@@ -247,10 +254,14 @@ export async function checkForAppUpdates(options?: {
               bannerDismissed: false,
               lastCheckedAt: new Date().toISOString(),
               statusMessage:
-                'È disponibile una nuova versione pubblicata su pianorama.vercel.app: premi "Aggiorna" per applicarla senza perdere i dati salvati.',
+                'È disponibile una nuova versione pubblicata su pianorama.vercel.app: premi "Aggiorna app" per applicarla senza perdere i dati salvati.',
             });
             return 'update_available';
           }
+          // Risposta JSON valida con stessa buildId -> app già aggiornata
+          break;
+        } catch {
+          // Prova eventuale origine successiva (es. pianorama.vercel.app)
         }
       }
     }
@@ -260,7 +271,7 @@ export async function checkForAppUpdates(options?: {
         status: 'update_available',
         lastCheckedAt: new Date().toISOString(),
         statusMessage:
-          'È disponibile una nuova versione di PIANORAMA: premi "Aggiorna" per completare l’installazione.',
+          'È disponibile una nuova versione di PIANORAMA: premi "Aggiorna app" per completare l’installazione.',
       });
       return 'update_available';
     }
@@ -298,6 +309,8 @@ async function clearStaticCachesWithoutTouchingIndexedDB(): Promise<void> {
 
 export async function applyAppUpdate(options?: {
   reloadPage?: () => void;
+  fetchImpl?: typeof fetch;
+  origin?: string;
 }): Promise<'updating' | 'up_to_date' | 'offline' | 'error'> {
   if (typeof navigator !== 'undefined' && !navigator.onLine && !swRegistration?.waiting) {
     setState({
@@ -309,7 +322,11 @@ export async function applyAppUpdate(options?: {
   }
 
   if (!state.needRefresh && !swRegistration?.waiting) {
-    const checkResult = await checkForAppUpdates({ silent: false });
+    const checkResult = await checkForAppUpdates({
+      silent: false,
+      fetchImpl: options?.fetchImpl,
+      origin: options?.origin,
+    });
     if (checkResult !== 'update_available') {
       return checkResult === 'offline' ? 'offline' : checkResult === 'error' ? 'error' : 'up_to_date';
     }
@@ -332,8 +349,8 @@ export async function applyAppUpdate(options?: {
       await updateSWFn(true);
       if (typeof window !== 'undefined') {
         window.setTimeout(() => {
-          reload();
-        }, 2500);
+          void clearStaticCachesWithoutTouchingIndexedDB().finally(() => reload());
+        }, 2000);
       }
       return 'updating';
     }
@@ -343,8 +360,16 @@ export async function applyAppUpdate(options?: {
       await waitForInstallingWorker(swRegistration, 1500);
       if (swRegistration.waiting && updateSWFn) {
         await updateSWFn(true);
+        if (typeof window !== 'undefined') {
+          window.setTimeout(() => {
+            void clearStaticCachesWithoutTouchingIndexedDB().finally(() => reload());
+          }, 2000);
+        }
         return 'updating';
       }
+      // Se il server segnala una nuova build ma nessun waiting worker si è attivato,
+      // aggiorna la registrazione SW senza mai toccare IndexedDB (PianoramaLocalDB).
+      await swRegistration.unregister().catch(() => undefined);
     }
 
     // Pulisce SOLO la Cache Storage HTTP (non IndexedDB/Dexie) prima di ricaricare i nuovi file

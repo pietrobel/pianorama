@@ -599,6 +599,12 @@ export function createProgrammazioneDocument(
       ];
 
   const disabilitaCount = plan.composizione.disabilita ?? 0;
+  const alunniVal =
+    typeof plan.composizione.alunni === 'number' ? String(plan.composizione.alunni) : '';
+  const maschiVal =
+    typeof plan.composizione.maschi === 'number' ? String(plan.composizione.maschi) : '';
+  const femmineVal =
+    typeof plan.composizione.femmine === 'number' ? String(plan.composizione.femmine) : '';
 
   const composizioneTable = isOriginal
     ? new Table({
@@ -607,13 +613,13 @@ export function createProgrammazioneDocument(
           new TableRow({
             cantSplit: true,
             children: [
-              cell([pText(`Alunni: ${plan.composizione.alunni}`, { spaceBefore: 10, spaceAfter: 10 })], {
+              cell([pText(alunniVal ? `Alunni: ${alunniVal}` : 'Alunni:', { spaceBefore: 10, spaceAfter: 10 })], {
                 widthPct: 14,
               }),
-              cell([pText(`Maschi: ${plan.composizione.maschi}`, { spaceBefore: 10, spaceAfter: 10 })], {
+              cell([pText(maschiVal ? `Maschi: ${maschiVal}` : 'Maschi:', { spaceBefore: 10, spaceAfter: 10 })], {
                 widthPct: 14,
               }),
-              cell([pText(`Femmine: ${plan.composizione.femmine}`, { spaceBefore: 10, spaceAfter: 10 })], {
+              cell([pText(femmineVal ? `Femmine: ${femmineVal}` : 'Femmine:', { spaceBefore: 10, spaceAfter: 10 })], {
                 widthPct: 14,
               }),
               cell([pText(`Ripetenti: ${plan.composizione.ripetenti}`, { spaceBefore: 10, spaceAfter: 10 })], {
@@ -665,9 +671,9 @@ export function createProgrammazioneDocument(
           new TableRow({
             cantSplit: true,
             children: [
-              cell([pText(String(plan.composizione.alunni), { align: AlignmentType.CENTER, bold: true })]),
-              cell([pText(String(plan.composizione.maschi), { align: AlignmentType.CENTER })]),
-              cell([pText(String(plan.composizione.femmine), { align: AlignmentType.CENTER })]),
+              cell([pText(alunniVal || '—', { align: AlignmentType.CENTER, bold: true })]),
+              cell([pText(maschiVal || '—', { align: AlignmentType.CENTER })]),
+              cell([pText(femmineVal || '—', { align: AlignmentType.CENTER })]),
               cell([pText(String(plan.composizione.ripetenti), { align: AlignmentType.CENTER })]),
               cell([pText(String(plan.composizione.bes), { align: AlignmentType.CENTER, bold: true })]),
               cell([pText(String(disabilitaCount), { align: AlignmentType.CENTER, bold: true })]),

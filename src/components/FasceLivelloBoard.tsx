@@ -34,6 +34,7 @@ import {
 import {
   computeLivelliFromStudents,
   createManualStudentEntry,
+  extractRegisterOrderAndCleanName,
   moveStudentToFascia,
   parseItalianDecimal,
   removeStudentFromFasce,
@@ -573,10 +574,11 @@ export function FasceLivelloBoard({
                   bandItems.map((entry) => {
                     const isGrabbed = keyboardGrabbedId === entry.id;
                     const bandIndex = BAND_ORDER.indexOf(entry.fasciaCorrente);
+                    const cleanedDisplay = entry.nominativo?.trim()
+                      ? extractRegisterOrderAndCleanName(entry.nominativo).cleanName
+                      : '';
                     const displayName =
-                      showNames && entry.nominativo?.trim()
-                        ? entry.nominativo.trim()
-                        : entry.labelAnonimo;
+                      showNames && cleanedDisplay ? cleanedDisplay : entry.labelAnonimo;
                     const catMeta = CATEGORIA_OPTIONS.find(
                       (c) => c.value === entry.categoriaInclusione
                     );

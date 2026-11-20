@@ -78,20 +78,67 @@ const SURNAME_PARTICLES = new Set([
 ]);
 
 /**
- * Normalizza Nome e Cognome completi letti dal registro elettronico
- * ("ROSSI, Mario" -> "ROSSI Mario", "  Rossi   Mario " -> "Rossi Mario").
+ * Formatta nome e cognome con la prima lettera di ciascuna parola in maiuscolo
+ * e le successive in minuscolo (es. "ROSSI MARIO" -> "Rossi Mario", "D'ANGELO LUCA" -> "D'Angelo Luca").
+ */
+export function formatStudentNameTitleCase(name: string): string {
+  const trimmed = (name ?? '').trim().replace(/\s+/g, ' ');
+  if (!trimmed) return '';
+  return trimmed
+    .toLocaleLowerCase('it-IT')
+    .replace(/(^|[\s\-’'])(\p{L})/giu, (_, sep: string, ch: string) => {
+      return `${sep}${ch.toLocaleUpperCase('it-IT')}`;
+    });
+}
+
+/**
+ * Estrae eventuale numero di registro tra parentesi o prefisso numerico (es. "(1) ROSSI MARIO",
+ * "Rossi Mario (12)", "(n. 3) D'ANGELO LUCA", "4. BIANCHI ANNA") e restituisce il nominativo
+ * pulito senza numeri e formattato in Title Case.
+ */
+export function extractRegisterOrderAndCleanName(rawName: string): {
+  cleanName: string;
+  registerOrder: number | null;
+} {
+  const trimmed = (rawName ?? '').trim().replace(/\s+/g, ' ');
+  if (!trimmed) return { cleanName: '', registerOrder: null };
+
+  let registerOrder: number | null = null;
+  const bracketMatches = [
+    ...trimmed.matchAll(/[(（[]\s*(?:n[°º.]?\s*|nr\.?\s*)?(\d{1,4})[°º.]?\s*[)）\]]/gi),
+  ];
+  if (bracketMatches.length > 0) {
+    const parsed = Number(bracketMatches[0][1]);
+    if (Number.isFinite(parsed)) {
+      registerOrder = parsed;
+    }
+  } else {
+    const leadingMatch = trimmed.match(/^\s*(?:n[°º.]?\s*)?(\d{1,4})\s*[°º.):\-]\s+/i);
+    if (leadingMatch) {
+      const parsed = Number(leadingMatch[1]);
+      if (Number.isFinite(parsed)) {
+        registerOrder = parsed;
+      }
+    }
+  }
+
+  const withoutNumbers = trimmed
+    .replace(/[(（[]\s*(?:n[°º.]?\s*|nr\.?\s*)?\d{1,4}[°º.]?\s*[)）\]]/gi, ' ')
+    .replace(/^\s*(?:n[°º.]?\s*)?\d{1,4}\s*[°º.):\-]\s+/i, '')
+    .replace(/,/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const cleanName = formatStudentNameTitleCase(withoutNumbers);
+  return { cleanName, registerOrder };
+}
+
+/**
+ * Normalizza Nome e Cognome completi letti dal registro elettronico,
+ * rimuovendo eventuali numeri tra parentesi e formattando solo le iniziali in maiuscolo.
  */
 export function formatFullStudentName(rawName: string): string {
-  const cleaned = rawName.trim().replace(/\s+/g, ' ');
-  if (!cleaned) return '';
-  if (cleaned.includes(',')) {
-    return cleaned
-      .split(',')
-      .map((part) => part.trim())
-      .filter(Boolean)
-      .join(' ');
-  }
-  return cleaned;
+  return extractRegisterOrderAndCleanName(rawName).cleanName;
 }
 
 /**
@@ -272,15 +319,16 @@ export function createManualStudentEntry(
     existingEntries.reduce((max, e) => Math.max(max, e.ordine), 0) + 1;
   const auto = classifyMediaToFascia(data.media, soglie);
   const current = data.fasciaManuale ?? auto;
-  const cleanName = data.nominativo?.trim();
+  const parsed = extractRegisterOrderAndCleanName(data.nominativo ?? '');
   return {
     id:
       typeof crypto !== 'undefined' && crypto.randomUUID
         ? crypto.randomUUID()
         : `alunno-${Date.now()}-${nextOrdine}`,
     ordine: nextOrdine,
+    ordineRegistro: parsed.registerOrder ?? undefined,
     labelAnonimo: `Alunno ${nextOrdine}`,
-    nominativo: cleanName || undefined,
+    nominativo: parsed.cleanName || undefined,
     media: data.media,
     fasciaAutomatica: auto,
     fasciaCorrente: current,
@@ -308,12 +356,16 @@ export function updateStudentDetails(
     const nextMedia = patch.media !== undefined ? patch.media : entry.media;
     const nextAuto = classifyMediaToFascia(nextMedia, soglie);
     const nextCurrent = entry.spostatoDalDocente ? entry.fasciaCorrente : nextAuto;
+    const parsedName =
+      patch.nominativo !== undefined
+        ? extractRegisterOrderAndCleanName(patch.nominativo)
+        : null;
     return {
       ...entry,
-      nominativo:
-        patch.nominativo !== undefined
-          ? patch.nominativo.trim() || undefined
-          : entry.nominativo,
+      ordineRegistro: parsedName
+        ? (parsedName.registerOrder ?? entry.ordineRegistro)
+        : entry.ordineRegistro,
+      nominativo: parsedName ? parsedName.cleanName || undefined : entry.nominativo,
       media: nextMedia,
       fasciaAutomatica: nextAuto,
       fasciaCorrente: nextCurrent,
@@ -642,13 +694,14 @@ function parseSingleWorksheet(
       }
     }
 
-    const fullName = formatFullStudentName(alunnoRaw);
+    const { cleanName, registerOrder } = extractRegisterOrderAndCleanName(alunnoRaw);
     const fascia = classifyMediaToFascia(media, soglie);
     entries.push({
       id: `alunno-${counter}`,
       ordine: counter,
+      ordineRegistro: keepNames && registerOrder !== null ? registerOrder : undefined,
       labelAnonimo: `Alunno ${counter}`,
-      nominativo: keepNames ? fullName || undefined : undefined,
+      nominativo: keepNames ? cleanName || undefined : undefined,
       media,
       fasciaAutomatica: fascia,
       fasciaCorrente: fascia,

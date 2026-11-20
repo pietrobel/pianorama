@@ -7,6 +7,7 @@ import {
   FilePlus2,
   FileUp,
   FolderOpen,
+  RefreshCw,
   Search,
   ShieldAlert,
   Trash2,
@@ -27,9 +28,17 @@ import {
   type DocumentImportResult,
 } from '../engine/documentPlanImporter';
 
+import type { UpdateCheckStatus } from '../pwa/pwaUpdateManager';
+
 interface DashboardPageProps {
   programmazioni: Programmazione[];
   settings: SchoolSettings;
+  pwaUpdateStatus?: UpdateCheckStatus;
+  pwaUpdateMessage?: string | null;
+  pwaNeedRefresh?: boolean;
+  pwaBuildId?: string;
+  onCheckPWAUpdates?: () => Promise<unknown>;
+  onApplyPWAUpdate?: () => Promise<unknown>;
   onCreateNew: () => void;
   onImportDocument: (plan: Programmazione) => Promise<void>;
   onReusePlan: (sourceId: string) => void;
@@ -59,6 +68,12 @@ const STATUS_STYLES: Record<PlanStatus, string> = {
 export function DashboardPage({
   programmazioni,
   settings,
+  pwaUpdateStatus = 'idle',
+  pwaUpdateMessage,
+  pwaNeedRefresh = false,
+  pwaBuildId,
+  onCheckPWAUpdates,
+  onApplyPWAUpdate,
   onCreateNew,
   onImportDocument,
   onReusePlan,
@@ -251,6 +266,62 @@ export function DashboardPage({
         </div>
       )}
 
+      {/* Controllo e aggiornamento app PWA */}
+      {(onCheckPWAUpdates || onApplyPWAUpdate) && (
+        <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900">
+          <div className="min-w-0 text-xs">
+            <p className="font-semibold text-slate-900 dark:text-slate-100">
+              Aggiornamento app da pianorama.vercel.app
+              {pwaBuildId ? (
+                <span className="ml-2 font-mono-num font-normal text-slate-500 dark:text-slate-400">
+                  (v. {pwaBuildId})
+                </span>
+              ) : null}
+            </p>
+            <p className="mt-0.5 text-slate-600 dark:text-slate-400">
+              {pwaUpdateMessage ||
+                'Aggiornando o reinstallando da pianorama.vercel.app i curricoli e le programmazioni salvate restano intatti.'}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {onCheckPWAUpdates && (
+              <button
+                type="button"
+                disabled={pwaUpdateStatus === 'checking' || pwaUpdateStatus === 'updating'}
+                onClick={() => void onCheckPWAUpdates()}
+                className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <RefreshCw
+                  className={`h-3.5 w-3.5 ${pwaUpdateStatus === 'checking' ? 'animate-spin' : ''}`}
+                />
+                {pwaUpdateStatus === 'checking' ? 'Controllo...' : 'Controlla aggiornamenti'}
+              </button>
+            )}
+            {onApplyPWAUpdate && (
+              <button
+                type="button"
+                disabled={pwaUpdateStatus === 'checking' || pwaUpdateStatus === 'updating'}
+                onClick={() => void onApplyPWAUpdate()}
+                className={`inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg px-3.5 py-1.5 text-xs font-semibold text-white disabled:opacity-60 ${
+                  pwaNeedRefresh
+                    ? 'bg-emerald-700 hover:bg-emerald-800'
+                    : 'bg-[#1F3864] hover:bg-[#172b4d]'
+                }`}
+              >
+                <RefreshCw
+                  className={`h-3.5 w-3.5 ${pwaUpdateStatus === 'updating' ? 'animate-spin' : ''}`}
+                />
+                {pwaUpdateStatus === 'updating'
+                  ? 'Aggiornamento...'
+                  : pwaNeedRefresh
+                  ? 'Aggiorna ora'
+                  : 'Aggiorna app'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Statistiche compatte */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
@@ -426,7 +497,7 @@ export function DashboardPage({
                 <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:border-slate-800 dark:bg-slate-800/60 dark:text-slate-300">
                   <th className="px-4 py-3">Disciplina e classe</th>
                   <th className="px-4 py-3">Anno / Plesso</th>
-                  <th className="px-4 py-3 text-right">Alunni / BES</th>
+                  <th className="px-4 py-3 text-right">Composizione</th>
                   <th className="px-4 py-3">Stato</th>
                   <th className="px-4 py-3">Aggiornata</th>
                   <th className="px-4 py-3 text-right">Azioni</th>
@@ -471,7 +542,13 @@ export function DashboardPage({
                       <span>{plan.datiGenerali.plesso || 'Sede'}</span>
                     </td>
                     <td className="px-4 py-3.5 text-right font-mono-num text-xs text-slate-700 dark:text-slate-300">
-                      {plan.composizione.alunni} alunni · {plan.composizione.bes} BES
+                      {typeof plan.composizione.alunni === 'number'
+                        ? `${plan.composizione.alunni} alunni`
+                        : 'Alunni n.d.'}{' '}
+                      · {plan.composizione.bes} BES
+                      {(plan.composizione.disabilita ?? 0) > 0
+                        ? ` · ${plan.composizione.disabilita} disab.`
+                        : ''}
                     </td>
                     <td className="px-4 py-3.5">
                       <select

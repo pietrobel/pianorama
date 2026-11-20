@@ -1,11 +1,10 @@
 import {
-  Check,
   ChevronDown,
   ChevronUp,
   Eraser,
   FileText,
   ListChecks,
-  RefreshCw,
+  SlidersHorizontal,
   Sparkles,
   Zap,
 } from 'lucide-react';
@@ -25,10 +24,9 @@ import {
 } from '../engine/questionnaireEngine';
 import {
   DEFAULT_QUICK_CLASS_SELECTION,
-  generateQuickClassDescription,
-  getQuickArchiveCombinationCount,
-  QUICK_CLASS_QUESTIONS,
+  normalizeQuickClassSelection,
 } from '../engine/quickClassDescriptionEngine';
+import { SimpleClassDescriptionBuilder } from './SimpleClassDescriptionBuilder';
 
 interface ClassQuestionnairePanelProps {
   plan: Programmazione;
@@ -60,39 +58,33 @@ export function ClassQuestionnairePanel({
     }).length;
   }, [questionnaire.risposte]);
 
-  const initialMode: 'rapida' | 'dettagliata' =
+  const panelMode: 'rapida' | 'dettagliata' =
     questionnaire.modalitaCompilazione ?? (compiledCount > 0 ? 'dettagliata' : 'rapida');
 
   const [expanded, setExpanded] = useState<boolean>(true);
-  const [panelMode, setPanelMode] = useState<'rapida' | 'dettagliata'>(initialMode);
   const [activeArea, setActiveArea] = useState<QuestionnaireIndicatorSpec['area'] | 'Tutte'>(
     'Tutte'
   );
   const [variantCursor, setVariantCursor] = useState<number>(0);
   const [quickAppliedFeedback, setQuickAppliedFeedback] = useState<boolean>(false);
 
-  const quickSelection: QuickClassModeSelection =
-    questionnaire.modalitaRapida ?? DEFAULT_QUICK_CLASS_SELECTION;
-
-  const quickPreviewText = useMemo(
-    () => generateQuickClassDescription(plan, quickSelection),
-    [plan, quickSelection]
+  const quickSelection = useMemo(
+    () =>
+      normalizeQuickClassSelection(
+        questionnaire.modalitaRapida ?? DEFAULT_QUICK_CLASS_SELECTION
+      ),
+    [questionnaire.modalitaRapida]
   );
 
   const switchPanelMode = (nextMode: 'rapida' | 'dettagliata') => {
-    setPanelMode(nextMode);
     onUpdateQuestionnaire({
       ...questionnaire,
       modalitaCompilazione: nextMode,
-      modalitaRapida: questionnaire.modalitaRapida ?? DEFAULT_QUICK_CLASS_SELECTION,
+      modalitaRapida: quickSelection,
     });
   };
 
-  const updateQuickSelection = (patch: Partial<QuickClassModeSelection>) => {
-    const nextQuick: QuickClassModeSelection = {
-      ...quickSelection,
-      ...patch,
-    };
+  const updateQuickSelection = (nextQuick: QuickClassModeSelection) => {
     setQuickAppliedFeedback(false);
     onUpdateQuestionnaire({
       ...questionnaire,
@@ -102,12 +94,14 @@ export function ClassQuestionnairePanel({
     });
   };
 
-  const handleApplyQuickDescription = () => {
-    const text = generateQuickClassDescription(plan, quickSelection);
+  const handleApplyQuickDescription = (
+    text: string,
+    usedSelection: QuickClassModeSelection
+  ) => {
     const nextQ: ClassQuestionnaire = {
       ...questionnaire,
       modalitaCompilazione: 'rapida',
-      modalitaRapida: quickSelection,
+      modalitaRapida: usedSelection,
       modalitaGenerazione: 'completa',
       ultimoAggiornamento: new Date().toISOString(),
     };
@@ -174,12 +168,12 @@ export function ClassQuestionnairePanel({
             {panelMode === 'rapida' ? (
               <Zap className="h-4 w-4 text-[#1F3864] dark:text-blue-400" />
             ) : (
-              <ListChecks className="h-4 w-4 text-[#1F3864] dark:text-blue-400" />
+              <SlidersHorizontal className="h-4 w-4 text-[#1F3864] dark:text-blue-400" />
             )}
             <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
               {panelMode === 'rapida'
-                ? 'Descrizione rapida della classe (4 domande · archivio offline)'
-                : `Questionario guidato descrizione classe (${QUESTIONNAIRE_INDICATORS.length} indicatori)`}
+                ? 'Modalità semplice — 5 domande chiuse e libreria descrizioni'
+                : `Modalità avanzata — Questionario analitico (${QUESTIONNAIRE_INDICATORS.length} indicatori)`}
             </h3>
           </div>
           <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">
@@ -191,8 +185,11 @@ export function ClassQuestionnairePanel({
             {panelMode === 'rapida' ? (
               <>
                 {' '}
-                · Alunni: <strong className="font-mono-num">{plan.composizione.alunni}</strong> · BES:{' '}
-                <strong className="font-mono-num">{besCount}</strong> · Disabilità:{' '}
+                · Alunni:{' '}
+                <strong className="font-mono-num">
+                  {typeof plan.composizione.alunni === 'number' ? plan.composizione.alunni : '—'}
+                </strong>{' '}
+                · BES: <strong className="font-mono-num">{besCount}</strong> · Disabilità:{' '}
                 <strong className="font-mono-num">{disabilitaCount}</strong>
               </>
             ) : (
@@ -228,7 +225,7 @@ export function ClassQuestionnairePanel({
 
       {expanded && (
         <div className="mt-4 space-y-4">
-          {/* Selettore Modalità rapida / Questionario dettagliato */}
+          {/* Selettore Modalità semplice / Modalità avanzata */}
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3 dark:border-slate-700">
             <div className="inline-flex rounded-lg border border-slate-300 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-900">
               <button
@@ -241,7 +238,7 @@ export function ClassQuestionnairePanel({
                 }`}
               >
                 <Zap className="h-3.5 w-3.5" />
-                Modalità rapida (4 domande)
+                Modalità semplice (predefinita)
               </button>
               <button
                 type="button"
@@ -253,151 +250,19 @@ export function ClassQuestionnairePanel({
                 }`}
               >
                 <ListChecks className="h-3.5 w-3.5" />
-                Questionario dettagliato ({compiledCount}/{QUESTIONNAIRE_INDICATORS.length})
+                Modalità avanzata ({compiledCount}/{QUESTIONNAIRE_INDICATORS.length})
               </button>
             </div>
-
-            {panelMode === 'rapida' && (
-              <span className="text-[11px] text-slate-600 dark:text-slate-400">
-                Archivio locale: {getQuickArchiveCombinationCount()} profili × 3 formulazioni italiane
-              </span>
-            )}
           </div>
 
           {panelMode === 'rapida' ? (
-            <div className="space-y-4">
-              <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
-                Rispondi alle 4 domande chiuse per selezionare dall’archivio precompilato una descrizione coerente della classe. L’eventuale presenza di alunni con BES ({besCount}) e con disabilità ({disabilitaCount}) impostata nella sezione 2 viene integrata automaticamente nel testo in modo anonimo (nessun nominativo).
-              </p>
-
-              {/* 4 Domande a risposta chiusa */}
-              <div className="grid gap-3 md:grid-cols-2">
-                {QUICK_CLASS_QUESTIONS.map((q) => {
-                  const selectedVal = quickSelection[q.key];
-                  return (
-                    <fieldset
-                      key={q.key}
-                      className="rounded-lg border border-slate-200 bg-white p-3.5 dark:border-slate-700 dark:bg-slate-900"
-                    >
-                      <legend className="px-1 text-xs font-bold text-[#1F3864] dark:text-blue-300">
-                        {q.number}. {q.title}
-                      </legend>
-                      <p className="mb-2.5 text-xs text-slate-500 dark:text-slate-400">
-                        {q.prompt}
-                      </p>
-                      <div className="space-y-1.5">
-                        {q.options.map((opt) => {
-                          const checked = selectedVal === opt.value;
-                          return (
-                            <label
-                              key={opt.value}
-                              className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2 transition ${
-                                checked
-                                  ? 'border-[#1F3864] bg-blue-50/50 dark:border-blue-500 dark:bg-blue-950/30'
-                                  : 'border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50'
-                              }`}
-                            >
-                              <input
-                                type="radio"
-                                name={`quick-${q.key}`}
-                                checked={checked}
-                                onChange={() =>
-                                  updateQuickSelection({
-                                    [q.key]: opt.value,
-                                  } as Partial<QuickClassModeSelection>)
-                                }
-                                className="mt-0.5 h-4 w-4 shrink-0 accent-[#1F3864]"
-                              />
-                              <div className="min-w-0">
-                                <span className="block text-xs font-semibold text-slate-900 dark:text-slate-100">
-                                  {opt.label}
-                                </span>
-                                <span className="block text-[11px] text-slate-500 dark:text-slate-400">
-                                  {opt.hint}
-                                </span>
-                              </div>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </fieldset>
-                  );
-                })}
-              </div>
-
-              {/* Anteprima e scelta fra le 3 formulazioni dell'archivio */}
-              <div className="rounded-lg border border-[#1F3864]/25 bg-white p-4 dark:border-blue-800/60 dark:bg-slate-900">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-xs font-bold uppercase tracking-wide text-[#1F3864] dark:text-blue-300">
-                    Anteprima dall’archivio (3 formulazioni disponibili)
-                  </span>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {([0, 1, 2] as const).map((idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => updateQuickSelection({ varianteSelezionata: idx })}
-                        className={`rounded-md border px-2.5 py-1 text-xs font-semibold transition ${
-                          quickSelection.varianteSelezionata === idx
-                            ? 'border-[#1F3864] bg-[#1F3864] text-white'
-                            : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300'
-                        }`}
-                      >
-                        Formulazione {idx + 1}/3
-                      </button>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        updateQuickSelection({
-                          varianteSelezionata: ((quickSelection.varianteSelezionata + 1) % 3) as
-                            | 0
-                            | 1
-                            | 2,
-                        })
-                      }
-                      title="Passa alla formulazione alternativa successiva"
-                      className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                    >
-                      <RefreshCw className="h-3 w-3" />
-                      Cambia stile
-                    </button>
-                  </div>
-                </div>
-
-                <div className="mt-3 whitespace-pre-line rounded-lg border border-slate-200 bg-slate-50/70 p-3 text-xs leading-relaxed text-slate-800 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-200">
-                  {quickPreviewText}
-                </div>
-
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                  <button
-                    type="button"
-                    onClick={() => updateQuickSelection(DEFAULT_QUICK_CLASS_SELECTION)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300"
-                  >
-                    <Eraser className="h-3.5 w-3.5" />
-                    Ripristina risposte predefinite
-                  </button>
-
-                  <div className="flex items-center gap-2.5">
-                    {quickAppliedFeedback && (
-                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
-                        <Check className="h-3.5 w-3.5" />
-                        Descrizione inserita sotto
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      onClick={handleApplyQuickDescription}
-                      className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-[#1F3864] px-4 py-2 text-xs font-semibold text-white hover:bg-[#172b4d]"
-                    >
-                      <Sparkles className="h-3.5 w-3.5" />
-                      Inserisci nella descrizione della classe
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <SimpleClassDescriptionBuilder
+              plan={plan}
+              selection={quickSelection}
+              onChangeSelection={updateQuickSelection}
+              onApplyDescription={handleApplyQuickDescription}
+              appliedFeedback={quickAppliedFeedback}
+            />
           ) : (
             <div className="space-y-4">
               <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
@@ -511,7 +376,12 @@ export function ClassQuestionnairePanel({
               <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3 dark:border-slate-700">
                 <button
                   type="button"
-                  onClick={() => onUpdateQuestionnaire(createEmptyQuestionnaire())}
+                  onClick={() =>
+                    onUpdateQuestionnaire({
+                      ...createEmptyQuestionnaire(),
+                      modalitaCompilazione: 'dettagliata',
+                    })
+                  }
                   className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
                 >
                   <Eraser className="h-3.5 w-3.5" />

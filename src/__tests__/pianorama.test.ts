@@ -12,6 +12,7 @@ import {
   generateQuickClassDescription,
   getQuickArchiveCombinationCount,
   getQuickArchiveVariants,
+  normalizeQuickClassSelection,
 } from '../engine/quickClassDescriptionEngine';
 import {
   DEFAULT_BES_INTERVENTI_TEXT,
@@ -308,7 +309,7 @@ describe('PIANORAMA — Privacy, Regole, Questionario, Clonazione, Registro XLSX
     expect(extractCognomeOnly('VERDI, Luca')).toBe('VERDI');
 
     const resultKeepNames = parseGradebookBuffer(out, DEFAULT_SOGLIE_FASCE, { keepNames: true });
-    expect(resultKeepNames.entries[0].nominativo).toBe('ROSSI MARIO');
+    expect(resultKeepNames.entries[0].nominativo).toBe('Rossi Mario');
 
     const result = parseGradebookBuffer(out, DEFAULT_SOGLIE_FASCE, { keepNames: false });
 
@@ -1992,43 +1993,76 @@ Utilizzare con sicurezza le tecniche di calcolo \\tab Eseguire espressioni con f
     );
   });
 
-  it('modalità rapida classe: 4 domande chiuse, archivio completo (81 combinazioni x 3 varianti italiane distinte) e menzione BES/disabilità', () => {
-    // 1. Verifica delle 4 domande a risposta chiusa richieste
+  it('modalità semplice classe (predefinita): 5 domande chiuse, archivio completo (243 combinazioni x 3 varianti italiane distinte), retrocompatibilità e menzione BES/disabilità con PDP/PEI', () => {
+    // 1. Verifica delle 5 domande a risposta chiusa e della modalità predefinita semplice
     expect(QUICK_CLASS_QUESTIONS.map((q) => q.key)).toEqual([
       'eterogeneita',
-      'preparazione',
-      'clima',
+      'livelloGenerale',
+      'socializzazione',
+      'regoleVivacita',
       'motivazione',
     ]);
     expect(QUICK_CLASS_QUESTIONS.every((q) => q.options.length === 3)).toBe(true);
 
-    // 2. Verifica completezza archivio (3^4 = 81 combinazioni) e almeno 3 formulazioni italiane distinte per ciascuna
-    expect(getQuickArchiveCombinationCount()).toBe(81);
+    const defaultPlan = createEmptyProgrammazione(DEFAULT_SCHOOL_SETTINGS, {
+      disciplina: 'Italiano',
+      classe: 'Prima',
+      sezione: 'B',
+    });
+    expect(defaultPlan.questionario.modalitaCompilazione).toBe('rapida');
+
+    // Retrocompatibilità da salvataggi nel vecchio formato a 4 domande
+    const legacyNormalized = normalizeQuickClassSelection({
+      eterogeneita: 'elevata',
+      preparazione: 'fragile',
+      clima: 'complesso',
+      motivazione: 'debole',
+      varianteSelezionata: 2,
+    });
+    expect(legacyNormalized).toEqual({
+      eterogeneita: 'elevata',
+      livelloGenerale: 'fragile',
+      socializzazione: 'difficile',
+      regoleVivacita: 'irrequieta',
+      motivazione: 'debole',
+      varianteSelezionata: 2,
+    });
+
+    // 2. Verifica completezza archivio (3^5 = 243 combinazioni) e 3 formulazioni italiane complete e distinte per ciascuna
+    expect(getQuickArchiveCombinationCount()).toBe(243);
     const hetLevels = ['omogenea', 'moderata', 'elevata'] as const;
-    const prepLevels = ['buono', 'medio', 'fragile'] as const;
-    const climaLevels = ['sereno', 'vivace', 'complesso'] as const;
+    const livLevels = ['buono', 'medio', 'fragile'] as const;
+    const socLevels = ['positiva', 'selettiva', 'difficile'] as const;
+    const regLevels = ['ordinata', 'vivace', 'irrequieta'] as const;
     const motivLevels = ['attiva', 'selettiva', 'debole'] as const;
 
     for (const eterogeneita of hetLevels) {
-      for (const preparazione of prepLevels) {
-        for (const clima of climaLevels) {
-          for (const motivazione of motivLevels) {
-            const variants = getQuickArchiveVariants({
-              eterogeneita,
-              preparazione,
-              clima,
-              motivazione,
-            });
-            expect(variants.length).toBeGreaterThanOrEqual(3);
-            expect(variants.every((v) => v.trim().length > 80)).toBe(true);
-            expect(new Set(variants).size).toBe(variants.length);
-            expect(CLASS_QUICK_DESCRIPTIONS_ARCHIVE[`${eterogeneita}|${preparazione}|${clima}|${motivazione}`]).toBeDefined();
+      for (const livelloGenerale of livLevels) {
+        for (const socializzazione of socLevels) {
+          for (const regoleVivacita of regLevels) {
+            for (const motivazione of motivLevels) {
+              const variants = getQuickArchiveVariants({
+                eterogeneita,
+                livelloGenerale,
+                socializzazione,
+                regoleVivacita,
+                motivazione,
+              });
+              expect(variants.length).toBeGreaterThanOrEqual(3);
+              expect(variants.every((v) => v.trim().length > 150)).toBe(true);
+              expect(new Set(variants).size).toBe(variants.length);
+              expect(
+                CLASS_QUICK_DESCRIPTIONS_ARCHIVE[
+                  `${eterogeneita}|${livelloGenerale}|${socializzazione}|${regoleVivacita}|${motivazione}`
+                ]
+              ).toBeDefined();
+            }
           }
         }
       }
     }
 
-    // 3. Verifica integrazione automatica e anonima di alunni con BES e con disabilità in tutte e 3 le varianti
+    // 3. Verifica integrazione automatica e anonima di alunni con BES e con disabilità con riferimenti espliciti a PDP e PEI in tutte e 3 le varianti
     const plan = createEmptyProgrammazione(DEFAULT_SCHOOL_SETTINGS, {
       disciplina: 'Matematica',
       classe: 'Seconda',
@@ -2272,6 +2306,91 @@ Utilizzare con sicurezza le tecniche di calcolo \\tab Eseguire espressioni con f
     expect(applyRes).toBe('updating');
     expect(swActivated).toBe(true);
     expect(reloaded).toBe(false);
+  });
+
+  it('non imposta valori predefiniti per alunni, maschi e femmine e supporta BES/disabilità senza stampare undefined', async () => {
+    const emptyPlan = createEmptyProgrammazione(DEFAULT_SCHOOL_SETTINGS, {
+      disciplina: 'Italiano',
+      classe: 'Prima',
+      sezione: 'A',
+      composizione: { bes: 2, disabilita: 1 },
+    });
+
+    expect(emptyPlan.composizione.alunni).toBeUndefined();
+    expect(emptyPlan.composizione.maschi).toBeUndefined();
+    expect(emptyPlan.composizione.femmine).toBeUndefined();
+    expect(emptyPlan.composizione.bes).toBe(2);
+    expect(emptyPlan.composizione.disabilita).toBe(1);
+
+    const intro = buildClassCompositionIntro(emptyPlan, 0);
+    expect(intro).not.toContain('undefined');
+    expect(intro).not.toContain('0 alunni');
+    expect(intro).toContain('2 alunni con Bisogni Educativi Speciali (BES)');
+    expect(intro).toContain('1 alunno con disabilità certificata');
+
+    const quick = generateQuickClassDescription(emptyPlan, DEFAULT_QUICK_CLASS_SELECTION, 0);
+    expect(quick).not.toContain('undefined');
+    expect(quick).not.toContain('0 alunni');
+    expect(quick).toContain('BES');
+    expect(quick).toContain('disabilità');
+
+    const mapping = defaultMappingRaw as DocxMappingSchema;
+    const docxBytes = await generateProgrammazioneDocxBytes(
+      emptyPlan,
+      DEFAULT_SCHOOL_SETTINGS,
+      mapping
+    );
+    const zip = await JSZip.loadAsync(docxBytes.buffer as ArrayBuffer);
+    const xml = await zip.file('word/document.xml')!.async('string');
+    expect(xml).not.toContain('undefined');
+    expect(xml).toContain('Con disabilit');
+
+    const pdfBytes = generateProgrammazionePdfBytes(emptyPlan, DEFAULT_SCHOOL_SETTINGS, mapping);
+    const pdfReimport = await importProgrammazioneFromBuffer(
+      pdfBytes.buffer as ArrayBuffer,
+      'senza_predefiniti.pdf',
+      DEFAULT_SCHOOL_SETTINGS
+    );
+    expect(pdfReimport.plan.composizione.bes).toBe(2);
+    expect(pdfReimport.plan.composizione.disabilita).toBe(1);
+  });
+
+  it('rimuove numeri di registro tra parentesi o prefissi su Excel e formatta in Title Case mantenendo ordinamento', async () => {
+    const rows = [
+      ['Alunno', 'Media'],
+      ['(18) ROSSI MARIO', '7,2'],
+      ["(n. 2) D'ANGELO LUCA", '7,5'],
+      ['(5.) BIANCHI, ANNA', '7,1'],
+      ['9. DE LUCA CHIARA', '9,4'],
+    ];
+    const sheet = XLSX.utils.aoa_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, sheet, 'Voti');
+    const buffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+
+    const imported = parseGradebookBuffer(buffer, DEFAULT_SOGLIE_FASCE, { keepNames: true });
+    expect(imported.entries.map((e) => e.nominativo)).toEqual([
+      'Rossi Mario',
+      "D'Angelo Luca",
+      'Bianchi Anna',
+      'De Luca Chiara',
+    ]);
+    expect(imported.entries.map((e) => e.ordineRegistro)).toEqual([18, 2, 5, 9]);
+
+    const clip = buildLivelliTableClipboardContent({
+      livelli: imported.livelli,
+      entries: imported.entries,
+      classeLabel: 'Prima A',
+    });
+    const idx2 = clip.plainText.indexOf("D'Angelo Luca");
+    const idx5 = clip.plainText.indexOf('Bianchi Anna');
+    const idx18 = clip.plainText.indexOf('Rossi Mario');
+    expect(idx2).toBeGreaterThan(-1);
+    expect(idx5).toBeGreaterThan(idx2);
+    expect(idx18).toBeGreaterThan(idx5);
+    expect(clip.plainText).toContain('De Luca Chiara');
+    expect(clip.plainText).not.toMatch(/\(\s*\d+\s*\)/);
+    expect(clip.plainText).not.toContain('ROSSI MARIO');
   });
 });
 
