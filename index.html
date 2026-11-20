@@ -22,6 +22,18 @@
     <meta name="apple-mobile-web-app-title" content="PIANORAMA" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <script>
+      window.__pianoramaDeferredInstallPrompt = null;
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        window.__pianoramaDeferredInstallPrompt = e;
+        window.dispatchEvent(new CustomEvent('pianorama:install-available'));
+      });
+      window.addEventListener('appinstalled', function () {
+        window.__pianoramaDeferredInstallPrompt = null;
+        window.dispatchEvent(new CustomEvent('pianorama:app-installed'));
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>

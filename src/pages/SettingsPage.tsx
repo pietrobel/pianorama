@@ -46,6 +46,7 @@ interface SettingsPageProps {
   pwaLastCheckedAt?: string | null;
   existingPlansCount?: number;
   onInstallPWA: () => Promise<boolean>;
+  onOpenInstallHelp?: () => void;
   onCheckPWAUpdates?: () => Promise<UpdateCheckStatus>;
   onApplyPWAUpdate?: () => Promise<unknown>;
   onSaveSettings: (next: SchoolSettings) => Promise<void>;
@@ -69,6 +70,7 @@ export function SettingsPage({
   pwaLastCheckedAt = null,
   existingPlansCount = 0,
   onInstallPWA,
+  onOpenInstallHelp,
   onCheckPWAUpdates,
   onApplyPWAUpdate,
   onSaveSettings,
@@ -268,10 +270,18 @@ export function SettingsPage({
               </button>
             )}
 
-            {canInstallPWA && !isPWAInstalled && (
+            {!isPWAInstalled && (
               <button
                 type="button"
-                onClick={onInstallPWA}
+                onClick={() => {
+                  if (canInstallPWA) {
+                    void onInstallPWA().then((ok) => {
+                      if (!ok && onOpenInstallHelp) onOpenInstallHelp();
+                    });
+                  } else if (onOpenInstallHelp) {
+                    onOpenInstallHelp();
+                  }
+                }}
                 className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border border-[#1F3864] bg-white px-3 py-2 text-xs font-semibold text-[#1F3864] hover:bg-blue-50 dark:border-blue-400 dark:bg-slate-900 dark:text-blue-300"
               >
                 <Download className="h-3.5 w-3.5" />

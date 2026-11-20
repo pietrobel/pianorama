@@ -1,4 +1,4 @@
-import { Eye, EyeOff, Lock } from 'lucide-react';
+import { Download, Eye, EyeOff, Lock } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
 export const PASSWORD_STORAGE_KEY = 'pianorama_access_unlocked_v1';
@@ -31,10 +31,20 @@ export function setAccessUnlocked(unlocked: boolean): void {
 interface PasswordGateProps {
   unlocked: boolean;
   onUnlock: () => void;
+  canInstallPWA?: boolean;
+  isPWAInstalled?: boolean;
+  onInstallClick?: () => void;
   children: ReactNode;
 }
 
-export function PasswordGate({ unlocked, onUnlock, children }: PasswordGateProps) {
+export function PasswordGate({
+  unlocked,
+  onUnlock,
+  canInstallPWA = false,
+  isPWAInstalled = false,
+  onInstallClick,
+  children,
+}: PasswordGateProps) {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -125,6 +135,21 @@ export function PasswordGate({ unlocked, onUnlock, children }: PasswordGateProps
           <p className="text-center text-[11px] text-slate-500 dark:text-slate-400">
             Elaborazione 100% locale e offline nel browser.
           </p>
+
+          {!isPWAInstalled && onInstallClick && (
+            <div className="border-t border-slate-200 pt-3 text-center dark:border-slate-800">
+              <button
+                type="button"
+                onClick={onInstallClick}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <Download className="h-3.5 w-3.5 text-[#1F3864] dark:text-blue-400" />
+                {canInstallPWA
+                  ? 'Scarica / Installa app offline'
+                  : 'Come installare l’app offline'}
+              </button>
+            </div>
+          )}
         </form>
       </div>
     </div>

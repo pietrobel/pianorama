@@ -2009,7 +2009,7 @@ Utilizzare con sicurezza le tecniche di calcolo \\tab Eseguire espressioni con f
       classe: 'Prima',
       sezione: 'B',
     });
-    expect(defaultPlan.questionario.modalitaCompilazione).toBe('rapida');
+    expect(defaultPlan.analisiPartenza.questionario?.modalitaCompilazione).toBe('rapida');
 
     // Retrocompatibilità da salvataggi nel vecchio formato a 4 domande
     const legacyNormalized = normalizeQuickClassSelection({
