@@ -1,3 +1,4 @@
+import { splitInlineMergedCurricoloSentences } from '../domain/textSanitizer';
 import type {
   AbilitaConoscenzaRow,
   ClasseSecondaria,
@@ -616,6 +617,7 @@ function extractNucleoBullets(cellText: string, nucleo: string): string[] {
   return lines
     .filter((l, idx) => !(idx === 0 && l.toLowerCase() === normNucleo))
     .map((l) => l.replace(/^[•●○▪▫◦☐☑☒□■▢\uF0B7\uF0A7\-–—*]+\s*/, '').trim())
+    .flatMap((l) => splitInlineMergedCurricoloSentences(l))
     .filter(Boolean);
 }
 
@@ -682,10 +684,15 @@ export function buildProgramRowsFromCatalogVoices(
       };
       buckets.set(key, bucket);
     }
+    const splitPieces = splitInlineMergedCurricoloSentences(cleanText);
     if (v.tipo === 'abilita' || v.tipo === 'obiettivo_specifico') {
-      if (!bucket.abilita.includes(cleanText)) bucket.abilita.push(cleanText);
+      for (const piece of splitPieces) {
+        if (!bucket.abilita.includes(piece)) bucket.abilita.push(piece);
+      }
     } else if (v.tipo === 'conoscenza') {
-      if (!bucket.conoscenze.includes(cleanText)) bucket.conoscenze.push(cleanText);
+      for (const piece of splitPieces) {
+        if (!bucket.conoscenze.includes(piece)) bucket.conoscenze.push(piece);
+      }
     }
   }
 

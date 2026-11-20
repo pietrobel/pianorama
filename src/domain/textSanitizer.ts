@@ -75,6 +75,74 @@ const LINE_MARKER_NORMALIZE_RX =
 const PLACEHOLDER_ONLY_RX =
   /^(?:[-—_]+|nessuna\s+(?:voce|conoscenza)\s+inserita\.?)$/i;
 
+const NON_SPLITTING_ABBREVIATIONS_RX =
+  /(?:^|[\s(])(?:es|ecc|n|nr|pag|pagg|pp|cap|art|lett|prof|dott|sig|ing|arch|avv|ss|vv|cfr|min|max|approx|fig|tab|vs|all|oss|dir|cir|prot|ord|dec|tel|int|sec|mill|vol|op|cit|loc|ib|ibid|id|cf|a\.C|d\.C|S\.I|A\.S|D\.Lgs|D\.M|D\.P\.R|C\.M)$/i;
+
+const SINGLE_UPPERCASE_INITIAL_RX = /(?:^|[\s(])[A-Z]$/;
+
+const STANDALONE_SECOND_SENTENCE_STARTER_RX =
+  /^(?:[A-ZÀ-Ö][a-zà-ÿ]+(?:are|ere|ire|rre)\b|(?:(?:Lo|La|Il|I|Gli|Le)\s+(?:studente|studentessa|alunno|alunna)|L[’'](?:alunn[oa]|alliev[oa]))\b|Saper(?:e)?\b|Esser(?:e)?\b|In\s+casi\b|Riconoscere\b|Utilizzare\b|Rappresentare\b|Fornire\b|Calcolare\b|Individuare\b|Cogliere\b|Applicare\b|Eseguire\b|Esprimere\b|Analizza(?:re)?\b|Produc[ea]\b|Mettere\b|Gestire\b|Controllare\b|Partecipare\b|Rispettare\b|Stabilire\b|Arbitrare\b|Inventare\b|Creare\b|Condurre\b|Realizzare\b|Usare\b|Variare\b|Risolvere\b|Prevedere\b|Mantenere\b|Giungere\b|Assumere\b|Progettazione\b|Collaborazione\b|Protezione\b|Condivisione\b|Gestione\b|Comunicazione\b|Nozioni\b|Utilizzo\b|Cenni\b|Regole\b|Tecniche\b|Opere\b)/;
+
+/**
+ * Divide eventuali frasi autonome accorpate sulla stessa riga con ". " (es. obiettivi del curricolo
+ * concatenati nello stesso punto elenco) preservando abbreviazioni ("es.", "ecc.", "L.") e
+ * prefissi brevi "Titolo. Descrizione" (es. "Lessico. Riconoscere...", "Comprendere e analizzare... . Evidenziare...").
+ */
+export function splitInlineMergedCurricoloSentences(rawLine: string): string[] {
+  const trimmed = (rawLine ?? '').trim();
+  if (!trimmed) return [];
+
+  const breakOffsets: number[] = [];
+  const candidateRx = /([a-zà-ÿ)\]»”’"])\.\s+(?=[A-ZÀ-Ö])/g;
+  let match: RegExpExecArray | null;
+  while ((match = candidateRx.exec(trimmed)) !== null) {
+    const periodIdx = match.index + 1;
+    const beforePeriod = trimmed.slice(0, periodIdx);
+    if (
+      NON_SPLITTING_ABBREVIATIONS_RX.test(beforePeriod) ||
+      SINGLE_UPPERCASE_INITIAL_RX.test(beforePeriod)
+    ) {
+      continue;
+    }
+    breakOffsets.push(periodIdx);
+  }
+
+  if (breakOffsets.length === 0) return [trimmed];
+
+  const segments: string[] = [];
+  let cursor = 0;
+  for (let i = 0; i < breakOffsets.length; i++) {
+    const endIdx = breakOffsets[i] + 1; // include the period
+    const leftChunk = trimmed.slice(cursor, endIdx).trim();
+    const rightTail = trimmed.slice(endIdx).trim();
+    const isAlreadyMultiChunkChain = segments.length > 0 || i < breakOffsets.length - 1;
+    const wordCount = leftChunk.split(/\s+/).filter(Boolean).length;
+    const hasInternalClausePunctuation = /[,;(]/.test(leftChunk);
+
+    const looksLikeHeadingPrefix =
+      !isAlreadyMultiChunkChain &&
+      leftChunk.length < 80 &&
+      (!hasInternalClausePunctuation || leftChunk.length <= 42);
+
+    const canSplitHere =
+      leftChunk.length >= 24 &&
+      wordCount >= 3 &&
+      rightTail.length >= 18 &&
+      !looksLikeHeadingPrefix &&
+      (isAlreadyMultiChunkChain || STANDALONE_SECOND_SENTENCE_STARTER_RX.test(rightTail));
+
+    if (canSplitHere) {
+      segments.push(leftChunk);
+      cursor = endIdx;
+      while (cursor < trimmed.length && /\s/.test(trimmed[cursor])) cursor++;
+    }
+  }
+
+  const tail = trimmed.slice(cursor).trim();
+  if (tail) segments.push(tail);
+  return segments.length ? segments : [trimmed];
+}
+
 export function stripLeadingBullet(raw: string): string {
   return normalizeDocumentText(raw ?? '')
     .replace(LEADING_BULLET_STRIP_RX, '')
@@ -126,18 +194,21 @@ export function formatCurricoloCellLines(
   const effective =
     hint && !hasHintOnFirstLine ? `${hint}\n${clean}` : clean;
 
-  const lines = effective
+  const rawLines = effective
     .split('\n')
     .map((l) => l.trim())
     .filter((l) => l.length > 0);
 
-  if (lines.length === 0) return [];
+  if (rawLines.length === 0) return [];
 
-  const hasFollowerWithMarker = lines
+  const hasFollowerWithMarker = rawLines
     .slice(1)
     .some((l) => /^(?:[•\-*▪▫◦●○☐☑☒]|\d+[.)]\s)/.test(l));
 
-  return lines.map((trimmed, idx) => {
+  const out: CurricoloFormattedLine[] = [];
+
+  for (let idx = 0; idx < rawLines.length; idx++) {
+    const trimmed = rawLines[idx];
     const startsWithBullet = trimmed.startsWith('•');
     const startsWithNumbering = /^\d+[.)]\s/.test(trimmed);
     const looksLikeInfinitiveObjectiveClause =
@@ -148,30 +219,35 @@ export function formatCurricoloCellLines(
       !startsWithBullet &&
       !startsWithNumbering &&
       ((hint.length > 0 && trimmed.toLowerCase() === hint.toLowerCase()) ||
-        (lines.length > 1 &&
+        (rawLines.length > 1 &&
           hasFollowerWithMarker &&
           trimmed.length <= 35 &&
           !/[.!?;:]$/.test(trimmed) &&
           !looksLikeInfinitiveObjectiveClause));
 
     if (isNucleoTitle) {
-      return { text: trimmed, isNucleoTitle: true };
+      out.push({ text: trimmed, isNucleoTitle: true });
+      continue;
     }
 
     if (PLACEHOLDER_ONLY_RX.test(trimmed)) {
-      return { text: trimmed, isNucleoTitle: false, isPlaceholder: true };
-    }
-
-    if (startsWithBullet) {
-      return { text: trimmed.replace(/^•\s*/, '• '), isNucleoTitle: false };
+      out.push({ text: trimmed, isNucleoTitle: false, isPlaceholder: true });
+      continue;
     }
 
     if (startsWithNumbering) {
-      return { text: trimmed, isNucleoTitle: false };
+      out.push({ text: trimmed, isNucleoTitle: false });
+      continue;
     }
 
-    return { text: `• ${trimmed}`, isNucleoTitle: false };
-  });
+    const bodyText = startsWithBullet ? trimmed.replace(/^•\s*/, '').trim() : trimmed;
+    const splitSentences = splitInlineMergedCurricoloSentences(bodyText);
+    for (const sentence of splitSentences) {
+      out.push({ text: `• ${sentence}`, isNucleoTitle: false });
+    }
+  }
+
+  return out;
 }
 
 export function normalizeProgrammazioneTexts(plan: Programmazione): Programmazione {

@@ -146,8 +146,8 @@ export function createProgrammazioneDocument(
   ) =>
     new Paragraph({
       alignment: opts?.align ?? AlignmentType.LEFT,
-      keepNext: opts?.keepNext,
-      pageBreakBefore: opts?.pageBreakBefore,
+      keepNext: opts?.keepNext ? true : undefined,
+      pageBreakBefore: opts?.pageBreakBefore ? true : undefined,
       spacing: {
         before: opts?.spaceBefore ?? (isOriginal ? 20 : 40),
         after: opts?.spaceAfter ?? (isOriginal ? 40 : 80),
@@ -158,8 +158,8 @@ export function createProgrammazioneDocument(
           text: normalizeDocumentText(text),
           font,
           size: opts?.size ?? bodySize,
-          bold: opts?.bold,
-          italics: opts?.italic,
+          bold: opts?.bold ? true : undefined,
+          italics: opts?.italic ? true : undefined,
           underline: opts?.underline ? {} : undefined,
           color: opts?.color ?? (isOriginal ? '000000' : '1E293B'),
           shading: opts?.highlightHex
@@ -954,7 +954,6 @@ export function createProgrammazioneDocument(
     return formattedLines.map((item) =>
       pText(item.text, {
         bold: item.isNucleoTitle,
-        keepNext: item.isNucleoTitle,
         spaceAfter: item.isNucleoTitle ? 25 : 20,
       })
     );
@@ -1013,11 +1012,11 @@ export function createProgrammazioneDocument(
             }),
             new TableRow({
               children: [
-                cell([headerCellText(leftCurricoloHeader, true, 'E6E6E6', true)], {
+                cell([headerCellText(leftCurricoloHeader, true, 'E6E6E6', false)], {
                   header: true,
                   widthPct: 50,
                 }),
-                cell([headerCellText('CONOSCENZE', true, 'E6E6E6', true)], {
+                cell([headerCellText('CONOSCENZE', true, 'E6E6E6', false)], {
                   header: true,
                   widthPct: 50,
                 }),
@@ -1067,11 +1066,11 @@ export function createProgrammazioneDocument(
             new TableRow({
               tableHeader: true,
               children: [
-                cell([headerCellText(leftCurricoloHeader, false, undefined, true)], {
+                cell([headerCellText(leftCurricoloHeader, false, undefined, false)], {
                   header: true,
                   widthPct: 50,
                 }),
-                cell([headerCellText('CONOSCENZE', false, undefined, true)], {
+                cell([headerCellText('CONOSCENZE', false, undefined, false)], {
                   header: true,
                   widthPct: 50,
                 }),
@@ -1515,7 +1514,7 @@ export function createProgrammazioneDocument(
       (lineText, idx, arr) =>
         new Paragraph({
           alignment: AlignmentType.RIGHT,
-          keepNext: idx < arr.length - 1,
+          keepNext: idx < arr.length - 1 ? true : undefined,
           spacing: {
             before: idx === 0 ? 280 : 0,
             after: idx === arr.length - 1 ? 60 : 20,
@@ -1525,7 +1524,7 @@ export function createProgrammazioneDocument(
               text: lineText,
               font,
               size: bodySize,
-              bold: !isOriginal,
+              bold: !isOriginal ? true : undefined,
               color: accentHex,
             }),
           ],

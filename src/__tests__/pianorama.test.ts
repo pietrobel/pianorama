@@ -2570,8 +2570,115 @@ Utilizzare con sicurezza le tecniche di calcolo \\tab Eseguire espressioni con f
     expect(joinedPdf).toContain('- Calcolare MCD e mcm');
     expect(joinedPdf).toContain('- Risolvere problemi geometrici con i');
   });
+
+  it('separa frasi accorpate nel curricolo (es. Rappresentare i numeri naturali sulla retta) con elenco puntato e rimuove keepNext dalla tabella doppia OBIETTIVI/CONOSCENZE', async () => {
+    // 1. Verifica sul catalogo seed: le tre frasi di Matematica Prima o12 sono voci distinte
+    const matPrima = filterCatalogEntries(CURRICOLO_VERTICALE_SEED, 'Prima', 'Matematica');
+    expect(
+      matPrima.some((e) =>
+        e.testo.startsWith(
+          'Rappresentare i numeri naturali, interi e razionali (sotto forma di frazioni e numeri decimali) sulla retta.'
+        )
+      )
+    ).toBe(true);
+    expect(
+      matPrima.some((e) =>
+        e.testo.startsWith('Fornire stime di misure di grandezze e di risultati di operazioni')
+      )
+    ).toBe(true);
+    expect(
+      matPrima.some((e) =>
+        e.testo.startsWith('Utilizzare scale graduate anche in contesti significativi')
+      )
+    ).toBe(true);
+
+    // 2. Verifica retroattiva su piani già salvati con frasi accorpate in un unico punto elenco, preservando abbreviazioni e titoli
+    const mergedLine =
+      '• Fornire stime di misure di grandezze e di risultati di operazioni, giustificando le stime effettuate. Rappresentare i numeri naturali, interi e razionali (sotto forma di frazioni e numeri decimali) sulla retta. Utilizzare scale graduate anche in contesti significativi per le scienze e per la tecnica per effettuare misure di grandezze, stimare misure';
+    expect(formatCurricoloCellLines(mergedLine, 'Numeri')).toEqual([
+      { text: 'Numeri', isNucleoTitle: true },
+      {
+        text: '• Fornire stime di misure di grandezze e di risultati di operazioni, giustificando le stime effettuate.',
+        isNucleoTitle: false,
+      },
+      {
+        text: '• Rappresentare i numeri naturali, interi e razionali (sotto forma di frazioni e numeri decimali) sulla retta.',
+        isNucleoTitle: false,
+      },
+      {
+        text: '• Utilizzare scale graduate anche in contesti significativi per le scienze e per la tecnica per effettuare misure di grandezze, stimare misure',
+        isNucleoTitle: false,
+      },
+    ]);
+
+    // Non spezza abbreviazioni (es., S.I.) né prefissi "Titolo. Descrizione"
+    expect(
+      formatCurricoloCellLines(
+        '• Lessico. Riconoscere le principali relazioni (es. Sinonimi e contrari) nel testo.',
+        'Lessico'
+      )
+    ).toEqual([
+      { text: 'Lessico', isNucleoTitle: true },
+      {
+        text: '• Lessico. Riconoscere le principali relazioni (es. Sinonimi e contrari) nel testo.',
+        isNucleoTitle: false,
+      },
+    ]);
+
+    // 3. Verifica DOCX (originale e moderno) e PDF: ogni frase ha "• " / "- " e la colonna doppia non ha keepNext né cantSplit
+    const mapping = defaultMappingRaw as DocxMappingSchema;
+    const plan = createEmptyProgrammazione(DEFAULT_SCHOOL_SETTINGS, {
+      disciplina: 'Matematica',
+      classe: 'Prima',
+      sezione: 'A',
+      layoutDocumento: 'originale',
+      indicazioniVersione: 'nuove',
+    });
+    plan.curricolo.competenzeAttese = [
+      'L’alunno si muove con sicurezza nel calcolo anche con i numeri razionali.',
+    ];
+    plan.curricolo.righeAbilitaConoscenze = [
+      {
+        id: 'row-merged-legacy',
+        competenze: '',
+        traguardo: 'Numeri',
+        abilita: `Numeri\n${mergedLine}`,
+        conoscenze: 'Numeri\n• Rappresentazione dei numeri sulla retta',
+      },
+    ];
+
+    const docxBytes = await generateProgrammazioneDocxBytes(plan, DEFAULT_SCHOOL_SETTINGS, mapping);
+    const zip = await JSZip.loadAsync(docxBytes.buffer as ArrayBuffer);
+    const xml = await zip.file('word/document.xml')!.async('string');
+    expect(xml).toContain('• Fornire stime di misure di grandezze');
+    expect(xml).toContain('• Rappresentare i numeri naturali, interi e razionali');
+    expect(xml).toContain('• Utilizzare scale graduate anche in contesti significativi');
+    expect(xml).not.toContain('<w:keepNext w:val="false"/>');
+
+    const tragIdx = xml.indexOf('TRAGUARDI PER LO SVILUPPO');
+    const tblStart = xml.lastIndexOf('<w:tbl>', tragIdx);
+    const tblEnd = xml.indexOf('</w:tbl>', tragIdx);
+    const tblXml = xml.slice(tblStart, tblEnd + 8);
+    const obRowStart = tblXml.indexOf('<w:tr>', tblXml.indexOf('OBIETTIVI') - 200);
+    // Dalla riga OBIETTIVI | CONOSCENZE in poi (Nota + Doppia Colonna) nessun cantSplit e nessun keepNext
+    const notaPos = tblXml.indexOf('Tenuto conto');
+    const fromNotaOnwards = tblXml.slice(notaPos);
+    expect(obRowStart).toBeGreaterThan(-1);
+    expect(fromNotaOnwards).not.toContain('w:cantSplit');
+    expect(fromNotaOnwards).not.toContain('w:keepNext');
+
+    const pdfBytes = generateProgrammazionePdfBytes(plan, DEFAULT_SCHOOL_SETTINGS, mapping);
+    const pdfDoc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
+    const pdfTexts: string[] = [];
+    for (let p = 1; p <= pdfDoc.numPages; p++) {
+      const page = await pdfDoc.getPage(p);
+      const tc = await page.getTextContent();
+      for (const item of tc.items) {
+        if ('str' in item && item.str.trim()) pdfTexts.push(item.str);
+      }
+    }
+    const joinedPdf = pdfTexts.join(' ');
+    expect(joinedPdf).toContain('- Rappresentare i numeri naturali, interi e razionali');
+    expect(joinedPdf).toContain('- Utilizzare scale graduate anche in contesti');
+  });
 });
-
-
-
-
