@@ -158,9 +158,10 @@ export class DexiePianoramaRepository implements PianoramaRepository {
         await this.db.kv.put({ key: 'migration_curricolo_seed_v4', value: true });
         await this.db.kv.put({ key: 'migration_curricolo_seed_v5', value: true });
         await this.db.kv.put({ key: 'migration_curricolo_seed_v6', value: true });
+        await this.db.kv.put({ key: 'migration_curricolo_seed_v7', value: true });
       } else {
-        const seedV6Flag = await this.db.kv.get('migration_curricolo_seed_v6');
-        if (!seedV6Flag) {
+        const seedV7Flag = await this.db.kv.get('migration_curricolo_seed_v7');
+        if (!seedV7Flag) {
           const existing = Array.isArray(catalogRow.value)
             ? (catalogRow.value as CurricoloCatalogEntry[])
             : [];
@@ -185,6 +186,7 @@ export class DexiePianoramaRepository implements PianoramaRepository {
           await this.db.kv.put({ key: 'migration_curricolo_seed_v4', value: true });
           await this.db.kv.put({ key: 'migration_curricolo_seed_v5', value: true });
           await this.db.kv.put({ key: 'migration_curricolo_seed_v6', value: true });
+          await this.db.kv.put({ key: 'migration_curricolo_seed_v7', value: true });
         }
       }
 

@@ -1,4 +1,7 @@
-import { splitInlineMergedCurricoloSentences } from '../domain/textSanitizer';
+import {
+  extractNormalizedBulletEntries,
+  splitInlineMergedCurricoloSentences,
+} from '../domain/textSanitizer';
 import type {
   AbilitaConoscenzaRow,
   ClasseSecondaria,
@@ -314,29 +317,18 @@ export interface PrimaContentPreselectionResult {
 }
 
 /**
- * Determina gli ID da preselezionare nel selettore del Curricolo Verticale.
- * Poiché competenze e obiettivi specifici sono formulati "al termine della terza",
- * per la Classe Prima preseleziona soltanto competenze e obiettivi coerenti con i contenuti
- * (conoscenze) della classe Prima (del piano se già presenti, altrimenti del catalogo Prima).
+ * Determina gli ID consigliati nel selettore del Curricolo Verticale:
+ * - le conoscenze della classe sono sempre mantenute selezionate;
+ * - competenze, obiettivi specifici e abilità non corrispondenti ai contenuti della classe
+ *   vengono deselezionati in modo conservativo ("nel dubbio lascia selezionato") sulla base
+ *   della valutazione curata del catalogo (`consigliato === false`) oppure, in presenza di
+ *   contenuti già personalizzati nel piano di Prima, tramite analisi di coerenza con i contenuti del piano.
  */
 export function computePreselectedCatalogIds(
   targetEntries: CurricoloCatalogEntry[],
   classe: ClasseSecondaria,
   planConoscenze: string[] = []
 ): PrimaContentPreselectionResult {
-  if (classe !== 'Prima') {
-    return {
-      selectedIds: new Set(targetEntries.map((e) => e.id)),
-      alignedCompetenceIds: new Set(
-        targetEntries.filter((e) => e.tipo === 'competenza').map((e) => e.id)
-      ),
-      alignedObjectiveIds: new Set(
-        targetEntries.filter((e) => e.tipo === 'obiettivo_specifico').map((e) => e.id)
-      ),
-      usedPlanContents: false,
-    };
-  }
-
   const cleanedPlanContents = planConoscenze.map((c) => c.trim()).filter((c) => c.length > 0);
   const catalogContents = targetEntries
     .filter((e) => e.tipo === 'conoscenza')
@@ -353,18 +345,37 @@ export function computePreselectedCatalogIds(
   const alignedObjectiveIds = new Set<string>();
 
   for (const entry of targetEntries) {
-    if (entry.tipo === 'conoscenza' || entry.tipo === 'abilita') {
+    if (entry.tipo === 'conoscenza') {
       selectedIds.add(entry.id);
       continue;
     }
 
-    if (
-      activeContentTexts.length > 0 &&
-      isEntryAlignedWithPrimaContents(entry, contentCorpusNorm, contentStems, contentStemArray)
-    ) {
+    let isRecommended = true;
+    if (usedPlanContents && classe === 'Prima') {
+      // Con contenuti personalizzati già inseriti nel piano di Prima, allinea dinamicamente ai contenuti reali del piano
+      isRecommended =
+        entry.consigliato !== false &&
+        isEntryAlignedWithPrimaContents(entry, contentCorpusNorm, contentStems, contentStemArray);
+    } else if (entry.consigliato !== undefined) {
+      isRecommended = entry.consigliato !== false;
+    } else if (entry.id.startsWith('cvn-') || entry.id.startsWith('cvv-')) {
+      // Le voci di catalogo curate che non hanno `consigliato: false` sono lasciate selezionate ("nel dubbio lascia selezionato")
+      isRecommended = true;
+    } else if (classe === 'Prima' && activeContentTexts.length > 0 && entry.tipo !== 'abilita') {
+      isRecommended = isEntryAlignedWithPrimaContents(
+        entry,
+        contentCorpusNorm,
+        contentStems,
+        contentStemArray
+      );
+    }
+
+    if (isRecommended) {
       selectedIds.add(entry.id);
       if (entry.tipo === 'competenza') alignedCompetenceIds.add(entry.id);
-      if (entry.tipo === 'obiettivo_specifico') alignedObjectiveIds.add(entry.id);
+      if (entry.tipo === 'obiettivo_specifico' || entry.tipo === 'abilita') {
+        alignedObjectiveIds.add(entry.id);
+      }
     }
   }
 
@@ -396,8 +407,9 @@ export function importCatalogEntriesToVoices(
 }
 
 /**
- * Estrae le competenze attese (senza duplicati) dalle voci di catalogo selezionate,
- * così da inserirle sotto "TRAGUARDI PER LO SVILUPPO DELLE COMPETENZE" prima delle competenze digitali.
+ * Estrae le competenze attese (senza duplicati e dividendo eventuali frasi accorpate)
+ * dalle voci di catalogo selezionate, così da inserirle sotto "TRAGUARDI PER LO SVILUPPO DELLE COMPETENZE"
+ * prima delle competenze digitali.
  */
 export function extractCompetenzeFromCatalogVoices(
   voices: ImportedCurricoloVoice[],
@@ -407,12 +419,13 @@ export function extractCompetenzeFromCatalogVoices(
   const next = [...existingCompetenze];
   for (const v of voices) {
     if (v.tipo !== 'competenza') continue;
-    const text = v.testo.trim();
-    if (!text) continue;
-    const key = text.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    next.push(text);
+    for (const text of extractNormalizedBulletEntries(v.testo)) {
+      if (!text) continue;
+      const key = text.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      next.push(text);
+    }
   }
   return next;
 }
@@ -423,27 +436,40 @@ const CANONICAL_NUCLEO_ORDER: Record<string, string[]> = {
     'spazio e figure',
     'relazioni e funzioni',
     'dati e previsioni',
+    'algoritmi',
     'ragionamento',
+    'informatica e steam',
     'digitale',
   ],
   scienze: [
+    'osservare e analizzare',
+    'chimica',
+    'sperimentazione',
+    'fonti energetiche',
+    'esseri viventi',
+    'scienze della terra',
     'biologia',
     'fisica',
-    'chimica',
     'astronomia',
     'studio del territorio',
     'scienze sperimentali',
     'metodo scientifico',
+    'scienza, tecnologia',
     'digitale',
   ],
   italiano: [
     'oralità',
+    'ascolto e parlato',
     'ascolto',
     'ascoltar',
     'lettura',
     'leggere',
     'scrittura',
     'scrivere',
+    'acquisizione ed espansione del lessico',
+    'elementi di grammatica',
+    'lingua e letteratura',
+    'lingua',
     'comprensione, produzione',
     'lessico',
     'la frase',
@@ -456,12 +482,16 @@ const CANONICAL_NUCLEO_ORDER: Record<string, string[]> = {
     'digitale',
   ],
   storia: [
+    'obiettivi disciplinari',
     'strumenti concettuali',
     'uso delle fonti',
     'organizzazione delle informazioni',
+    'produzione scritta',
+    'flussi migratori',
+    'sistemi di produzione',
+    'trasformazione del concetto di stato',
     'riconoscere le tracce',
     'esporre i fatti',
-    'produzione scritta',
     'feudalesimo',
     'motore del cambiamento',
     'tre italie',
@@ -475,8 +505,11 @@ const CANONICAL_NUCLEO_ORDER: Record<string, string[]> = {
   ],
   geografia: [
     'orientamento',
+    'linguaggio',
     'paesaggio',
-    'regioni',
+    'regione',
+    'relazioni e dinamiche',
+    'organizzazione territoriale',
     'approfondimento dell’italia',
     'approfondimento dell’europa',
     'approfondimento degli altri continenti',
@@ -490,6 +523,7 @@ const CANONICAL_NUCLEO_ORDER: Record<string, string[]> = {
     'scrittura',
     'funzioni comunicative',
     'riflessione sulla lingua',
+    'cultura',
     'digitale',
   ],
   francese: [
@@ -499,35 +533,51 @@ const CANONICAL_NUCLEO_ORDER: Record<string, string[]> = {
     'scrittura',
     'descrivere',
     'riflessione sulla lingua',
+    'cultura e civiltà',
     'digitale',
   ],
   'arte e immagine': [
-    'osserva',
-    'analizzare',
-    'comprendere',
-    'esprimersi',
     'espressivit',
+    'esprimersi e comunicare',
     'comunicazione',
+    'emozioni complesse',
+    'osservazione/lettura',
+    'osservare e leggere',
+    'analisi/interpretazione',
+    'comprendere e apprezzare',
     'tecniche artistiche',
     'superficie',
     'digitale',
   ],
   tecnologia: [
     'vedere, osservare',
-    'materiali',
+    'prevedere, immaginare',
+    'intervenire, trasformare',
     'disegno tecnico',
-    'progettazione',
+    'materiali',
+    'cicli tecnologici',
+    'tecnologia',
     'sistema operativo',
     'informatica',
   ],
   'educazione fisica': [
     'il corpo',
+    'dimensione dei comportamenti',
+    'dimensione motoria',
+    'dimensione cognitiva',
+    'dimensione sociale',
+    'dimensione emotivo',
+    'il movimento del corpo',
     'linguaggio del corpo',
     'gioco, lo sport',
+    'sicurezza e prevenzione',
     'salute, benessere',
     'digitale',
   ],
   'latino (lel)': [
+    'educazione linguistica diacronica',
+    'consapevolezza della centralità',
+    'confronto interlinguistico',
     'alfabeto',
     'morfologia',
     'cultura latina',
@@ -541,6 +591,9 @@ const CANONICAL_NUCLEO_ORDER: Record<string, string[]> = {
     'valori etici',
   ],
   musica: [
+    'obiettivi disciplinari',
+    'ascolto, percezione',
+    'produzione',
     'ascolto',
     'analizzare',
     'teoria e notazione',
@@ -575,6 +628,37 @@ const CANONICAL_NUCLEO_ORDER: Record<string, string[]> = {
     'cittadinanza digitale',
   ],
   'strumento musicale': [
+    'percezione e analisi (pianoforte)',
+    'decodifica della notazione (pianoforte)',
+    'esecuzione e interpretazione (pianoforte)',
+    'collaborazione ed esplorazione (pianoforte)',
+    'teoria e prassi (pianoforte)',
+    'strumenti a tastiera (pianoforte)',
+    'tecnica e prassi (pianoforte)',
+    'abilità tecniche (pianoforte)',
+    'abilità percettive e uditive (pianoforte)',
+    'abilità cognitive e di studio (pianoforte)',
+    'percezione e analisi (fagotto)',
+    'decodifica della notazione (fagotto)',
+    'esecuzione e interpretazione (fagotto)',
+    'collaborazione ed esplorazione (fagotto)',
+    'teoria e prassi (fagotto)',
+    'strumenti a fiato – legni (fagotto)',
+    'tecnica e prassi (fagotto)',
+    'percezione e analisi (tromba)',
+    'decodifica della notazione (tromba)',
+    'esecuzione e interpretazione (tromba)',
+    'collaborazione ed esplorazione (tromba)',
+    'teoria e prassi (tromba)',
+    'strumenti a fiato – ottoni (tromba)',
+    'tecnica e prassi (tromba)',
+    'percezione e analisi (corno)',
+    'decodifica della notazione (corno)',
+    'esecuzione e interpretazione (corno)',
+    'collaborazione ed esplorazione (corno)',
+    'teoria e prassi (corno)',
+    'strumenti a fiato – ottoni (corno)',
+    'tecnica e prassi (corno)',
     'percezione',
     'teoria e lettura',
     'tecnica e prassi',
@@ -590,6 +674,7 @@ function isDigitalNucleoName(nucleo: string): boolean {
   return (
     nLower.includes('digital') ||
     nLower.includes('steam') ||
+    nLower.includes('informatica') ||
     nLower.includes('usare bene la rete') ||
     nLower.includes('altro')
   );
@@ -877,6 +962,7 @@ export function validateCatalogJsonPayload(rawJson: string): CurricoloCatalogEnt
         (classe === 'Prima'
           ? 'Curricolo verticale nuovo'
           : 'Curricolo verticale vecchio (A.S. 2025/2026)'),
+      ...(typeof r.consigliato === 'boolean' ? { consigliato: r.consigliato } : {}),
     };
   });
 }
@@ -903,7 +989,8 @@ export function computeCatalogDiff(
       existing.tipo !== nextItem.tipo ||
       existing.nucleoTematico !== nextItem.nucleoTematico ||
       existing.testo !== nextItem.testo ||
-      existing.documentoProvenienza !== nextItem.documentoProvenienza
+      existing.documentoProvenienza !== nextItem.documentoProvenienza ||
+      (existing.consigliato ?? true) !== (nextItem.consigliato ?? true)
     ) {
       modifiedCount += 1;
     } else {

@@ -225,6 +225,7 @@ export interface CurricoloCatalogEntry {
   nucleoTematico: string;
   testo: string;
   documentoProvenienza: string;
+  consigliato?: boolean;
 }
 
 export interface ImportedCurricoloVoice {

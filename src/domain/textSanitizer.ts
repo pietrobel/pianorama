@@ -57,20 +57,32 @@ export function normalizeDocumentText(raw: string): string {
       new RegExp(`\\b(${SPLIT_A_GRAVE_PREFIXES})\\s+à(?![A-Za-zÀ-ÿ])`, 'gi'),
       '$1à'
     )
-    // Rimuovi eventuale "#" residuo di encoding PDF attaccato a parole accentate
+    // Ricomponi eventuali artefatti PDF "e2" / "EJ" / "EY" in parole accentate comuni e ripara separazioni "#"/legature residue
+    .replace(/\b(cio|perch|poich|bench|affinch|sicch|finch|giacch|purch|talch|cosicch|checch|alcunch|fuorch|macch|nonch)\s*e2\b/gi, '$1é')
+    .replace(/\bs\s*e2\b/gi, 'sé')
+    .replace(/\bd\s*e2\s*pliant\b/gi, 'dépliant')
+    .replace(/\bBelle\s+EY\s*poque\b/g, 'Belle Époque')
+    .replace(/\bEJ(?=\s+(?:in grado|consapevole|capace|possibile|opportuno|necessario|utile)\b)/g, 'È')
+    .replace(/\bABILIT\s+AJ\b/g, 'ABILITÀ')
+    .replace(/\babilit\s+aj\b/g, 'abilità')
+    // Rimuovi eventuale "#" residuo di encoding PDF attaccato a parole accentate o vocali finali (anche con spazio interposto)
+    .replace(/([a-zà-ÿ])\s*a#(?=\s|[,.;:!?)\]]|$)/gi, '$1à')
+    .replace(/([a-zà-ÿ])\s*o#(?=\s|[,.;:!?)\]]|$)/gi, '$1ò')
+    .replace(/([a-zà-ÿ])\s*u#(?=\s|[,.;:!?)\]]|$)/gi, '$1ù')
+    .replace(/([a-zà-ÿ])\s*i#(?=\s|[,.;:!?)\]]|$)/gi, '$1ì')
     .replace(/([àèéìîòù])#(?=\s|[,.;:!?)\]]|$)/gi, '$1');
 
   return text;
 }
 
 const LEADING_BULLET_STRIP_RX =
-  /^\s*(?:[•●○▪▫◦☐☑☒□■▢\uF0B7\uF0A7\uF0FE\uF0A8*]+|[-–—](?=\s+))\s*/;
+  /^\s*(?:[•●○▪▫◦☐☑☒□■▢\uF0B7\uF0A7\uF0FE\uF0A8*]+|[-–—](?=\s+|[A-ZÀ-Ö][a-zà-ÿ]))\s*/;
 
 const INLINE_MARKER_SPLIT_RX =
   /([^\n])\s*([☐☑☒□■▢●○▪▫◦\uF0B7\uF0A7\uF0FE\uF0A8•])\s*/g;
 
 const LINE_MARKER_NORMALIZE_RX =
-  /^\s*(?:[☐☑☒□■▢●○▪▫◦\uF0B7\uF0A7\uF0FE\uF0A8•]+|\*(?=\s*)|[-–—](?=\s+))\s*/gm;
+  /^\s*(?:[☐☑☒□■▢●○▪▫◦\uF0B7\uF0A7\uF0FE\uF0A8•]+|\*(?=\s*)|[-–—](?=\s+|[A-ZÀ-Ö][a-zà-ÿ]))\s*/gm;
 
 const PLACEHOLDER_ONLY_RX =
   /^(?:[-—_]+|nessuna\s+(?:voce|conoscenza)\s+inserita\.?)$/i;
@@ -81,12 +93,12 @@ const NON_SPLITTING_ABBREVIATIONS_RX =
 const SINGLE_UPPERCASE_INITIAL_RX = /(?:^|[\s(])[A-Z]$/;
 
 const STANDALONE_SECOND_SENTENCE_STARTER_RX =
-  /^(?:[A-ZÀ-Ö][a-zà-ÿ]+(?:are|ere|ire|rre)\b|(?:(?:Lo|La|Il|I|Gli|Le)\s+(?:studente|studentessa|alunno|alunna)|L[’'](?:alunn[oa]|alliev[oa]))\b|Saper(?:e)?\b|Esser(?:e)?\b|In\s+casi\b|Riconoscere\b|Utilizzare\b|Rappresentare\b|Fornire\b|Calcolare\b|Individuare\b|Cogliere\b|Applicare\b|Eseguire\b|Esprimere\b|Analizza(?:re)?\b|Produc[ea]\b|Mettere\b|Gestire\b|Controllare\b|Partecipare\b|Rispettare\b|Stabilire\b|Arbitrare\b|Inventare\b|Creare\b|Condurre\b|Realizzare\b|Usare\b|Variare\b|Risolvere\b|Prevedere\b|Mantenere\b|Giungere\b|Assumere\b|Progettazione\b|Collaborazione\b|Protezione\b|Condivisione\b|Gestione\b|Comunicazione\b|Nozioni\b|Utilizzo\b|Cenni\b|Regole\b|Tecniche\b|Opere\b)/;
+  /^(?:[A-ZÀ-Ö][a-zà-ÿ]+(?:(?:ar|er|ir|rr)(?:e|si|mi|ti|ci|vi|lo|la|li|le|ne))\b|(?:(?:Lo|La|Il|I|Gli|Le)\s+(?:studente|studentessa|alunno|alunna)|L[’'](?:alunn[oa]|alliev[oa]))\b|Saper(?:e|si)?\b|Esser(?:e|ci)?\b|In\s+casi\b|(?:Riconosc|Utilizz|Rappresent|Fornisc|Calcol|Individu|Cogli|Applic|Esegu|Esprim|Analizz|Produc|Mett|Gestisc|Controll|Partecip|Rispett|Stabilisc|Arbitr|Invent|Cre|Conduc|Realizz|Us|Vari|Risolv|Preved|Mantien|Giung|Assum|Comprend|Legg|Scriv|Interpret|Padroneggi|Disting|Formul|Sostien|Possied|Conosc|Descriv|Spieg|Costruisc|Ricav|Cerc|Selezion|Valut|Identific|Confront|Organizz|Elabor|Scegl|Svilupp|Progett|Adott|Cooper|Interagisc|Accett|Comunic|Espon|Rielabor|Capisc|Apprezz|Verific|Dimostr|Argoment|Document|Ricostruisc|Colloc|Orient|Muov|Esplor|Speriment|Matur)[a-zà-ÿ]*\b|Si\s+[a-zà-ÿ]+\b|Progettazione\b|Collaborazione\b|Protezione\b|Condivisione\b|Gestione\b|Comunicazione\b|Nozioni\b|Utilizzo\b|Cenni\b|Regole\b|Tecniche\b|Opere\b)/;
 
 /**
  * Divide eventuali frasi autonome accorpate sulla stessa riga con ". " (es. obiettivi del curricolo
  * concatenati nello stesso punto elenco) preservando abbreviazioni ("es.", "ecc.", "L.") e
- * prefissi brevi "Titolo. Descrizione" (es. "Lessico. Riconoscere...", "Comprendere e analizzare... . Evidenziare...").
+ * prefissi brevi "Titolo. Descrizione" (es. "Lessico. Riconoscere...", "La frase e la sua struttura. Riconoscere...").
  */
 export function splitInlineMergedCurricoloSentences(rawLine: string): string[] {
   const trimmed = (rawLine ?? '').trim();
@@ -117,12 +129,27 @@ export function splitInlineMergedCurricoloSentences(rawLine: string): string[] {
     const rightTail = trimmed.slice(endIdx).trim();
     const isAlreadyMultiChunkChain = segments.length > 0 || i < breakOffsets.length - 1;
     const wordCount = leftChunk.split(/\s+/).filter(Boolean).length;
-    const hasInternalClausePunctuation = /[,;(]/.test(leftChunk);
+    const hasClauseSeparator = /[;(]/.test(leftChunk);
+    const isVerbListTitle =
+      /^[A-ZÀ-Ö][a-zà-ÿ]+(?:ar|er|ir|rr)(?:e|si)(?:\s*,\s*[a-zà-ÿ]+(?:ar|er|ir|rr)(?:e|si))+(?:\s+e\s+[a-zà-ÿ]+(?:ar|er|ir|rr)(?:e|si))?\.$/.test(
+        leftChunk
+      );
+    const hasOperationalVerb =
+      /^(?:l[’'](?:alunn[oa]|alliev[oa])|l[oa]\s+student(?:e|essa)|i\s+ragazzi)\b/i.test(
+        leftChunk
+      ) ||
+      /\b(?:[a-zà-ÿ]{3,}(?:ar|er|ir|rr)(?:e|si)|saper(?:e)?|esser(?:e)?|comprende|utilizza|riconosce|espone|esegue|interpreta|rappresenta|analizza|scrive|legge|produce|applica|conosce|descrive|individua|distingue|osserva|partecipa|interagisce|comunica|sostiene|coglie|calcola|formula|progetta|organizza|collabora|adotta|orienta|riflette|esplora|rispetta|ricerca|seleziona|elabora|valuta|usa|verifica|argomenta|colloca|muove|spiega|costruisce|ricava|sceglie|sviluppa|crea|gestisce|controlla|mantiene|risolve|prevede)\b/i.test(
+        leftChunk
+      );
 
     const looksLikeHeadingPrefix =
       !isAlreadyMultiChunkChain &&
-      leftChunk.length < 80 &&
-      (!hasInternalClausePunctuation || leftChunk.length <= 42);
+      (isVerbListTitle ||
+        (!hasOperationalVerb &&
+          leftChunk.length <= 54 &&
+          wordCount <= 8 &&
+          !hasClauseSeparator &&
+          !/,/.test(leftChunk)));
 
     const canSplitHere =
       leftChunk.length >= 24 &&
@@ -144,9 +171,13 @@ export function splitInlineMergedCurricoloSentences(rawLine: string): string[] {
 }
 
 export function stripLeadingBullet(raw: string): string {
-  return normalizeDocumentText(raw ?? '')
-    .replace(LEADING_BULLET_STRIP_RX, '')
-    .trim();
+  let prev = normalizeDocumentText(raw ?? '').trim();
+  while (true) {
+    const next = prev.replace(LEADING_BULLET_STRIP_RX, '').trim();
+    if (next === prev) break;
+    prev = next;
+  }
+  return prev;
 }
 
 export function extractNormalizedBulletEntries(raw: string): string[] {
@@ -155,6 +186,9 @@ export function extractNormalizedBulletEntries(raw: string): string[] {
     .replace(/\r?\n/g, '\n');
   return normalized
     .split('\n')
+    .map((line) => stripLeadingBullet(line))
+    .filter((line) => line.length > 0)
+    .flatMap((line) => splitInlineMergedCurricoloSentences(line))
     .map((line) => stripLeadingBullet(line))
     .filter((line) => line.length > 0);
 }
@@ -187,9 +221,11 @@ export function formatCurricoloCellLines(
   }
 
   const hint = normalizeDocumentText((nucleoHint ?? '').trim());
+  const normalizedHintKey = hint.replace(/:$/, '').trim().toLowerCase();
   const rawFirstLine = clean.split('\n')[0]?.trim() ?? '';
   const hasHintOnFirstLine =
-    hint.length > 0 && rawFirstLine.toLowerCase() === hint.toLowerCase();
+    normalizedHintKey.length > 0 &&
+    rawFirstLine.replace(/^•\s*/, '').replace(/:$/, '').trim().toLowerCase() === normalizedHintKey;
 
   const effective =
     hint && !hasHintOnFirstLine ? `${hint}\n${clean}` : clean;
@@ -211,19 +247,32 @@ export function formatCurricoloCellLines(
     const trimmed = rawLines[idx];
     const startsWithBullet = trimmed.startsWith('•');
     const startsWithNumbering = /^\d+[.)]\s/.test(trimmed);
-    const looksLikeInfinitiveObjectiveClause =
-      /^[A-Za-zÀ-ÿ]+(?:are|ere|ire|rre)\s+\S+/i.test(trimmed);
+    const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
+    const looksLikeObjectiveClause =
+      /^(?:[A-Za-zÀ-ÿ]+(?:(?:ar|er|ir|rr)(?:e|si|mi|ti|ci|vi))|Saper(?:e)?|Esser(?:e)?)\s+\S+/i.test(
+        trimmed
+      ) ||
+      /^(?:Il|Lo|La|I|Gli|Le|Un|Uno|Una|L[’'])\s+/i.test(trimmed) ||
+      /^[a-zà-ÿ]/.test(trimmed);
+
+    const isHintMatch =
+      normalizedHintKey.length > 0 &&
+      trimmed.replace(/:$/, '').trim().toLowerCase() === normalizedHintKey;
+
+    const isUnHintedNucleoTitle =
+      hint.length === 0 &&
+      rawLines.length > 1 &&
+      hasFollowerWithMarker &&
+      trimmed.length <= 26 &&
+      wordCount <= 3 &&
+      !/[.!?;:]$/.test(trimmed) &&
+      !looksLikeObjectiveClause;
 
     const isNucleoTitle =
       idx === 0 &&
       !startsWithBullet &&
       !startsWithNumbering &&
-      ((hint.length > 0 && trimmed.toLowerCase() === hint.toLowerCase()) ||
-        (rawLines.length > 1 &&
-          hasFollowerWithMarker &&
-          trimmed.length <= 35 &&
-          !/[.!?;:]$/.test(trimmed) &&
-          !looksLikeInfinitiveObjectiveClause));
+      (isHintMatch || isUnHintedNucleoTitle);
 
     if (isNucleoTitle) {
       out.push({ text: trimmed, isNucleoTitle: true });
@@ -240,10 +289,13 @@ export function formatCurricoloCellLines(
       continue;
     }
 
-    const bodyText = startsWithBullet ? trimmed.replace(/^•\s*/, '').trim() : trimmed;
+    const bodyText = stripLeadingBullet(trimmed);
     const splitSentences = splitInlineMergedCurricoloSentences(bodyText);
     for (const sentence of splitSentences) {
-      out.push({ text: `• ${sentence}`, isNucleoTitle: false });
+      const cleanSentence = stripLeadingBullet(sentence);
+      if (cleanSentence) {
+        out.push({ text: `• ${cleanSentence}`, isNucleoTitle: false });
+      }
     }
   }
 

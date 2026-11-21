@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { describe, expect, it } from 'vitest';
 import {
+  extractNormalizedBulletEntries,
   formatCurricoloCellLines,
   normalizeDocumentText,
   normalizeProgrammazioneTexts,
@@ -933,40 +934,77 @@ Utilizzare con sicurezza le tecniche di calcolo \\tab Eseguire espressioni con f
   });
 
   it('per la Prima preseleziona competenze e obiettivi specifici in funzione dei contenuti della classe', () => {
-    const matPrima = filterCatalogEntries(CURRICOLO_VERTICALE_SEED, 'Prima', 'Matematica');
+    const matPrima = filterCatalogEntries(CURRICOLO_VERTICALE_SEED, 'Prima', 'Matematica', 'nuove');
     const matRes = computePreselectedCatalogIds(matPrima, 'Prima');
-    // Tutte le conoscenze e abilità della Prima sono preselezionate
-    const matPrimaCon = matPrima.filter((e) => e.tipo === 'conoscenza' || e.tipo === 'abilita');
+    // Tutte le conoscenze della Prima restano sempre selezionate
+    const matPrimaCon = matPrima.filter((e) => e.tipo === 'conoscenza');
     expect(matPrimaCon.every((e) => matRes.selectedIds.has(e.id))).toBe(true);
-    // Competenze/obiettivi tipici di Seconda/Terza (radici, percentuali, irrazionali, rapporti) restano esclusi
-    expect(matRes.selectedIds.has('cvn-matematica-prima-o13')).toBe(false);
-    expect(matRes.selectedIds.has('cvn-matematica-prima-o15')).toBe(false);
-    expect(matRes.selectedIds.has('cvn-matematica-prima-o17')).toBe(false);
-    expect(matRes.selectedIds.has('cvn-matematica-prima-o18')).toBe(false);
-    // Obiettivi coerenti con i contenuti della Prima (numeri naturali, potenze/fattori primi) restano preselezionati
+    // Obiettivi tipici di Seconda/Terza (rapporti, percentuali, radici, irrazionali, Pitagora, equazioni) restano esclusi
+    expect(matRes.selectedIds.has('cvn-matematica-prima-o6')).toBe(false);
+    expect(matRes.selectedIds.has('cvn-matematica-prima-o9')).toBe(false);
+    expect(matRes.selectedIds.has('cvn-matematica-prima-o14')).toBe(false);
+    expect(matRes.selectedIds.has('cvn-matematica-prima-o16')).toBe(false);
+    expect(matRes.selectedIds.has('cvn-matematica-prima-o30')).toBe(false);
+    expect(matRes.selectedIds.has('cvn-matematica-prima-o38')).toBe(false);
+    // Obiettivi coerenti con i contenuti della Prima (numeri naturali, retta numerica, multipli/divisori) restano preselezionati
+    expect(matRes.selectedIds.has('cvn-matematica-prima-o1')).toBe(true);
+    expect(matRes.selectedIds.has('cvn-matematica-prima-o4')).toBe(true);
     expect(matRes.selectedIds.has('cvn-matematica-prima-o10')).toBe(true);
-    expect(matRes.selectedIds.has('cvn-matematica-prima-o16')).toBe(true);
     expect(matRes.alignedCompetenceIds.size).toBeGreaterThan(0);
 
-    const sciPrima = filterCatalogEntries(CURRICOLO_VERTICALE_SEED, 'Prima', 'Scienze');
+    const sciPrima = filterCatalogEntries(CURRICOLO_VERTICALE_SEED, 'Prima', 'Scienze', 'nuove');
     const sciRes = computePreselectedCatalogIds(sciPrima, 'Prima');
-    // Astronomia (Terza) e reazioni acido-base / fossili restano esclusi per i contenuti Prima
-    expect(sciRes.selectedIds.has('cvn-scienze-prima-o12')).toBe(false);
-    expect(sciRes.selectedIds.has('cvn-scienze-prima-o14')).toBe(false);
-    expect(sciRes.selectedIds.has('cvn-scienze-prima-o15')).toBe(false);
-    // Passaggi di stato e ciclo del carbonio (presenti nei contenuti Prima) sono preselezionati
-    expect(sciRes.selectedIds.has('cvn-scienze-prima-o11')).toBe(true);
-    expect(sciRes.selectedIds.has('cvn-scienze-prima-o17')).toBe(true);
+    // Astronomia, fossili, trasformazioni chimiche/acido-base e modello geocentrico restano esclusi in Prima
+    expect(sciRes.selectedIds.has('cvn-scienze-prima-o5')).toBe(false);
+    expect(sciRes.selectedIds.has('cvn-scienze-prima-o7')).toBe(false);
+    expect(sciRes.selectedIds.has('cvn-scienze-prima-o8')).toBe(false);
+    expect(sciRes.selectedIds.has('cvn-scienze-prima-o11')).toBe(false);
+    expect(sciRes.selectedIds.has('cvn-scienze-prima-o31')).toBe(false);
+    // Ecosistemi, ciclo del carbonio, passaggi di stato e biologia cellulare restano selezionati
+    expect(sciRes.selectedIds.has('cvn-scienze-prima-o3')).toBe(true);
+    expect(sciRes.selectedIds.has('cvn-scienze-prima-o4')).toBe(true);
+    expect(sciRes.selectedIds.has('cvn-scienze-prima-o10')).toBe(true);
+    expect(sciRes.selectedIds.has('cvn-scienze-prima-o22')).toBe(true);
 
     // Preselezione reattiva anche su contenuti personalizzati già presenti nel piano di Prima
     const customRes = computePreselectedCatalogIds(sciPrima, 'Prima', [
       'La cellula, la fotosintesi nelle piante e il ciclo del carbonio.',
     ]);
     expect(customRes.usedPlanContents).toBe(true);
-    expect(customRes.selectedIds.has('cvn-scienze-prima-o11')).toBe(true);
-    expect(customRes.selectedIds.has('cvn-scienze-prima-o17')).toBe(false);
+    expect(customRes.selectedIds.has('cvn-scienze-prima-o4')).toBe(true);
+    expect(customRes.selectedIds.has('cvn-scienze-prima-o22')).toBe(true);
+    expect(customRes.selectedIds.has('cvn-scienze-prima-o10')).toBe(false);
 
-    // Per la Terza tutte le voci della classe restano preselezionate
+    // Esclusioni conservative su Religione, Musica e Geografia in Prima
+    const relPrima = filterCatalogEntries(CURRICOLO_VERTICALE_SEED, 'Prima', 'Religione', 'nuove');
+    const relRes = computePreselectedCatalogIds(relPrima, 'Prima');
+    expect(relRes.selectedIds.has('cvn-religione-prima-o4')).toBe(false);
+    expect(relRes.selectedIds.has('cvn-religione-prima-o5')).toBe(false);
+    expect(relRes.selectedIds.has('cvn-religione-prima-o10')).toBe(false);
+    expect(relRes.selectedIds.has('cvn-religione-prima-c1')).toBe(true);
+    expect(relRes.selectedIds.has('cvn-religione-prima-o1')).toBe(true);
+
+    const musPrima = filterCatalogEntries(CURRICOLO_VERTICALE_SEED, 'Prima', 'Musica', 'nuove');
+    const musRes = computePreselectedCatalogIds(musPrima, 'Prima');
+    expect(musRes.selectedIds.has('cvn-musica-prima-c6')).toBe(false);
+    expect(musRes.selectedIds.has('cvn-musica-prima-o7')).toBe(false);
+    expect(musRes.selectedIds.has('cvn-musica-prima-o8')).toBe(false);
+    expect(musRes.selectedIds.has('cvn-musica-prima-c1')).toBe(true);
+    expect(musRes.selectedIds.has('cvn-musica-prima-o1')).toBe(true);
+
+    const geoPrima = filterCatalogEntries(CURRICOLO_VERTICALE_SEED, 'Prima', 'Geografia', 'nuove');
+    const geoRes = computePreselectedCatalogIds(geoPrima, 'Prima');
+    expect(geoRes.selectedIds.has('cvn-geografia-prima-o21')).toBe(false);
+    expect(geoRes.selectedIds.has('cvn-geografia-prima-o23')).toBe(false);
+    expect(geoRes.selectedIds.has('cvn-geografia-prima-o24')).toBe(false);
+    expect(geoRes.selectedIds.has('cvn-geografia-prima-o25')).toBe(false);
+    expect(geoRes.selectedIds.has('cvn-geografia-prima-c1')).toBe(true);
+    expect(geoRes.selectedIds.has('cvn-geografia-prima-o9')).toBe(true);
+
+    // Nel dubbio lascia selezionato (es. discipline trasversali in Prima e Matematica Terza)
+    const stoPrima = filterCatalogEntries(CURRICOLO_VERTICALE_SEED, 'Prima', 'Storia', 'nuove');
+    expect(computePreselectedCatalogIds(stoPrima, 'Prima').selectedIds.size).toBe(stoPrima.length);
+
     const matTerza = filterCatalogEntries(CURRICOLO_VERTICALE_SEED, 'Terza', 'Matematica');
     const terzaRes = computePreselectedCatalogIds(matTerza, 'Terza');
     expect(terzaRes.selectedIds.size).toBe(matTerza.length);
@@ -2179,7 +2217,7 @@ Utilizzare con sicurezza le tecniche di calcolo \\tab Eseguire espressioni con f
       }
     }
 
-    // 4. Verifica specifica Matematica Prima (Nuove e Vecchie): presenti tutti i nuclei fondamentali
+    // 4. Verifica specifica Matematica Prima (Nuove e Vecchie): presenti tutti i nuclei fondamentali del documento ufficiale
     for (const ver of ['nuove', 'vecchie'] as const) {
       const matPrimaAll = resolveCatalogEntriesForCurriculum(
         CURRICOLO_VERTICALE_SEED,
@@ -2189,15 +2227,18 @@ Utilizzare con sicurezza le tecniche di calcolo \\tab Eseguire espressioni con f
       );
       const matPrimaSheet = buildCurriculumSheetModel(matPrimaAll, 'Matematica', ver);
       const nuclei = matPrimaSheet.rows.map((r) => r.nucleoTematico);
-      expect(nuclei).toEqual(
-        expect.arrayContaining([
-          'Numeri',
-          'Spazio e figure',
-          'Relazioni e funzioni',
-          'Dati e previsioni',
-          'Digitale e STEAM',
-        ])
-      );
+      const expectedNuclei =
+        ver === 'nuove'
+          ? [
+              'Numeri',
+              'Spazio e figure',
+              'Relazioni e funzioni',
+              'Dati e previsioni',
+              'Algoritmi',
+              'Informatica e STEAM',
+            ]
+          : ['Numeri', 'Spazio e figure', 'Relazioni e funzioni', 'Dati e previsioni'];
+      expect(nuclei).toEqual(expect.arrayContaining(expectedNuclei));
     }
   });
 
@@ -2680,5 +2721,96 @@ Utilizzare con sicurezza le tecniche di calcolo \\tab Eseguire espressioni con f
     const joinedPdf = pdfTexts.join(' ');
     expect(joinedPdf).toContain('- Rappresentare i numeri naturali, interi e razionali');
     expect(joinedPdf).toContain('- Utilizzare scale graduate anche in contesti');
+  });
+
+  it('copre tutte le 15 discipline nei tre anni per Curricolo Nuovo (competenze/obiettivi triennali + conoscenze per classe) e Vecchio (competenze triennali + abilità/conoscenze per classe)', () => {
+    const classi = ['Prima', 'Seconda', 'Terza'] as const;
+
+    for (const disc of DISCIPLINE_SECONDARIA) {
+      for (const cls of classi) {
+        const nuove = filterCatalogEntries(CURRICOLO_VERTICALE_SEED, cls, disc, 'nuove');
+        const vecchie = filterCatalogEntries(CURRICOLO_VERTICALE_SEED, cls, disc, 'vecchie');
+
+        expect(nuove.filter((e) => e.tipo === 'competenza').length).toBeGreaterThan(0);
+        expect(nuove.filter((e) => e.tipo === 'obiettivo_specifico').length).toBeGreaterThan(0);
+        expect(nuove.filter((e) => e.tipo === 'conoscenza').length).toBeGreaterThan(0);
+
+        expect(vecchie.filter((e) => e.tipo === 'competenza').length).toBeGreaterThan(0);
+        expect(vecchie.filter((e) => e.tipo === 'abilita').length).toBeGreaterThan(0);
+        expect(vecchie.filter((e) => e.tipo === 'conoscenza').length).toBeGreaterThan(0);
+      }
+    }
+
+    // Nessun artefatto di decodifica PDF né nuclei spezzati nel catalogo
+    for (const entry of CURRICOLO_VERTICALE_SEED) {
+      expect(entry.nucleoTematico.trim().length).toBeGreaterThan(0);
+      expect(entry.nucleoTematico.toLowerCase()).not.toBe('della lingua');
+      expect(entry.nucleoTematico.toLowerCase()).not.toBe('il tempo');
+      expect(entry.testo).not.toMatch(/\b(abilit|umanit|societ|responsabilit)\s+[aà]#/i);
+      expect(entry.testo).not.toContain('Belle EY');
+      expect(entry.testo).not.toContain('going t.o');
+      expect(entry.testo).not.toContain('pronomi. complemento');
+    }
+  });
+
+  it('garantisce il punto elenco su competenze, infiniti riflessivi, voci di riga 0 non segnalate come nucleo e frasi accorpate', async () => {
+    // 1. Voci di prima riga senza nucleoHint che iniziano con verbi / espressioni operative non vengono scambiate per titoli di nucleo
+    expect(formatCurricoloCellLines('Saper prestare attenzione alle spiegazioni.\nSaper prendere appunti.')).toEqual([
+      { text: '• Saper prestare attenzione alle spiegazioni.', isNucleoTitle: false },
+      { text: '• Saper prendere appunti.', isNucleoTitle: false },
+    ]);
+    expect(formatCurricoloCellLines('Uso del dizionario\nLessico di base')).toEqual([
+      { text: '• Uso del dizionario', isNucleoTitle: false },
+      { text: '• Lessico di base', isNucleoTitle: false },
+    ]);
+
+    // 2. Infiniti riflessivi ed enclitici accorpamenti vengono separati e puntati correttamente
+    expect(
+      formatCurricoloCellLines(
+        '• Orientarsi nello spazio scolastico. Esercitarsi nel calcolo mentale rapido.',
+        'Spazio e figure'
+      )
+    ).toEqual([
+      { text: 'Spazio e figure', isNucleoTitle: true },
+      { text: '• Orientarsi nello spazio scolastico.', isNucleoTitle: false },
+      { text: '• Esercitarsi nel calcolo mentale rapido.', isNucleoTitle: false },
+    ]);
+
+    // 3. Competenze accorpate in 3a persona singolare o con elenchi puntati misti si separano in singole competenze con bullet in DOCX/PDF
+    expect(
+      extractNormalizedBulletEntries(
+        'L’alunno osserva i fenomeni naturali. Utilizza il metodo sperimentale per formulare ipotesi.'
+      )
+    ).toEqual([
+      'L’alunno osserva i fenomeni naturali.',
+      'Utilizza il metodo sperimentale per formulare ipotesi.',
+    ]);
+
+    const sciCompEntries = filterCatalogEntries(
+      CURRICOLO_VERTICALE_SEED,
+      'Prima',
+      'Scienze',
+      'nuove'
+    ).filter((e) => e.tipo === 'competenza');
+    const compVoices = importCatalogEntriesToVoices(sciCompEntries);
+    const extractedComp = extractCompetenzeFromCatalogVoices(compVoices);
+    expect(extractedComp.length).toBeGreaterThanOrEqual(5);
+
+    const mapping = defaultMappingRaw as DocxMappingSchema;
+    const plan = createEmptyProgrammazione(DEFAULT_SCHOOL_SETTINGS, {
+      disciplina: 'Scienze',
+      classe: 'Prima',
+      sezione: 'A',
+      layoutDocumento: 'originale',
+      indicazioniVersione: 'nuove',
+    });
+    plan.curricolo.competenzeAttese = [
+      'Analizza fenomeni naturali. Comunica concetti scientifici con proprietà di linguaggio.',
+    ];
+    const docxBytes = await generateProgrammazioneDocxBytes(plan, DEFAULT_SCHOOL_SETTINGS, mapping);
+    const zip = await JSZip.loadAsync(docxBytes.buffer as ArrayBuffer);
+    const xml = await zip.file('word/document.xml')!.async('string');
+    expect(xml).toContain('• Analizza fenomeni naturali.');
+    expect(xml).toContain('• Comunica concetti scientifici con proprietà di linguaggio.');
   });
 });
