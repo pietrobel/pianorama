@@ -19,6 +19,7 @@ import type {
   CurricoloVoiceType,
   LibraryCategory,
   LibraryItem,
+  SchoolSettings,
 } from '../domain/types';
 import {
   computeCatalogDiff,
@@ -27,10 +28,12 @@ import {
   validateCatalogJsonPayload,
   type CatalogDiffSummary,
 } from '../engine/curricoloCatalogEngine';
+import { saveBlobToFileSystem } from '../storage/saveDirectoryService';
 
 interface LibraryPageProps {
   items: LibraryItem[];
   curricoloCatalog: CurricoloCatalogEntry[];
+  settings?: SchoolSettings;
   onSaveItem: (item: LibraryItem) => Promise<void>;
   onBulkImport: (items: LibraryItem[]) => Promise<void>;
   onReplaceCurricoloCatalog: (items: CurricoloCatalogEntry[]) => Promise<void>;
@@ -56,6 +59,7 @@ const CATEGORY_LABELS: Record<LibraryCategory, string> = {
 export function LibraryPage({
   items,
   curricoloCatalog,
+  settings,
   onSaveItem,
   onBulkImport,
   onReplaceCurricoloCatalog,
@@ -171,17 +175,19 @@ export function LibraryPage({
     setStatusMessage('Voce duplicata.');
   };
 
-  const handleExportJson = () => {
+  const handleExportJson = async () => {
     const blob = new Blob([JSON.stringify(items, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `pianorama_libreria_${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setStatusMessage('Libreria esportata in formato JSON.');
+    const filename = `pianorama_libreria_${new Date().toISOString().slice(0, 10)}.json`;
+    const res = await saveBlobToFileSystem(blob, filename, 'auto', settings);
+    if (res.cancelled) {
+      setStatusMessage('Esportazione annullata.');
+      return;
+    }
+    setStatusMessage(
+      res.folderName
+        ? `Libreria esportata nella cartella «${res.folderName}» (${res.filename}).`
+        : `Libreria esportata in formato JSON (${res.filename}).`
+    );
   };
 
   const handleImportJson = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -217,19 +223,21 @@ export function LibraryPage({
     }
   };
 
-  const handleExportCatalogJson = () => {
+  const handleExportCatalogJson = async () => {
     const blob = new Blob([JSON.stringify(curricoloCatalog, null, 2)], {
       type: 'application/json',
     });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `pianorama_catalogo_curricolo_${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setStatusMessage('Catalogo Curricolo Verticale esportato in JSON (zero dati alunni).');
+    const filename = `pianorama_catalogo_curricolo_${new Date().toISOString().slice(0, 10)}.json`;
+    const res = await saveBlobToFileSystem(blob, filename, 'auto', settings);
+    if (res.cancelled) {
+      setStatusMessage('Esportazione annullata.');
+      return;
+    }
+    setStatusMessage(
+      res.folderName
+        ? `Catalogo Curricolo Verticale esportato in «${res.folderName}» (${res.filename}).`
+        : 'Catalogo Curricolo Verticale esportato in JSON (zero dati alunni).'
+    );
   };
 
   const handleSelectCatalogJsonFile = async (e: React.ChangeEvent<HTMLInputElement>) => {

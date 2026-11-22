@@ -25,13 +25,20 @@ import {
 import {
   extractNormalizedBulletEntries,
   formatCurricoloCellLines,
+  formatUnifiedCurricoloColumns,
   normalizeDocumentText,
+  type CurricoloFormattedLine,
 } from '../domain/textSanitizer';
 import {
   buildUnifiedClassDescriptionText,
   getStudentNamesByLevelBand,
 } from '../engine/classCharacteristicsEngine';
 import { buildClassCompositionIntro } from '../engine/questionnaireEngine';
+import {
+  saveBlobToFileSystem,
+  type SaveFileResult,
+  type SaveTargetMode,
+} from '../storage/saveDirectoryService';
 import { buildDocxFilename } from './docxGenerator';
 import {
   getSchoolBannerDataUrl,
@@ -329,7 +336,13 @@ export function generateProgrammazionePdfBytes(
     c1: string,
     c2: string,
     repeatLeftHeader: string,
-    opts?: { isHeader?: boolean; repeatHeaderOnBreak?: boolean; nucleoHint?: string }
+    opts?: {
+      isHeader?: boolean;
+      repeatHeaderOnBreak?: boolean;
+      nucleoHint?: string;
+      preFormattedLeft?: CurricoloFormattedLine[];
+      preFormattedRight?: CurricoloFormattedLine[];
+    }
   ) => {
     const widths = [contentWidth * 0.5, contentWidth * 0.5];
     const pad = 2;
@@ -338,19 +351,25 @@ export function generateProgrammazionePdfBytes(
     const lineH = 3.85;
 
     type StyledLine = { text: string; bold: boolean };
-    const buildStyledLines = (raw: string): StyledLine[] => {
+    const buildStyledLines = (
+      raw: string,
+      preFormatted?: CurricoloFormattedLine[]
+    ): StyledLine[] => {
       if (isHeader) {
         doc.setFont(fontFamily, 'bold');
         doc.setFontSize(fontSize);
         const wrapped = doc.splitTextToSize(pdfSafeText(raw), widths[0] - pad * 2) as string[];
         return wrapped.map((t) => ({ text: t, bold: true }));
       }
-      const formattedLines = formatCurricoloCellLines(raw, opts?.nucleoHint);
+      const formattedLines = preFormatted ?? formatCurricoloCellLines(raw, opts?.nucleoHint);
       if (formattedLines.length === 0) {
         return [{ text: '-', bold: false }];
       }
       const out: StyledLine[] = [];
-      for (const item of formattedLines) {
+      formattedLines.forEach((item, idx) => {
+        if (item.isNucleoTitle && idx > 0) {
+          out.push({ text: '', bold: false });
+        }
         doc.setFont(fontFamily, item.isNucleoTitle ? 'bold' : 'normal');
         doc.setFontSize(fontSize);
         const wrapped = doc.splitTextToSize(
@@ -364,12 +383,12 @@ export function generateProgrammazionePdfBytes(
             out.push({ text: w, bold: item.isNucleoTitle });
           }
         }
-      }
+      });
       return out.length ? out : [{ text: '-', bold: false }];
     };
 
-    const l1 = buildStyledLines(c1);
-    const l2 = buildStyledLines(c2);
+    const l1 = buildStyledLines(c1, opts?.preFormattedLeft);
+    const l2 = buildStyledLines(c2, opts?.preFormattedRight);
 
     let startLine = 0;
     const totalLines = Math.max(l1.length, l2.length, 1);
@@ -1190,14 +1209,17 @@ export function generateProgrammazionePdfBytes(
     doc.text(notaLines, marginX + 2, y + 4.5);
     y += notaH;
 
+    const unifiedCurricolo = formatUnifiedCurricoloColumns(
+      plan.curricolo.righeAbilitaConoscenze
+    );
+
     drawTwoColRow(leftCurricoloHeader, 'CONOSCENZE', leftCurricoloHeader, { isHeader: true });
-    if (plan.curricolo.righeAbilitaConoscenze.length) {
-      for (const row of plan.curricolo.righeAbilitaConoscenze) {
-        drawTwoColRow(row.abilita, row.conoscenze, leftCurricoloHeader, {
-          repeatHeaderOnBreak: true,
-          nucleoHint: row.traguardo,
-        });
-      }
+    if (unifiedCurricolo.leftLines.length > 0 || unifiedCurricolo.rightLines.length > 0) {
+      drawTwoColRow('', '', leftCurricoloHeader, {
+        repeatHeaderOnBreak: true,
+        preFormattedLeft: unifiedCurricolo.leftLines,
+        preFormattedRight: unifiedCurricolo.rightLines,
+      });
     } else {
       drawTwoColRow(' ', ' ', leftCurricoloHeader);
     }
@@ -1227,14 +1249,16 @@ export function generateProgrammazionePdfBytes(
     }
     drawParagraph(notaIntroCurricolo, { italic: true });
     y += 1.5;
+    const unifiedCurricolo = formatUnifiedCurricoloColumns(
+      plan.curricolo.righeAbilitaConoscenze
+    );
     drawTwoColRow(leftCurricoloHeader, 'CONOSCENZE', leftCurricoloHeader, { isHeader: true });
-    if (plan.curricolo.righeAbilitaConoscenze.length) {
-      for (const row of plan.curricolo.righeAbilitaConoscenze) {
-        drawTwoColRow(row.abilita, row.conoscenze, leftCurricoloHeader, {
-          repeatHeaderOnBreak: true,
-          nucleoHint: row.traguardo,
-        });
-      }
+    if (unifiedCurricolo.leftLines.length > 0 || unifiedCurricolo.rightLines.length > 0) {
+      drawTwoColRow('', '', leftCurricoloHeader, {
+        repeatHeaderOnBreak: true,
+        preFormattedLeft: unifiedCurricolo.leftLines,
+        preFormattedRight: unifiedCurricolo.rightLines,
+      });
     } else {
       drawTwoColRow('Nessuna voce inserita.', 'Nessuna conoscenza inserita.', leftCurricoloHeader);
     }
@@ -1508,21 +1532,14 @@ export function generateProgrammazionePdfBytes(
   return new Uint8Array(buffer);
 }
 
-export function downloadProgrammazionePdf(
+export async function downloadProgrammazionePdf(
   plan: Programmazione,
   settings: SchoolSettings,
-  mapping: DocxMappingSchema
-): string {
+  mapping: DocxMappingSchema,
+  saveMode: SaveTargetMode = 'auto'
+): Promise<SaveFileResult> {
   const bytes = generateProgrammazionePdfBytes(plan, settings, mapping);
   const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' });
-  const url = URL.createObjectURL(blob);
   const filename = buildDocxFilename(plan, 'pdf');
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-  return filename;
+  return saveBlobToFileSystem(blob, filename, saveMode, settings);
 }

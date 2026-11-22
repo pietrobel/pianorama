@@ -1,4 +1,13 @@
-import { ArrowLeft, Eye, EyeOff, FileDown, FileText, Printer, Sliders } from 'lucide-react';
+import {
+  ArrowLeft,
+  Eye,
+  EyeOff,
+  FileDown,
+  FileText,
+  FolderOpen,
+  Printer,
+  Sliders,
+} from 'lucide-react';
 import { useState } from 'react';
 import { DocumentSheetPreview } from '../components/DocumentSheetPreview';
 import type {
@@ -10,6 +19,7 @@ import type {
 } from '../domain/types';
 import { downloadProgrammazioneDocx } from '../export/docxGenerator';
 import { downloadProgrammazionePdf } from '../export/pdfGenerator';
+import type { SaveFileResult, SaveTargetMode } from '../storage/saveDirectoryService';
 
 interface PreviewExportPageProps {
   plan: Programmazione;
@@ -34,19 +44,30 @@ export function PreviewExportPage({
   const [exportError, setExportError] = useState<string | null>(null);
   const [busy, setBusy] = useState<'docx' | 'pdf' | null>(null);
   const [showInstitutionBanner, setShowInstitutionBanner] = useState(false);
+  const [saveMode, setSaveMode] = useState<SaveTargetMode>('auto');
 
   const activeLayout: DocumentLayoutStyle =
     plan.datiGenerali.layoutDocumento ?? settings.defaultLayoutDocumento ?? 'originale';
   const activeGenere: DocenteGenere =
     plan.datiGenerali.docenteGenere ?? settings.defaultDocenteGenere ?? 'F';
 
+  const formatSaveSuccess = (label: string, res: SaveFileResult): string => {
+    if (res.cancelled) {
+      return 'Salvataggio annullato.';
+    }
+    const base = res.folderName
+      ? `${label} salvato nella cartella «${res.folderName}»: ${res.filename}`
+      : `${label} esportato localmente: ${res.filename}`;
+    return res.warning ? `${base} (${res.warning})` : base;
+  };
+
   const handleExportDocx = async () => {
     setBusy('docx');
     setExportError(null);
     setExportMessage(null);
     try {
-      const filename = await downloadProgrammazioneDocx(plan, settings, mapping);
-      setExportMessage(`Documento Word esportato localmente: ${filename}`);
+      const res = await downloadProgrammazioneDocx(plan, settings, mapping, saveMode);
+      setExportMessage(formatSaveSuccess('Documento Word', res));
     } catch (err) {
       setExportError(
         err instanceof Error ? err.message : 'Errore durante la generazione del file DOCX.'
@@ -56,13 +77,13 @@ export function PreviewExportPage({
     }
   };
 
-  const handleExportPdf = () => {
+  const handleExportPdf = async () => {
     setBusy('pdf');
     setExportError(null);
     setExportMessage(null);
     try {
-      const filename = downloadProgrammazionePdf(plan, settings, mapping);
-      setExportMessage(`Documento PDF A4 esportato localmente: ${filename}`);
+      const res = await downloadProgrammazionePdf(plan, settings, mapping, saveMode);
+      setExportMessage(formatSaveSuccess('Documento PDF A4', res));
     } catch (err) {
       setExportError(
         err instanceof Error ? err.message : 'Errore durante la generazione del file PDF.'
@@ -190,6 +211,28 @@ export function PreviewExportPage({
             <Printer className="h-3.5 w-3.5" />
             Stampa
           </button>
+
+          <label className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
+            <FolderOpen className="h-3.5 w-3.5 text-[#1F3864] dark:text-blue-400" />
+            <span className="sr-only">Destinazione salvataggio</span>
+            <select
+              aria-label="Destinazione salvataggio"
+              value={saveMode}
+              onChange={(e) => setSaveMode(e.target.value as SaveTargetMode)}
+              className="bg-transparent text-xs font-semibold focus:outline-none"
+            >
+              <option value="auto">
+                {settings.defaultSaveFolderName
+                  ? `Cartella: ${settings.defaultSaveFolderName}`
+                  : settings.saveBehavior === 'ask_each_time'
+                  ? 'Scegli cartella...'
+                  : 'Salvataggio predefinito'}
+              </option>
+              <option value="pick_folder">Scegli cartella ora...</option>
+              <option value="browser_download">Download standard browser</option>
+            </select>
+          </label>
+
           <button
             type="button"
             disabled={busy !== null}

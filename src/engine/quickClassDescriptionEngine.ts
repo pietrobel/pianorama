@@ -1,7 +1,9 @@
 import { CLASS_QUICK_DESCRIPTIONS_ARCHIVE } from '../data/classQuickDescriptionsArchive';
+import { formatBesCompositionClause, resolveBesBreakdown } from '../domain/defaults';
 import type {
   ClassLivello,
   ClassTipologia,
+  ComposizioneClasse,
   Programmazione,
   QuickClassModeKey,
   QuickClassModeSelection,
@@ -300,44 +302,69 @@ function formatAlunniNoun(count: number): string {
 }
 
 function buildInclusionSentence(
-  bes: number,
-  disabilita: number,
+  composizione: Partial<ComposizioneClasse>,
   variantIdx: 0 | 1 | 2
 ): string {
+  const { bes, disabilita } = resolveBesBreakdown(composizione);
+  const besPhrase = formatBesCompositionClause(composizione);
+  const disPhrase = `${formatAlunniNoun(disabilita)} con disabilità certificata ai sensi della L. 104/1992`;
+
   if (bes > 0 && disabilita > 0) {
-    const besPhrase = `${formatAlunniNoun(bes)} con Bisogni Educativi Speciali (BES)`;
-    const disPhrase = `${formatAlunniNoun(disabilita)} con disabilità certificata ai sensi della L. 104/1992`;
+    const pdpRef =
+      bes === 1
+        ? 'al Piano Didattico Personalizzato (PDP)'
+        : 'ai rispettivi Piani Didattici Personalizzati (PDP)';
+    const peiRef =
+      disabilita === 1
+        ? 'al Piano Educativo Individualizzato (PEI)'
+        : 'ai rispettivi Piani Educativi Individualizzati (PEI)';
+    const pdpShort = bes === 1 ? 'al PDP' : 'ai rispettivi PDP';
+    const peiShort = disabilita === 1 ? 'al PEI' : 'ai rispettivi PEI';
+    const nelPdp =
+      bes === 1
+        ? 'nel Piano Didattico Personalizzato (PDP)'
+        : 'nei rispettivi Piani Didattici Personalizzati (PDP)';
+    const nelPei =
+      disabilita === 1
+        ? 'nel Piano Educativo Individualizzato (PEI)'
+        : 'nei rispettivi Piani Educativi Individualizzati (PEI)';
+
     if (variantIdx === 0) {
-      return `Nel gruppo classe sono inoltre presenti ${besPhrase} e ${disPhrase}, per i quali si farà riferimento rispettivamente al Piano Didattico Personalizzato (PDP) e al Piano Educativo Individualizzato (PEI), attivando strumenti compensativi, misure dispensative e strategie inclusive calibrate.`;
+      return `Nel gruppo classe sono inoltre presenti ${besPhrase} e ${disPhrase}, per i quali si farà riferimento rispettivamente ${pdpRef} e ${peiRef}, attivando strumenti compensativi, misure dispensative e strategie inclusive calibrate.`;
     }
     if (variantIdx === 1) {
-      return `Si segnala altresì la presenza di ${disPhrase} e di ${besPhrase}: per garantire il pieno successo formativo si farà riferimento ai rispettivi PEI e PDP predisposti e condivisi dal Consiglio di Classe.`;
+      return `Si segnala altresì la presenza di ${disPhrase} e di ${besPhrase}: per garantire il pieno successo formativo si farà riferimento ${peiShort} e ${pdpShort} predisposti e condivisi dal Consiglio di Classe.`;
     }
-    return `All’interno della classe figurano infine ${besPhrase} e ${disPhrase}; per il loro percorso scolastico si farà espresso riferimento alle misure personalizzate e individualizzate definite nei rispettivi PDP e PEI.`;
+    return `All’interno della classe figurano infine ${besPhrase} e ${disPhrase}; per il loro percorso scolastico si farà espresso riferimento alle misure personalizzate e individualizzate definite ${nelPdp} e ${nelPei}.`;
   }
 
   if (bes > 0) {
-    const besPhrase = `${formatAlunniNoun(bes)} con Bisogni Educativi Speciali (BES)`;
-    const refPdp = bes === 1 ? 'al rispettivo Piano Didattico Personalizzato (PDP)' : 'ai rispettivi Piani Didattici Personalizzati (PDP)';
+    const refPdp =
+      bes === 1
+        ? 'al Piano Didattico Personalizzato (PDP)'
+        : 'ai rispettivi Piani Didattici Personalizzati (PDP)';
     if (variantIdx === 0) {
       return `Nel gruppo classe è inoltre registrata la presenza di ${besPhrase}, per ${bes === 1 ? 'il quale' : 'i quali'} si farà riferimento ${refPdp} attraverso idonei strumenti compensativi e misure dispensative.`;
     }
     if (variantIdx === 1) {
-      return `All’interno della classe figurano anche ${besPhrase}: per la personalizzazione del loro apprendimento si farà riferimento ${refPdp}.`;
+      return `All’interno della classe figurano anche ${besPhrase}: per la personalizzazione ${bes === 1 ? 'del suo apprendimento' : 'del loro apprendimento'} si farà riferimento ${refPdp}.`;
     }
-    return `Si rileva inoltre la presenza di ${besPhrase}, il cui percorso sarà opportunamente calibrato facendo riferimento ${refPdp} approvato dal Consiglio di Classe.`;
+    return `Si rileva inoltre la presenza di ${besPhrase}, il cui percorso sarà opportunamente calibrato facendo riferimento ${refPdp} ${bes === 1 ? 'approvato' : 'approvati'} dal Consiglio di Classe.`;
   }
 
   if (disabilita > 0) {
-    const disPhrase = `${formatAlunniNoun(disabilita)} con disabilità certificata (L. 104/1992)`;
-    const refPei = disabilita === 1 ? 'al Piano Educativo Individualizzato (PEI)' : 'ai rispettivi Piani Educativi Individualizzati (PEI)';
+    const disPhraseShort = `${formatAlunniNoun(disabilita)} con disabilità certificata (L. 104/1992)`;
+    const refPei =
+      disabilita === 1
+        ? 'al Piano Educativo Individualizzato (PEI)'
+        : 'ai rispettivi Piani Educativi Individualizzati (PEI)';
     if (variantIdx === 0) {
-      return `Nella classe è inoltre presente ${disPhrase}, per ${disabilita === 1 ? 'il quale' : 'i quali'} si farà costante riferimento ${refPei} e alle azioni inclusive concordate dal Consiglio di Classe.`;
+      return `Nella classe è inoltre presente ${disPhraseShort}, per ${disabilita === 1 ? 'il quale' : 'i quali'} si farà costante riferimento ${refPei} e alle azioni inclusive concordate dal Consiglio di Classe.`;
     }
     if (variantIdx === 1) {
-      return `Il gruppo accoglie altresì ${disPhrase}: per obiettivi, adattamenti e verifiche si farà diretto riferimento ${refPei}.`;
+      return `Il gruppo accoglie altresì ${disPhraseShort}: per obiettivi, adattamenti e verifiche si farà diretto riferimento ${refPei}.`;
     }
-    return `All’interno del contesto classe è inserito anche ${disPhrase}; l’azione didattica si svolgerà in pieno raccordo con quanto stabilito facendo riferimento ${refPei}.`;
+    return `All’interno del contesto classe è inserito anche ${disPhraseShort}; l’azione didattica si svolgerà in pieno raccordo con quanto stabilito facendo riferimento ${refPei}.`;
   }
 
   return '';
@@ -347,7 +374,7 @@ export function buildQuickCompositionAndInclusionIntro(
   plan: Programmazione,
   variantIndex: 0 | 1 | 2
 ): string {
-  const { alunni, maschi, femmine, ripetenti, bes, disabilita = 0 } = plan.composizione;
+  const { alunni, maschi, femmine, ripetenti } = plan.composizione;
   const classeLabel = [plan.datiGenerali.classe, plan.datiGenerali.sezione]
     .filter(Boolean)
     .join(' ')
@@ -387,7 +414,7 @@ export function buildQuickCompositionAndInclusionIntro(
     }
   }
 
-  const inclusionSentence = buildInclusionSentence(bes, disabilita, variantIndex);
+  const inclusionSentence = buildInclusionSentence(plan.composizione, variantIndex);
   return [baseSentence, inclusionSentence].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
 }
 

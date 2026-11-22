@@ -38,14 +38,20 @@ import {
 } from '../domain/types';
 import {
   extractNormalizedBulletEntries,
-  formatCurricoloCellLines,
+  formatUnifiedCurricoloColumns,
   normalizeDocumentText,
+  type CurricoloFormattedLine,
 } from '../domain/textSanitizer';
 import {
   buildUnifiedClassDescriptionText,
   getStudentNamesByLevelBand,
 } from '../engine/classCharacteristicsEngine';
 import { buildClassCompositionIntro } from '../engine/questionnaireEngine';
+import {
+  saveBlobToFileSystem,
+  type SaveFileResult,
+  type SaveTargetMode,
+} from '../storage/saveDirectoryService';
 import {
   getSchoolBannerUint8Array,
   SCHOOL_BANNER_HEIGHT,
@@ -948,16 +954,29 @@ export function createProgrammazioneDocument(
     plan.curricolo.indicazioniVersione
   );
 
-  const renderCurricoloCellParagraphs = (text: string, nucleoHint?: string) => {
-    const formattedLines = formatCurricoloCellLines(text, nucleoHint);
-    if (formattedLines.length === 0) return [pText('—')];
-    return formattedLines.map((item) =>
+  const renderCurricoloFormattedLines = (
+    formattedLines: CurricoloFormattedLine[],
+    emptyFallback = '—'
+  ) => {
+    if (formattedLines.length === 0) {
+      return [
+        emptyFallback === '—'
+          ? pText('—')
+          : pText(emptyFallback, { italic: true }),
+      ];
+    }
+    return formattedLines.map((item, idx) =>
       pText(item.text, {
         bold: item.isNucleoTitle,
-        spaceAfter: item.isNucleoTitle ? 25 : 20,
+        spaceBefore: item.isNucleoTitle && idx > 0 ? 110 : 0,
+        spaceAfter: item.isNucleoTitle ? 30 : 22,
       })
     );
   };
+
+  const unifiedCurricolo = formatUnifiedCurricoloColumns(
+    plan.curricolo.righeAbilitaConoscenze
+  );
 
   const curricoloSectionBlocks: (Paragraph | Table)[] = isOriginal
     ? [
@@ -1022,20 +1041,19 @@ export function createProgrammazioneDocument(
                 }),
               ],
             }),
-            ...(plan.curricolo.righeAbilitaConoscenze.length
-              ? plan.curricolo.righeAbilitaConoscenze.map(
-                  (row) =>
-                    new TableRow({
-                      children: [
-                        cell(renderCurricoloCellParagraphs(row.abilita, row.traguardo), {
-                          widthPct: 50,
-                        }),
-                        cell(renderCurricoloCellParagraphs(row.conoscenze, row.traguardo), {
-                          widthPct: 50,
-                        }),
-                      ],
-                    })
-                )
+            ...(unifiedCurricolo.leftLines.length > 0 || unifiedCurricolo.rightLines.length > 0
+              ? [
+                  new TableRow({
+                    children: [
+                      cell(renderCurricoloFormattedLines(unifiedCurricolo.leftLines), {
+                        widthPct: 50,
+                      }),
+                      cell(renderCurricoloFormattedLines(unifiedCurricolo.rightLines), {
+                        widthPct: 50,
+                      }),
+                    ],
+                  }),
+                ]
               : [
                   new TableRow({
                     children: [
@@ -1076,20 +1094,27 @@ export function createProgrammazioneDocument(
                 }),
               ],
             }),
-            ...(plan.curricolo.righeAbilitaConoscenze.length
-              ? plan.curricolo.righeAbilitaConoscenze.map(
-                  (row) =>
-                    new TableRow({
-                      children: [
-                        cell(renderCurricoloCellParagraphs(row.abilita, row.traguardo), {
-                          widthPct: 50,
-                        }),
-                        cell(renderCurricoloCellParagraphs(row.conoscenze, row.traguardo), {
-                          widthPct: 50,
-                        }),
-                      ],
-                    })
-                )
+            ...(unifiedCurricolo.leftLines.length > 0 || unifiedCurricolo.rightLines.length > 0
+              ? [
+                  new TableRow({
+                    children: [
+                      cell(
+                        renderCurricoloFormattedLines(
+                          unifiedCurricolo.leftLines,
+                          'Nessuna voce inserita.'
+                        ),
+                        { widthPct: 50 }
+                      ),
+                      cell(
+                        renderCurricoloFormattedLines(
+                          unifiedCurricolo.rightLines,
+                          'Nessuna conoscenza inserita.'
+                        ),
+                        { widthPct: 50 }
+                      ),
+                    ],
+                  }),
+                ]
               : [
                   new TableRow({
                     children: [
@@ -1578,20 +1603,13 @@ export async function generateProgrammazioneDocxBytes(
 export async function downloadProgrammazioneDocx(
   plan: Programmazione,
   settings: SchoolSettings,
-  mapping: DocxMappingSchema
-): Promise<string> {
+  mapping: DocxMappingSchema,
+  saveMode: SaveTargetMode = 'auto'
+): Promise<SaveFileResult> {
   const bytes = await generateProgrammazioneDocxBytes(plan, settings, mapping);
   const blob = new Blob([bytes.buffer as ArrayBuffer], {
     type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   });
-  const url = URL.createObjectURL(blob);
   const filename = buildDocxFilename(plan, 'docx');
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-  return filename;
+  return saveBlobToFileSystem(blob, filename, saveMode, settings);
 }

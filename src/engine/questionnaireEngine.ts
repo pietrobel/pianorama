@@ -1,3 +1,4 @@
+import { formatBesCompositionClause, resolveBesBreakdown } from '../domain/defaults';
 import type {
   ClassQuestionnaire,
   Programmazione,
@@ -733,7 +734,8 @@ export function buildClassCompositionIntro(
   plan: Programmazione,
   variantOverride?: number
 ): string {
-  const { alunni, maschi, femmine, ripetenti, bes, disabilita = 0 } = plan.composizione;
+  const { alunni, maschi, femmine, ripetenti } = plan.composizione;
+  const { bes, disabilita } = resolveBesBreakdown(plan.composizione);
   const classeLabel = [plan.datiGenerali.classe, plan.datiGenerali.sezione]
     .filter(Boolean)
     .join(' ')
@@ -742,15 +744,39 @@ export function buildClassCompositionIntro(
   if (ripetenti > 0) {
     extraParts.push(`${ripetenti} alunn${ripetenti === 1 ? 'o' : 'i'} ripetent${ripetenti === 1 ? 'e' : 'i'}`);
   }
-  if (bes > 0) {
-    extraParts.push(
-      `${bes} alunn${bes === 1 ? 'o' : 'i'} con Bisogni Educativi Speciali (BES)`
-    );
+  const besClause = formatBesCompositionClause(plan.composizione);
+  if (besClause) {
+    extraParts.push(besClause);
   }
   if (disabilita > 0) {
     extraParts.push(
       `${disabilita} alunn${disabilita === 1 ? 'o' : 'i'} con disabilità certificata`
     );
+  }
+
+  let planAgreementSentence = '';
+  if (bes > 0 && disabilita > 0) {
+    const pdpRef =
+      bes === 1
+        ? 'al Piano Didattico Personalizzato (PDP)'
+        : 'ai rispettivi Piani Didattici Personalizzati (PDP)';
+    const peiRef =
+      disabilita === 1
+        ? 'al Piano Educativo Individualizzato (PEI)'
+        : 'ai rispettivi Piani Educativi Individualizzati (PEI)';
+    planAgreementSentence = ` Per i relativi percorsi si farà riferimento rispettivamente ${pdpRef} e ${peiRef}.`;
+  } else if (bes > 0) {
+    const pdpRef =
+      bes === 1
+        ? 'al Piano Didattico Personalizzato (PDP)'
+        : 'ai rispettivi Piani Didattici Personalizzati (PDP)';
+    planAgreementSentence = ` Per ${bes === 1 ? "l'alunno indicato" : 'gli alunni indicati'} si farà riferimento ${pdpRef}.`;
+  } else if (disabilita > 0) {
+    const peiRef =
+      disabilita === 1
+        ? 'al Piano Educativo Individualizzato (PEI)'
+        : 'ai rispettivi Piani Educativi Individualizzati (PEI)';
+    planAgreementSentence = ` Per ${disabilita === 1 ? "l'alunno indicato" : 'gli alunni indicati'} si farà riferimento ${peiRef}.`;
   }
 
   const rawVariant =
@@ -769,19 +795,22 @@ export function buildClassCompositionIntro(
 
   if (typeof alunni === 'number' && alunni > 0) {
     if (typeof maschi === 'number' && typeof femmine === 'number') {
-      return COMPOSITION_INTRO_VARIANTS[idx](classeLabel, alunni, maschi, femmine, suffix).replace(
+      return `${COMPOSITION_INTRO_VARIANTS[idx](classeLabel, alunni, maschi, femmine, suffix)}${planAgreementSentence}`.replace(
         /\s+/g,
         ' '
       );
     }
-    return `La classe ${classeLabel} è composta complessivamente da ${alunni} alunni${suffix}.`.replace(
+    return `La classe ${classeLabel} è composta complessivamente da ${alunni} alunni${suffix}.${planAgreementSentence}`.replace(
       /\s+/g,
       ' '
     );
   }
 
   if (extraParts.length > 0) {
-    return `La classe ${classeLabel} presenta una composizione varia${suffix}.`.replace(/\s+/g, ' ');
+    return `La classe ${classeLabel} presenta una composizione varia${suffix}.${planAgreementSentence}`.replace(
+      /\s+/g,
+      ' '
+    );
   }
 
   return `La classe ${classeLabel} viene esaminata nel suo assetto complessivo.`.replace(

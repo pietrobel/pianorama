@@ -27,7 +27,11 @@ import type {
   Programmazione,
   SchoolSettings,
 } from '../domain/types';
-import { normalizeDocumentText } from '../domain/textSanitizer';
+import {
+  formatCurricoloCellLines,
+  looksLikeCurriculumSentenceNotHeading,
+  normalizeDocumentText,
+} from '../domain/textSanitizer';
 import { extractRegisterOrderAndCleanName } from './gradebookImporter';
 
 export interface ImportedDocumentSummary {
@@ -1238,13 +1242,26 @@ function normalizeImportedCurricoloCellText(raw: string, nucleoHint?: string): s
 
     const matchesHint =
       Boolean(nucleoHint) && content.toLowerCase() === nucleoHint!.trim().toLowerCase();
+    const wordCount = content.split(/\s+/).filter(Boolean).length;
+    const hasFollowerWithMarker = rawLines
+      .slice(idx + 1)
+      .some((l) => CHECKBOX_OR_BULLET_CELL_RX.test(l));
+    const prevWasMarkedOrTerminated =
+      idx === 0 ||
+      CHECKBOX_OR_BULLET_CELL_RX.test(rawLines[idx - 1]) ||
+      /[.!?;:]$/.test(rawLines[idx - 1]);
     const looksLikeShortHeading =
       !hasMarker &&
-      rawLines.length > 1 &&
-      idx === 0 &&
-      content.length <= 55 &&
+      rawLines.length > idx + 1 &&
+      content.length <= 78 &&
+      wordCount <= 12 &&
       !/[.!?;,:]$/.test(content) &&
-      (matchesHint || (hasExplicitMarkers && !/^[a-zàèéìòù]/.test(content)));
+      !looksLikeCurriculumSentenceNotHeading(content) &&
+      (matchesHint ||
+        (hasExplicitMarkers &&
+          hasFollowerWithMarker &&
+          prevWasMarkedOrTerminated &&
+          !/^[a-zàèéìòù]/.test(content)));
 
     if (matchesHint || looksLikeShortHeading) {
       entries.push({ text: content, isNucleo: true });
@@ -1481,7 +1498,88 @@ function detectCurriculumRowsFromTables(tables: string[][][]): {
     }
   });
 
-  return { rows, matchedTableIndexes, detectedIndicazioni };
+  const splitRows = rows.flatMap((row) => splitUnifiedCurriculumRowByNuclei(row));
+  return { rows: splitRows, matchedTableIndexes, detectedIndicazioni };
+}
+
+function splitUnifiedCurriculumRowByNuclei(
+  row: AbilitaConoscenzaRow
+): AbilitaConoscenzaRow[] {
+  const groupSide = (raw: string, hint?: string) => {
+    const formatted = formatCurricoloCellLines(raw, hint);
+    const sections: { key: string; title?: string; items: string[] }[] = [];
+    for (const line of formatted) {
+      if (line.isPlaceholder) continue;
+      if (line.isNucleoTitle) {
+        const title = line.text.replace(/:$/, '').trim();
+        const key = title.toLowerCase();
+        const last = sections[sections.length - 1];
+        if (last && last.key === key) continue;
+        sections.push({ key, title, items: [] });
+      } else {
+        if (sections.length === 0) {
+          sections.push({ key: '', title: hint?.trim() || undefined, items: [] });
+        }
+        sections[sections.length - 1].items.push(line.text);
+      }
+    }
+    return sections.filter((s) => s.title || s.items.length > 0);
+  };
+
+  const leftSections = groupSide(row.abilita, row.traguardo);
+  const rightSections = groupSide(row.conoscenze, row.traguardo);
+  const namedLeft = leftSections.filter((s) => Boolean(s.title));
+  const namedRight = rightSections.filter((s) => Boolean(s.title));
+
+  if (namedLeft.length <= 1 && namedRight.length <= 1) {
+    return [row];
+  }
+
+  const orderedKeys: string[] = [];
+  const mergedMap = new Map<
+    string,
+    { title?: string; leftItems: string[]; rightItems: string[] }
+  >();
+
+  const pushSide = (
+    sections: { key: string; title?: string; items: string[] }[],
+    side: 'left' | 'right'
+  ) => {
+    for (const sec of sections) {
+      const k = sec.key || '__default__';
+      let entry = mergedMap.get(k);
+      if (!entry) {
+        entry = { title: sec.title, leftItems: [], rightItems: [] };
+        mergedMap.set(k, entry);
+        orderedKeys.push(k);
+      } else if (!entry.title && sec.title) {
+        entry.title = sec.title;
+      }
+      if (side === 'left') entry.leftItems.push(...sec.items);
+      else entry.rightItems.push(...sec.items);
+    }
+  };
+
+  pushSide(leftSections, 'left');
+  pushSide(rightSections, 'right');
+
+  return orderedKeys.map((k, idx) => {
+    const entry = mergedMap.get(k)!;
+    const title = entry.title;
+    return {
+      id: idx === 0 ? row.id : makeId('imp-row'),
+      competenze: idx === 0 ? row.competenze : undefined,
+      traguardo: title,
+      abilita:
+        entry.leftItems.length > 0
+          ? [title, ...entry.leftItems].filter(Boolean).join('\n')
+          : '',
+      conoscenze:
+        entry.rightItems.length > 0
+          ? [title, ...entry.rightItems].filter(Boolean).join('\n')
+          : '',
+    };
+  });
 }
 
 function shouldMergeWithPreviousRow(
@@ -1559,13 +1657,37 @@ function detectCurriculumRowsFromLines(
 
     if (parts.length === 0) continue;
 
-    // Continua riga precedente se il PDF ha spezzato celle multi-linea
+    // Continua riga precedente se il PDF ha spezzato celle multi-linea o riga unica a 2 colonne
     const prevRow = rows[rows.length - 1];
-    if (prevRow && shouldMergeWithPreviousRow(prevRow, parts, expectedCols)) {
+    if (
+      prevRow &&
+      ((expectedCols === 2 && parts.length === 2 && !prevRow.competenze) ||
+        shouldMergeWithPreviousRow(prevRow, parts, expectedCols))
+    ) {
       const joinCol = (existing: string | undefined, add: string) => {
         if (!add) return existing ?? '';
-        if (!existing) return add;
-        return /[.!?;:]$/.test(existing.trim()) ? `${existing}\n${add}` : `${existing} ${add}`;
+        const cleanAdd = add.trim();
+        if (!existing) return cleanAdd;
+        const cleanExisting = existing.trim();
+        const lastLine = cleanExisting.split('\n').pop()?.trim() ?? cleanExisting;
+        const addStartsBullet = /^(?:[•\-*▪▫◦●○☐☑☒]|\d+[.)]\s)/.test(cleanAdd);
+        const lastEndsSentence = /[.!?;:]$/.test(lastLine);
+        const lastWasBullet = /^(?:[•\-*▪▫◦●○☐☑☒]|\d+[.)]\s)/.test(lastLine);
+        const isShortHeading = (txt: string) =>
+          txt.length <= 78 &&
+          txt.split(/\s+/).filter(Boolean).length <= 12 &&
+          !/[.!?;,:]$/.test(txt) &&
+          !/^[a-zàèéìòù]/.test(txt) &&
+          !looksLikeCurriculumSentenceNotHeading(txt);
+        if (
+          addStartsBullet ||
+          isShortHeading(cleanAdd) ||
+          (!lastWasBullet && isShortHeading(lastLine)) ||
+          lastEndsSentence
+        ) {
+          return `${cleanExisting}\n${cleanAdd}`;
+        }
+        return `${cleanExisting} ${cleanAdd}`;
       };
       if (expectedCols === 3 && parts.length >= 3) {
         prevRow.competenze = joinCol(prevRow.competenze, parts[0]);
@@ -1619,12 +1741,13 @@ function detectCurriculumRowsFromLines(
   }
 
   if (rows.length > 0) {
+    const normalizedRows = rows.map((row) => ({
+      ...row,
+      abilita: normalizeImportedCurricoloCellText(row.abilita, row.traguardo),
+      conoscenze: normalizeImportedCurricoloCellText(row.conoscenze, row.traguardo),
+    }));
     return {
-      rows: rows.map((row) => ({
-        ...row,
-        abilita: normalizeImportedCurricoloCellText(row.abilita, row.traguardo),
-        conoscenze: normalizeImportedCurricoloCellText(row.conoscenze, row.traguardo),
-      })),
+      rows: normalizedRows.flatMap((r) => splitUnifiedCurriculumRowByNuclei(r)),
       detectedIndicazioni,
     };
   }

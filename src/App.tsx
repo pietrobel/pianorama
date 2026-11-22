@@ -340,7 +340,8 @@ export default function App() {
   ) => {
     const target = programmazioni.find((p) => p.id === planId);
     if (!target) return;
-    const livelli = computeLivelliFromStudents(entries);
+    const excludeDisabilita = target.analisiPartenza.escludiDisabilitaDaFasce !== false;
+    const livelli = computeLivelliFromStudents(entries, { excludeDisabilita });
     const updated: Programmazione = {
       ...target,
       analisiPartenza: {
@@ -363,20 +364,57 @@ export default function App() {
     setProgrammazioni((prev) => prev.map((p) => (p.id === planId ? updated : p)));
   };
 
+  const handleToggleExcludeDisabilitaFromRoster = async (
+    planId: string,
+    exclude: boolean
+  ) => {
+    const target = programmazioni.find((p) => p.id === planId);
+    if (!target) return;
+    const entries = target.analisiPartenza.alunniAnonimiFasce ?? [];
+    const livelli =
+      entries.length > 0
+        ? computeLivelliFromStudents(entries, { excludeDisabilita: exclude })
+        : target.analisiPartenza.livelli;
+    const updated: Programmazione = {
+      ...target,
+      analisiPartenza: {
+        ...target.analisiPartenza,
+        escludiDisabilitaDaFasce: exclude,
+        livelli,
+      },
+    };
+    await repository.saveProgrammazione(updated);
+    setProgrammazioni((prev) => prev.map((p) => (p.id === planId ? updated : p)));
+  };
+
   const handleSyncComposizioneFromRoster = async (
     planId: string,
     totaleAlunni: number,
     totaleBes: number,
-    totaleDisabilita = 0
+    totaleDisabilita = 0,
+    besConCertificazione?: number,
+    besSenzaCertificazione?: number,
+    maschi?: number,
+    femmine?: number
   ) => {
     const target = programmazioni.find((p) => p.id === planId);
     if (!target) return;
+    const isManualAlunni = Boolean(target.composizione.inserimentoManualeAlunni);
     const updated: Programmazione = {
       ...target,
       composizione: {
         ...target.composizione,
-        alunni: totaleAlunni,
+        ...(typeof maschi === 'number' ? { maschi } : {}),
+        ...(typeof femmine === 'number' ? { femmine } : {}),
+        alunni:
+          !isManualAlunni && typeof maschi === 'number' && typeof femmine === 'number'
+            ? maschi + femmine
+            : isManualAlunni && typeof target.composizione.alunni === 'number'
+            ? target.composizione.alunni
+            : totaleAlunni,
         bes: totaleBes,
+        besConCertificazione,
+        besSenzaCertificazione,
         disabilita: totaleDisabilita,
       },
     };
@@ -738,6 +776,7 @@ export default function App() {
                 settings={settings}
                 initialPlanId={route.planId}
                 onApplyToPlan={handleApplyGradebookToPlan}
+                onToggleExcludeDisabilita={handleToggleExcludeDisabilitaFromRoster}
                 onSyncComposizione={handleSyncComposizioneFromRoster}
                 onOpenPlanEditor={(planId) => setRoute({ page: 'editor', planId })}
                 onOpenSettings={() => setRoute({ page: 'settings' })}
@@ -748,6 +787,7 @@ export default function App() {
               <LibraryPage
                 items={library}
                 curricoloCatalog={curricoloCatalog}
+                settings={settings}
                 onSaveItem={handleSaveLibraryItem}
                 onBulkImport={handleBulkImportLibrary}
                 onReplaceCurricoloCatalog={handleReplaceCurricoloCatalog}

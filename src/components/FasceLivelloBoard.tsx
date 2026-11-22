@@ -13,6 +13,7 @@ import {
   Lock,
   Plus,
   RotateCcw,
+  Tag,
   Trash2,
   Users,
 } from 'lucide-react';
@@ -24,7 +25,8 @@ import type {
   DocumentLayoutStyle,
   FasciaLivelloKey,
   LivelliPartenza,
-  RiferimentoPianoAlunno,
+  SchoolSettings,
+  SessoIpotizzato,
   SoglieFasce,
 } from '../domain/types';
 import {
@@ -32,20 +34,30 @@ import {
   downloadLivelliTableDocx,
 } from '../export/livelliTableExport';
 import {
+  computeGenderCountsFromStudents,
+  computeInclusionCountsFromStudents,
   computeLivelliFromStudents,
   createManualStudentEntry,
   extractRegisterOrderAndCleanName,
+  getUnifiedPianoForCategoria,
   moveStudentToFascia,
   parseItalianDecimal,
   removeStudentFromFasce,
+  resolveStudentGender,
   restoreAutomaticFasce,
   updateStudentDetails,
 } from '../engine/gradebookImporter';
+import { estimateStudentGender } from '../engine/studentGenderEstimator';
+import type { SaveTargetMode } from '../storage/saveDirectoryService';
 
 interface FasceLivelloBoardProps {
   entries: AnonymousStudentBandEntry[];
   soglie: SoglieFasce;
   classeRilevata?: string;
+  excludeDisabilita?: boolean;
+  onToggleExcludeDisabilita?: (next: boolean) => void;
+  settings?: SchoolSettings;
+  saveMode?: SaveTargetMode;
   tableExportContext?: {
     livelliOverride?: LivelliPartenza;
     classeLabel?: string;
@@ -55,7 +67,11 @@ interface FasceLivelloBoardProps {
   onSyncComposizione?: (
     totaleAlunni: number,
     totaleBes: number,
-    totaleDisabilita?: number
+    totaleDisabilita?: number,
+    besConCertificazione?: number,
+    besSenzaCertificazione?: number,
+    maschi?: number,
+    femmine?: number
   ) => void;
 }
 
@@ -67,20 +83,74 @@ const BAND_ORDER: FasciaLivelloKey[] = [
   'da_verificare',
 ];
 
-const CATEGORIA_OPTIONS: { value: CategoriaBisognoAlunno; label: string; badge?: string }[] = [
-  { value: 'nessuno', label: 'Nessuna segnalazione' },
-  { value: 'bes', label: 'BES (Bisogni Educativi Speciali)', badge: 'BES' },
-  { value: 'dsa', label: 'DSA (Disturbi Specifici Apprendimento)', badge: 'DSA' },
-  { value: 'disabilita_pei', label: 'Disabilità / Sostegno', badge: 'PEI' },
-  { value: 'svantaggio_altro', label: 'Svantaggio linguistico / altro', badge: 'BES' },
+const UNIFIED_INCLUSION_OPTIONS: {
+  value: CategoriaBisognoAlunno;
+  label: string;
+  shortLabel: string;
+  badge?: string;
+  pianoLabel?: string;
+}[] = [
+  { value: 'nessuno', label: 'Nessun bisogno educativo speciale', shortLabel: 'Nessuno' },
+  {
+    value: 'disabilita_pei',
+    label: 'Alunno con disabilità → PEI',
+    shortLabel: 'Disabilità · PEI',
+    badge: 'Disabilità',
+    pianoLabel: 'PEI',
+  },
+  {
+    value: 'dsa',
+    label: 'Alunno con DSA (certificato) → PDP',
+    shortLabel: 'DSA · PDP',
+    badge: 'DSA',
+    pianoLabel: 'PDP',
+  },
+  {
+    value: 'bes',
+    label: 'Altri BES (senza certificazione) → PDP',
+    shortLabel: 'Altri BES · PDP',
+    badge: 'Altri BES',
+    pianoLabel: 'PDP',
+  },
 ];
 
-const PIANO_OPTIONS: { value: RiferimentoPianoAlunno; label: string }[] = [
-  { value: '', label: 'Nessun piano specifico' },
-  { value: 'PDP', label: 'PDP (Piano Didattico Personalizzato)' },
-  { value: 'PEI', label: 'PEI (Piano Educativo Individualizzato)' },
-  { value: 'Osservazione', label: 'Osservazione didattica interna' },
-];
+function normalizeCategoriaForSelect(cat?: CategoriaBisognoAlunno): CategoriaBisognoAlunno {
+  if (cat === 'svantaggio_altro') return 'bes';
+  return cat ?? 'nessuno';
+}
+
+function getGenderBadgeClasses(sesso: SessoIpotizzato): {
+  pillClass: string;
+  shortLabel: string;
+  titleLabel: string;
+  colorWord: string;
+} {
+  if (sesso === 'M') {
+    return {
+      pillClass:
+        'border-blue-300 bg-blue-100 text-blue-900 hover:bg-blue-200 dark:border-blue-800 dark:bg-blue-950/70 dark:text-blue-200',
+      shortLabel: 'M',
+      titleLabel: 'Maschio (BLU)',
+      colorWord: 'BLU',
+    };
+  }
+  if (sesso === 'F') {
+    return {
+      pillClass:
+        'border-pink-300 bg-pink-100 text-pink-900 hover:bg-pink-200 dark:border-pink-800 dark:bg-pink-950/70 dark:text-pink-200',
+      shortLabel: 'F',
+      titleLabel: 'Femmina (ROSA)',
+      colorWord: 'ROSA',
+    };
+  }
+  return {
+    pillClass:
+      'border-slate-300 bg-slate-200 text-slate-800 hover:bg-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200',
+    shortLabel: '?',
+    titleLabel: 'Indeterminato (GRIGIO)',
+    colorWord: 'GRIGIO',
+  };
+}
 
 function getBandMeta(
   key: FasciaLivelloKey,
@@ -130,6 +200,10 @@ export function FasceLivelloBoard({
   entries,
   soglie,
   classeRilevata,
+  excludeDisabilita = true,
+  onToggleExcludeDisabilita,
+  settings,
+  saveMode = 'auto',
   tableExportContext,
   onChangeEntries,
   onSyncComposizione,
@@ -140,6 +214,7 @@ export function FasceLivelloBoard({
   const [keyboardGrabbedId, setKeyboardGrabbedId] = useState<string | null>(null);
   const [dropTargetBand, setDropTargetBand] = useState<FasciaLivelloKey | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [quickTagId, setQuickTagId] = useState<string | null>(null);
   const [confirmRestore, setConfirmRestore] = useState(false);
   const [confirmClearAll, setConfirmClearAll] = useState(false);
   const [tableActionStatus, setTableActionStatus] = useState<string | null>(null);
@@ -153,10 +228,10 @@ export function FasceLivelloBoard({
   const [newMedia, setNewMedia] = useState('');
   const [newFasciaManuale, setNewFasciaManuale] = useState<FasciaLivelloKey | 'auto'>('auto');
   const [newCategoria, setNewCategoria] = useState<CategoriaBisognoAlunno>('nessuno');
-  const [newPiano, setNewPiano] = useState<RiferimentoPianoAlunno>('');
+  const [newSessoOverride, setNewSessoOverride] = useState<SessoIpotizzato | 'auto'>('auto');
   const [newNota, setNewNota] = useState('');
 
-  const computedLivelli = computeLivelliFromStudents(entries);
+  const computedLivelli = computeLivelliFromStudents(entries, { excludeDisabilita });
   const exportLivelli =
     entries.length > 0
       ? computedLivelli
@@ -167,17 +242,48 @@ export function FasceLivelloBoard({
     exportLivelli.medioAlunni +
     exportLivelli.altoAlunni;
   const livelli = computedLivelli;
-  const daVerificareCount = entries.filter((e) => e.fasciaCorrente === 'da_verificare').length;
-  const movedCount = entries.filter((e) => e.spostatoDalDocente).length;
-  const disabilitaCount = entries.filter(
-    (e) => e.categoriaInclusione === 'disabilita_pei'
-  ).length;
-  const besCount = entries.filter(
+  const daVerificareCount = entries.filter(
     (e) =>
-      e.categoriaInclusione &&
-      e.categoriaInclusione !== 'nessuno' &&
-      e.categoriaInclusione !== 'disabilita_pei'
+      e.fasciaCorrente === 'da_verificare' &&
+      !(excludeDisabilita && e.categoriaInclusione === 'disabilita_pei')
   ).length;
+  const movedCount = entries.filter((e) => e.spostatoDalDocente).length;
+  const inclusionCounts = computeInclusionCountsFromStudents(entries);
+  const genderCounts = computeGenderCountsFromStudents(entries);
+  const disabilitaCount = inclusionCounts.disabilita;
+  const besCount = inclusionCounts.totaleBes;
+  const besConCert = inclusionCounts.besConCertificazione;
+  const besSenzaCert = inclusionCounts.besSenzaCertificazione;
+
+  const handleQuickAssignInclusion = (
+    studentId: string,
+    categoriaInclusione: CategoriaBisognoAlunno
+  ) => {
+    const riferimentoPiano = getUnifiedPianoForCategoria(categoriaInclusione);
+    onChangeEntries(
+      updateStudentDetails(
+        entries,
+        studentId,
+        { categoriaInclusione, riferimentoPiano },
+        soglie
+      )
+    );
+    setQuickTagId(null);
+  };
+
+  const handleCycleStudentGender = (entry: AnonymousStudentBandEntry) => {
+    const resolved = resolveStudentGender(entry);
+    const nextSesso: SessoIpotizzato =
+      resolved.sesso === 'M' ? 'F' : resolved.sesso === 'F' ? 'INDETERMINATO' : 'M';
+    onChangeEntries(
+      updateStudentDetails(
+        entries,
+        entry.id,
+        { sessoIpotizzato: nextSesso, sessoModificatoDalDocente: true },
+        soglie
+      )
+    );
+  };
 
   const formatMedia = (m: number | null) =>
     m === null ? 'n.d.' : m.toFixed(2).replace('.', ',');
@@ -206,8 +312,10 @@ export function FasceLivelloBoard({
         media: validMedia,
         fasciaManuale: newFasciaManuale === 'auto' ? undefined : newFasciaManuale,
         categoriaInclusione: newCategoria,
-        riferimentoPiano: newPiano,
+        riferimentoPiano: getUnifiedPianoForCategoria(newCategoria),
         notaSensibileDocente: newNota,
+        sessoIpotizzato: newSessoOverride === 'auto' ? undefined : newSessoOverride,
+        sessoModificatoDalDocente: newSessoOverride !== 'auto',
       },
       soglie
     );
@@ -216,7 +324,7 @@ export function FasceLivelloBoard({
     setNewMedia('');
     setNewFasciaManuale('auto');
     setNewCategoria('nessuno');
-    setNewPiano('');
+    setNewSessoOverride('auto');
     setNewNota('');
     setShowAddForm(false);
   };
@@ -243,6 +351,7 @@ export function FasceLivelloBoard({
         entries,
         classeLabel: resolvedClasseLabel,
         layoutDocumento: tableExportContext?.layoutDocumento,
+        excludeDisabilita,
       });
       setCopiedRecently(true);
       setTimeout(() => setCopiedRecently(false), 2500);
@@ -263,13 +372,24 @@ export function FasceLivelloBoard({
     setTableActionStatus(null);
     setExportingTableDocx(true);
     try {
-      const filename = await downloadLivelliTableDocx({
+      const result = await downloadLivelliTableDocx({
         livelli: exportLivelli,
         entries,
         classeLabel: resolvedClasseLabel,
         layoutDocumento: tableExportContext?.layoutDocumento,
+        excludeDisabilita,
+        settings,
+        saveMode,
       });
-      setTableActionStatus(`Tabella fasce di livello esportata in DOCX: ${filename}`);
+      if (!result.cancelled) {
+        setTableActionStatus(
+          result.folderName
+            ? `Tabella fasce di livello salvata nella cartella «${result.folderName}»: ${result.filename}`
+            : result.warning
+            ? `Tabella fasce di livello esportata (${result.filename}) — ${result.warning}`
+            : `Tabella fasce di livello esportata in DOCX: ${result.filename}`
+        );
+      }
     } catch (err) {
       setTableActionError(
         err instanceof Error ? err.message : 'Errore durante la generazione del file DOCX della tabella.'
@@ -282,13 +402,21 @@ export function FasceLivelloBoard({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-800/40">
-        <div className="space-y-0.5 text-xs">
-          <div className="flex items-center gap-2 font-semibold text-slate-900 dark:text-slate-100">
+        <div className="space-y-1 text-xs">
+          <div className="flex flex-wrap items-center gap-2 font-semibold text-slate-900 dark:text-slate-100">
             <Lock className="h-4 w-4 text-emerald-700 dark:text-emerald-400" />
             <span>
               Elenco locale offline ({entries.length} alunni
               {classeRilevata ? ` · ${classeRilevata}` : ''}
-              {besCount > 0 ? ` · ${besCount} BES/DSA/PEI` : ''})
+              {entries.length > 0
+                ? ` · ${genderCounts.maschi} M / ${genderCounts.femmine} F${
+                    genderCounts.indeterminati > 0
+                      ? ` / ${genderCounts.indeterminati} indet.`
+                      : ''
+                  }`
+                : ''}
+              {besCount > 0 ? ` · ${besCount} BES (${besConCert} DSA, ${besSenzaCert} altri BES)` : ''}
+              {disabilitaCount > 0 ? ` · ${disabilitaCount} Disabilità` : ''})
             </span>
           </div>
           <p className="text-slate-600 dark:text-slate-400 tabular-nums">
@@ -297,7 +425,23 @@ export function FasceLivelloBoard({
             <strong>{livelli.medioAlunni}</strong> · Alto: <strong>{livelli.altoAlunni}</strong>
             {daVerificareCount > 0 ? ` · Da verificare: ${daVerificareCount}` : ''}
             {movedCount > 0 ? ` · Spostati manualmente: ${movedCount}` : ''}
+            {excludeDisabilita && disabilitaCount > 0
+              ? ` · Esclusi dalle fasce (disabilità): ${disabilitaCount}`
+              : ''}
           </p>
+          {onToggleExcludeDisabilita && (
+            <label className="inline-flex cursor-pointer items-center gap-2 pt-0.5 text-xs font-medium text-slate-700 dark:text-slate-300">
+              <input
+                type="checkbox"
+                checked={excludeDisabilita}
+                onChange={(e) => onToggleExcludeDisabilita(e.target.checked)}
+                className="h-3.5 w-3.5 accent-[#1F3864]"
+              />
+              <span>
+                Escludi alunni con disabilità dalle fasce di livello (predefinito)
+              </span>
+            </label>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -351,11 +495,21 @@ export function FasceLivelloBoard({
           {onSyncComposizione && entries.length > 0 && (
             <button
               type="button"
-              onClick={() => onSyncComposizione(entries.length, besCount, disabilitaCount)}
+              onClick={() =>
+                onSyncComposizione(
+                  entries.length,
+                  besCount,
+                  disabilitaCount,
+                  besConCert,
+                  besSenzaCert,
+                  genderCounts.maschi,
+                  genderCounts.femmine
+                )
+              }
               className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
             >
               <Users className="h-3.5 w-3.5" />
-              Aggiorna Composizione ({entries.length} / {besCount} BES / {disabilitaCount} Dis.)
+              Aggiorna Composizione ({entries.length} · {genderCounts.maschi}M/{genderCounts.femmine}F · {besCount} BES · {disabilitaCount} Dis.)
             </button>
           )}
 
@@ -420,15 +574,25 @@ export function FasceLivelloBoard({
         >
           <label className="block">
             <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Nome e cognome (opzionale)
+              Cognome e nome (opzionale)
             </span>
             <input
               type="text"
               value={newNome}
               onChange={(e) => setNewNome(e.target.value)}
-              placeholder="es. Rossi Mario"
+              placeholder="es. ROSSI MARIO"
               className="mt-1 w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-950"
             />
+            {newNome.trim() && newSessoOverride === 'auto' && (() => {
+              const est = estimateStudentGender(newNome);
+              const meta = getGenderBadgeClasses(est.sesso);
+              return (
+                <span className={`mt-1 inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-semibold ${meta.pillClass}`}>
+                  Sesso stimato: {est.sesso} ({meta.colorWord}) · {est.confidenza}
+                  {est.nota ? ` — ${est.nota}` : ''}
+                </span>
+              );
+            })()}
           </label>
           <label className="block">
             <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
@@ -461,14 +625,14 @@ export function FasceLivelloBoard({
           </label>
           <label className="block">
             <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Inclusione / bisogni
+              Bisogno e piano (PEI / PDP)
             </span>
             <select
               value={newCategoria}
               onChange={(e) => setNewCategoria(e.target.value as CategoriaBisognoAlunno)}
               className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-950"
             >
-              {CATEGORIA_OPTIONS.map((opt) => (
+              {UNIFIED_INCLUSION_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
                 </option>
@@ -477,18 +641,19 @@ export function FasceLivelloBoard({
           </label>
           <label className="block">
             <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Piano personalizzato
+              Genere alunno (stima o manuale)
             </span>
             <select
-              value={newPiano}
-              onChange={(e) => setNewPiano(e.target.value as RiferimentoPianoAlunno)}
+              value={newSessoOverride}
+              onChange={(e) =>
+                setNewSessoOverride(e.target.value as SessoIpotizzato | 'auto')
+              }
               className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-950"
             >
-              {PIANO_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
+              <option value="auto">Automatico da Cognome Nome</option>
+              <option value="M">M — Maschio (BLU)</option>
+              <option value="F">F — Femmina (ROSA)</option>
+              <option value="INDETERMINATO">INDETERMINATO (GRIGIO)</option>
             </select>
           </label>
           <label className="block sm:col-span-2 lg:col-span-3">
@@ -557,7 +722,11 @@ export function FasceLivelloBoard({
                     {meta.title}
                   </h4>
                   <span className="font-mono-num text-sm font-bold text-slate-900 dark:text-slate-100">
-                    {bandItems.length}
+                    {
+                      bandItems.filter(
+                        (e) => !(excludeDisabilita && e.categoriaInclusione === 'disabilita_pei')
+                      ).length
+                    }
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">{meta.subtitle}</p>
@@ -579,10 +748,16 @@ export function FasceLivelloBoard({
                       : '';
                     const displayName =
                       showNames && cleanedDisplay ? cleanedDisplay : entry.labelAnonimo;
-                    const catMeta = CATEGORIA_OPTIONS.find(
-                      (c) => c.value === entry.categoriaInclusione
+                    const catNormalized = normalizeCategoriaForSelect(entry.categoriaInclusione);
+                    const catMeta = UNIFIED_INCLUSION_OPTIONS.find(
+                      (c) => c.value === catNormalized
                     );
+                    const genderResolved = resolveStudentGender(entry);
+                    const genderBadge = getGenderBadgeClasses(genderResolved.sesso);
                     const isExpanded = expandedId === entry.id;
+                    const isQuickTagOpen = quickTagId === entry.id;
+                    const isExcludedFromBands =
+                      excludeDisabilita && entry.categoriaInclusione === 'disabilita_pei';
                     const hasSensitiveInfo =
                       Boolean(catMeta?.badge) ||
                       Boolean(entry.riferimentoPiano) ||
@@ -591,7 +766,7 @@ export function FasceLivelloBoard({
                     return (
                       <div
                         key={entry.id}
-                        draggable={!isExpanded}
+                        draggable={!isExpanded && !isQuickTagOpen}
                         tabIndex={0}
                         aria-grabbed={isGrabbed}
                         aria-label={`${displayName}, media ${formatMedia(entry.media)}, fascia ${meta.title}${
@@ -615,6 +790,7 @@ export function FasceLivelloBoard({
                             );
                           } else if (e.key === 'Escape') {
                             setKeyboardGrabbedId(null);
+                            setQuickTagId(null);
                           } else if (e.key === 'ArrowRight') {
                             e.preventDefault();
                             stepMove(entry, 1);
@@ -626,12 +802,25 @@ export function FasceLivelloBoard({
                         className={`rounded-lg border p-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#1F3864] ${
                           isGrabbed
                             ? 'border-[#1F3864] bg-blue-50/70 dark:border-blue-400 dark:bg-blue-950/40'
+                            : isExcludedFromBands
+                            ? 'border-dashed border-amber-300 bg-amber-50/30 opacity-75 dark:border-amber-800 dark:bg-amber-950/15'
                             : 'border-slate-200 bg-slate-50/80 dark:border-slate-800 dark:bg-slate-800/40'
                         }`}
                       >
                         <div className="flex items-start justify-between gap-1.5">
                           <div className="flex min-w-0 items-center gap-1.5 font-semibold text-slate-900 dark:text-slate-100">
                             <GripVertical className="h-3.5 w-3.5 shrink-0 cursor-grab text-slate-400" />
+                            <button
+                              type="button"
+                              onClick={() => handleCycleStudentGender(entry)}
+                              title={`${genderBadge.titleLabel} · Confidenza: ${genderResolved.confidenza}${
+                                genderResolved.nota ? ` (${genderResolved.nota})` : ''
+                              } — Clicca per cambiare M/F/?`}
+                              aria-label={`Sesso ipotizzato per ${displayName}: ${genderResolved.sesso}. Clicca per modificare`}
+                              className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-bold transition ${genderBadge.pillClass}`}
+                            >
+                              {genderBadge.shortLabel}
+                            </button>
                             <span className="truncate" title={displayName}>
                               {displayName}
                             </span>
@@ -641,26 +830,74 @@ export function FasceLivelloBoard({
                           </span>
                         </div>
 
-                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                        {/* Pulsante evidente per indicazione bisogno & PEI/PDP */}
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setQuickTagId((prev) => (prev === entry.id ? null : entry.id))
+                            }
+                            aria-label={`Abbina bisogno e piano per ${displayName}`}
+                            className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-bold transition ${
+                              catNormalized === 'disabilita_pei'
+                                ? 'border-amber-400 bg-amber-100 text-amber-950 hover:bg-amber-200 dark:border-amber-700 dark:bg-amber-950/70 dark:text-amber-200'
+                                : catNormalized === 'dsa'
+                                ? 'border-indigo-300 bg-indigo-100 text-indigo-950 hover:bg-indigo-200 dark:border-indigo-700 dark:bg-indigo-950/70 dark:text-indigo-200'
+                                : catNormalized === 'bes'
+                                ? 'border-sky-300 bg-sky-100 text-sky-950 hover:bg-sky-200 dark:border-sky-700 dark:bg-sky-950/70 dark:text-sky-200'
+                                : 'border-slate-300 bg-white text-slate-700 hover:border-[#1F3864] hover:text-[#1F3864] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
+                            }`}
+                          >
+                            <Tag className="h-3 w-3" />
+                            <span>
+                              {catMeta?.badge
+                                ? `${catMeta.badge} · ${catMeta.pianoLabel}`
+                                : '+ Disabilità / DSA / BES'}
+                            </span>
+                          </button>
+
                           {showNames && entry.nominativo?.trim() && (
-                            <span>({entry.labelAnonimo})</span>
-                          )}
-                          {catMeta?.badge && (
-                            <span className="rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-                              {catMeta.badge}
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                              ({entry.labelAnonimo})
                             </span>
                           )}
-                          {entry.riferimentoPiano && (
-                            <span className="rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-[#1F3864] dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-200">
-                              {entry.riferimentoPiano}
+                          {isExcludedFromBands && (
+                            <span className="rounded border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                              Escluso dalle fasce
                             </span>
                           )}
                           {entry.spostatoDalDocente && (
-                            <span className="font-semibold text-amber-700 dark:text-amber-300">
+                            <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300">
                               · spostato dal docente
                             </span>
                           )}
                         </div>
+
+                        {isQuickTagOpen && (
+                          <div className="mt-1.5 rounded-md border border-blue-200 bg-white p-1.5 dark:border-blue-900 dark:bg-slate-950">
+                            <label className="block">
+                              <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-300">
+                                Bisogno e piano (PEI / PDP)
+                              </span>
+                              <select
+                                value={catNormalized}
+                                onChange={(e) =>
+                                  handleQuickAssignInclusion(
+                                    entry.id,
+                                    e.target.value as CategoriaBisognoAlunno
+                                  )
+                                }
+                                className="mt-0.5 w-full rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium dark:border-slate-700 dark:bg-slate-900"
+                              >
+                                {UNIFIED_INCLUSION_OPTIONS.map((opt) => (
+                                  <option key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          </div>
+                        )}
 
                         {entry.notaSensibileDocente && !isExpanded && (
                           <p className="mt-1 line-clamp-2 text-[11px] italic text-slate-600 dark:text-slate-300">
@@ -757,31 +994,32 @@ export function FasceLivelloBoard({
                               />
                             </label>
 
-                            <div className="grid grid-cols-2 gap-1.5">
+                            <div className="grid grid-cols-1 gap-1.5">
                               <label className="block">
                                 <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300">
-                                  Inclusione
+                                  Bisogno e piano (PEI / PDP)
                                 </span>
                                 <select
-                                  value={entry.categoriaInclusione ?? 'nessuno'}
-                                  onChange={(e) =>
+                                  value={catNormalized}
+                                  onChange={(e) => {
+                                    const nextCat = e.target.value as CategoriaBisognoAlunno;
                                     onChangeEntries(
                                       updateStudentDetails(
                                         entries,
                                         entry.id,
                                         {
-                                          categoriaInclusione: e.target
-                                            .value as CategoriaBisognoAlunno,
+                                          categoriaInclusione: nextCat,
+                                          riferimentoPiano: getUnifiedPianoForCategoria(nextCat),
                                         },
                                         soglie
                                       )
-                                    )
-                                  }
+                                    );
+                                  }}
                                   className="mt-0.5 w-full rounded border border-slate-300 bg-white px-1.5 py-1 text-[11px] dark:border-slate-700 dark:bg-slate-950"
                                 >
-                                  {CATEGORIA_OPTIONS.map((opt) => (
+                                  {UNIFIED_INCLUSION_OPTIONS.map((opt) => (
                                     <option key={opt.value} value={opt.value}>
-                                      {opt.badge || 'Nessuno'}
+                                      {opt.label}
                                     </option>
                                   ))}
                                 </select>
@@ -789,18 +1027,19 @@ export function FasceLivelloBoard({
 
                               <label className="block">
                                 <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300">
-                                  Piano
+                                  Sesso ipotizzato ({genderBadge.colorWord} · Conf. {genderResolved.confidenza}
+                                  {genderResolved.nota ? ` — ${genderResolved.nota}` : ''})
                                 </span>
                                 <select
-                                  value={entry.riferimentoPiano ?? ''}
+                                  value={genderResolved.sesso}
                                   onChange={(e) =>
                                     onChangeEntries(
                                       updateStudentDetails(
                                         entries,
                                         entry.id,
                                         {
-                                          riferimentoPiano: e.target
-                                            .value as RiferimentoPianoAlunno,
+                                          sessoIpotizzato: e.target.value as SessoIpotizzato,
+                                          sessoModificatoDalDocente: true,
                                         },
                                         soglie
                                       )
@@ -808,10 +1047,9 @@ export function FasceLivelloBoard({
                                   }
                                   className="mt-0.5 w-full rounded border border-slate-300 bg-white px-1.5 py-1 text-[11px] dark:border-slate-700 dark:bg-slate-950"
                                 >
-                                  <option value="">Nessuno</option>
-                                  <option value="PDP">PDP</option>
-                                  <option value="PEI">PEI</option>
-                                  <option value="Osservazione">Osservaz.</option>
+                                  <option value="M">M — Maschio (BLU)</option>
+                                  <option value="F">F — Femmina (ROSA)</option>
+                                  <option value="INDETERMINATO">INDETERMINATO (GRIGIO)</option>
                                 </select>
                               </label>
                             </div>

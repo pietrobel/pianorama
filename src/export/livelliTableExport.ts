@@ -16,14 +16,23 @@ import type {
   AnonymousStudentBandEntry,
   DocumentLayoutStyle,
   LivelliPartenza,
+  SchoolSettings,
 } from '../domain/types';
 import { sortAndCleanStudentNamesForBands } from '../engine/classCharacteristicsEngine';
+import {
+  saveBlobToFileSystem,
+  type SaveFileResult,
+  type SaveTargetMode,
+} from '../storage/saveDirectoryService';
 
 export interface LivelliTableExportInput {
   livelli: LivelliPartenza;
   entries?: AnonymousStudentBandEntry[];
   layoutDocumento?: DocumentLayoutStyle;
   classeLabel?: string;
+  excludeDisabilita?: boolean;
+  settings?: SchoolSettings;
+  saveMode?: SaveTargetMode;
 }
 
 type FourBandKey = 'basso' | 'medio_basso' | 'medio' | 'alto';
@@ -52,13 +61,14 @@ function escapeHtml(text: string): string {
  */
 export function buildLivelliTableColumns(
   livelli: LivelliPartenza,
-  entries?: AnonymousStudentBandEntry[]
+  entries?: AnonymousStudentBandEntry[],
+  excludeDisabilita = true
 ): {
   columns: BandColumnSpec[];
   hasAnyNames: boolean;
   totalNamedExported: number;
 } {
-  const bands = sortAndCleanStudentNamesForBands(entries ?? []);
+  const bands = sortAndCleanStudentNamesForBands(entries ?? [], { excludeDisabilita });
   const totalNamedExported =
     bands.basso.length +
     bands.medio_basso.length +
@@ -107,7 +117,11 @@ export function buildLivelliTableColumns(
 export function buildLivelliTableClipboardContent(
   input: LivelliTableExportInput
 ): { html: string; plainText: string } {
-  const { columns, hasAnyNames } = buildLivelliTableColumns(input.livelli, input.entries);
+  const { columns, hasAnyNames } = buildLivelliTableColumns(
+    input.livelli,
+    input.entries,
+    input.excludeDisabilita ?? true
+  );
   const isOriginal = (input.layoutDocumento ?? 'originale') === 'originale';
   const cleanLabel = (input.classeLabel ?? '').trim();
 
@@ -263,7 +277,11 @@ export async function copyLivelliTableToClipboard(
 export function createLivelliTableOnlyDocument(
   input: LivelliTableExportInput
 ): Document {
-  const { columns, hasAnyNames } = buildLivelliTableColumns(input.livelli, input.entries);
+  const { columns, hasAnyNames } = buildLivelliTableColumns(
+    input.livelli,
+    input.entries,
+    input.excludeDisabilita ?? true
+  );
   const isOriginal = (input.layoutDocumento ?? 'originale') === 'originale';
   const font = isOriginal ? 'Arial' : 'Garamond';
   const accentHex = isOriginal ? '000000' : '1F3864';
@@ -441,19 +459,16 @@ export function buildLivelliTableDocxFilename(classeLabel?: string): string {
 
 export async function downloadLivelliTableDocx(
   input: LivelliTableExportInput
-): Promise<string> {
+): Promise<SaveFileResult> {
   const bytes = await generateLivelliTableDocxBytes(input);
   const blob = new Blob([bytes.buffer as ArrayBuffer], {
     type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   });
-  const url = URL.createObjectURL(blob);
   const filename = buildLivelliTableDocxFilename(input.classeLabel);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-  return filename;
+  return saveBlobToFileSystem(
+    blob,
+    filename,
+    input.saveMode ?? 'auto',
+    input.settings
+  );
 }

@@ -1,4 +1,12 @@
-import { CheckCircle2, Download, GitMerge, Lock, ShieldCheck, Upload } from 'lucide-react';
+import {
+  CheckCircle2,
+  Download,
+  FolderOpen,
+  GitMerge,
+  Lock,
+  ShieldCheck,
+  Upload,
+} from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { ConfirmModal } from '../components/ConfirmModal';
 import {
@@ -19,6 +27,7 @@ import type {
   Programmazione,
   SchoolSettings,
 } from '../domain/types';
+import { saveBlobToFileSystem, type SaveTargetMode } from '../storage/saveDirectoryService';
 
 interface BackupPageProps {
   settings: SchoolSettings;
@@ -46,6 +55,7 @@ export function BackupPage({
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportSuccess, setExportSuccess] = useState<string | null>(null);
   const [busyExport, setBusyExport] = useState(false);
+  const [saveMode, setSaveMode] = useState<SaveTargetMode>('auto');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pendingEnvelope, setPendingEnvelope] = useState<PianoramaBackupEnvelope | null>(null);
@@ -90,22 +100,22 @@ export function BackupPage({
         type: 'application/json',
       });
       const filename = `pianorama_backup_${new Date().toISOString().slice(0, 10)}.pianorama`;
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      const result = await saveBlobToFileSystem(blob, filename, saveMode, settings);
+      if (result.cancelled) {
+        setExportSuccess('Salvataggio del backup annullato.');
+        return;
+      }
 
       await onMarkBackupDone();
       setExportPassword('');
       setExportPasswordConfirm('');
+      const where = result.folderName
+        ? `nella cartella «${result.folderName}»`
+        : 'sul dispositivo';
       setExportSuccess(
-        `Backup salvato sul dispositivo (${filename})${
+        `Backup salvato ${where} (${result.filename})${
           encryptEnabled ? ' con cifratura AES-GCM 256-bit.' : ' in formato JSON in chiaro.'
-        }`
+        }${result.warning ? ` ${result.warning}` : ''}`
       );
     } catch (err) {
       setExportError(err instanceof Error ? err.message : 'Errore durante l’esportazione.');
@@ -286,13 +296,35 @@ export function BackupPage({
             </p>
           )}
 
+          <label className="block">
+            <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300">
+              <FolderOpen className="h-3.5 w-3.5 text-[#1F3864] dark:text-blue-400" />
+              Cartella di salvataggio
+            </span>
+            <select
+              value={saveMode}
+              onChange={(e) => setSaveMode(e.target.value as SaveTargetMode)}
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-950"
+            >
+              <option value="auto">
+                {settings.defaultSaveFolderName
+                  ? `Cartella predefinita: ${settings.defaultSaveFolderName}`
+                  : settings.saveBehavior === 'ask_each_time'
+                  ? 'Chiedi la cartella al salvataggio'
+                  : 'Impostazione predefinita (Download / Cartella)'}
+              </option>
+              <option value="pick_folder">Scegli cartella ora...</option>
+              <option value="browser_download">Download standard del browser</option>
+            </select>
+          </label>
+
           <button
             type="submit"
             disabled={busyExport}
             className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#1F3864] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#172b4d] disabled:opacity-60"
           >
             {encryptEnabled ? <Lock className="h-4 w-4" /> : <Download className="h-4 w-4" />}
-            {busyExport ? 'Generazione archivio...' : 'Scarica file .pianorama'}
+            {busyExport ? 'Generazione archivio...' : 'Salva file .pianorama'}
           </button>
         </form>
 

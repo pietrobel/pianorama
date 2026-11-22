@@ -6,8 +6,11 @@ import type {
   FasciaLivelloKey,
   LivelliPartenza,
   RiferimentoPianoAlunno,
+  SessoConfidenza,
+  SessoIpotizzato,
   SoglieFasce,
 } from '../domain/types';
+import { estimateStudentGender } from './studentGenderEstimator';
 
 export interface GradebookImportOptions {
   keepNames?: boolean;
@@ -234,8 +237,10 @@ export function classifyMediaToFascia(
 }
 
 export function computeLivelliFromStudents(
-  entries: AnonymousStudentBandEntry[]
+  entries: AnonymousStudentBandEntry[],
+  options?: { excludeDisabilita?: boolean }
 ): LivelliPartenza {
+  const excludeDisabilita = options?.excludeDisabilita ?? true;
   const livelli: LivelliPartenza = {
     bassoAlunni: 0,
     medioBassoAlunni: 0,
@@ -244,6 +249,9 @@ export function computeLivelliFromStudents(
   };
 
   for (const entry of entries) {
+    if (excludeDisabilita && entry.categoriaInclusione === 'disabilita_pei') {
+      continue;
+    }
     switch (entry.fasciaCorrente) {
       case 'basso':
         livelli.bassoAlunni += 1;
@@ -264,6 +272,114 @@ export function computeLivelliFromStudents(
   }
 
   return livelli;
+}
+
+export function getUnifiedPianoForCategoria(
+  categoria?: CategoriaBisognoAlunno
+): RiferimentoPianoAlunno {
+  if (categoria === 'disabilita_pei') return 'PEI';
+  if (categoria === 'dsa' || categoria === 'bes' || categoria === 'svantaggio_altro') {
+    return 'PDP';
+  }
+  return '';
+}
+
+export interface StudentGenderCounts {
+  maschi: number;
+  femmine: number;
+  indeterminati: number;
+  totale: number;
+}
+
+export function resolveStudentGender(entry: AnonymousStudentBandEntry): {
+  sesso: SessoIpotizzato;
+  confidenza: SessoConfidenza;
+  nota: string;
+  modificatoDalDocente: boolean;
+} {
+  if (entry.sessoIpotizzato) {
+    return {
+      sesso: entry.sessoIpotizzato,
+      confidenza: entry.sessoConfidenza ?? 'BASSA',
+      nota: entry.sessoNota ?? '',
+      modificatoDalDocente: Boolean(entry.sessoModificatoDalDocente),
+    };
+  }
+  const name = entry.nominativo?.trim() ?? '';
+  if (!name) {
+    return {
+      sesso: 'INDETERMINATO',
+      confidenza: 'BASSA',
+      nota: 'nominativo non presente',
+      modificatoDalDocente: false,
+    };
+  }
+  const est = estimateStudentGender(name);
+  return {
+    sesso: est.sesso,
+    confidenza: est.confidenza,
+    nota: est.nota,
+    modificatoDalDocente: false,
+  };
+}
+
+export function computeGenderCountsFromStudents(
+  entries: AnonymousStudentBandEntry[]
+): StudentGenderCounts {
+  let maschi = 0;
+  let femmine = 0;
+  let indeterminati = 0;
+
+  for (const entry of entries) {
+    const { sesso } = resolveStudentGender(entry);
+    if (sesso === 'M') maschi += 1;
+    else if (sesso === 'F') femmine += 1;
+    else indeterminati += 1;
+  }
+
+  return {
+    maschi,
+    femmine,
+    indeterminati,
+    totale: entries.length,
+  };
+}
+
+export interface StudentInclusionCounts {
+  totaleAlunni: number;
+  besConCertificazione: number;
+  besSenzaCertificazione: number;
+  totaleBes: number;
+  disabilita: number;
+}
+
+export function computeInclusionCountsFromStudents(
+  entries: AnonymousStudentBandEntry[]
+): StudentInclusionCounts {
+  let besConCertificazione = 0;
+  let besSenzaCertificazione = 0;
+  let disabilita = 0;
+
+  for (const entry of entries) {
+    if (entry.categoriaInclusione === 'disabilita_pei') {
+      disabilita += 1;
+    } else if (entry.categoriaInclusione === 'dsa') {
+      besConCertificazione += 1;
+    } else if (
+      entry.categoriaInclusione === 'bes' ||
+      entry.categoriaInclusione === 'svantaggio_altro'
+    ) {
+      besSenzaCertificazione += 1;
+    }
+  }
+
+  return {
+    totaleAlunni: entries.length,
+    besConCertificazione,
+    besSenzaCertificazione,
+    totaleBes: besConCertificazione + besSenzaCertificazione,
+    disabilita,
+  };
 }
 
 export function moveStudentToFascia(
@@ -312,6 +428,8 @@ export function createManualStudentEntry(
     riferimentoPiano?: RiferimentoPianoAlunno;
     notaSensibileDocente?: string;
     fasciaManuale?: FasciaLivelloKey;
+    sessoIpotizzato?: SessoIpotizzato;
+    sessoModificatoDalDocente?: boolean;
   },
   soglie: SoglieFasce = DEFAULT_SOGLIE_FASCE
 ): AnonymousStudentBandEntry {
@@ -320,6 +438,20 @@ export function createManualStudentEntry(
   const auto = classifyMediaToFascia(data.media, soglie);
   const current = data.fasciaManuale ?? auto;
   const parsed = extractRegisterOrderAndCleanName(data.nominativo ?? '');
+  const categoria = data.categoriaInclusione ?? 'nessuno';
+  const piano = data.riferimentoPiano ?? getUnifiedPianoForCategoria(categoria);
+  const estimated = parsed.cleanName ? estimateStudentGender(parsed.cleanName) : null;
+  const sessoIpotizzato: SessoIpotizzato | undefined =
+    data.sessoIpotizzato ?? estimated?.sesso;
+  const sessoConfidenza: SessoConfidenza | undefined = data.sessoIpotizzato
+    ? 'ALTA'
+    : estimated?.confidenza;
+  const sessoNota: string | undefined = data.sessoIpotizzato
+    ? data.sessoModificatoDalDocente
+      ? 'Impostato manualmente dal docente'
+      : undefined
+    : estimated?.nota;
+
   return {
     id:
       typeof crypto !== 'undefined' && crypto.randomUUID
@@ -333,9 +465,13 @@ export function createManualStudentEntry(
     fasciaAutomatica: auto,
     fasciaCorrente: current,
     spostatoDalDocente: current !== auto,
-    categoriaInclusione: data.categoriaInclusione ?? 'nessuno',
-    riferimentoPiano: data.riferimentoPiano ?? '',
+    categoriaInclusione: categoria,
+    riferimentoPiano: piano,
     notaSensibileDocente: data.notaSensibileDocente?.trim() ?? '',
+    sessoIpotizzato,
+    sessoConfidenza,
+    sessoNota,
+    sessoModificatoDalDocente: Boolean(data.sessoIpotizzato && data.sessoModificatoDalDocente),
   };
 }
 
@@ -348,6 +484,8 @@ export function updateStudentDetails(
     categoriaInclusione?: CategoriaBisognoAlunno;
     riferimentoPiano?: RiferimentoPianoAlunno;
     notaSensibileDocente?: string;
+    sessoIpotizzato?: SessoIpotizzato;
+    sessoModificatoDalDocente?: boolean;
   },
   soglie: SoglieFasce = DEFAULT_SOGLIE_FASCE
 ): AnonymousStudentBandEntry[] {
@@ -360,6 +498,40 @@ export function updateStudentDetails(
       patch.nominativo !== undefined
         ? extractRegisterOrderAndCleanName(patch.nominativo)
         : null;
+    const nextCategoria =
+      patch.categoriaInclusione !== undefined
+        ? patch.categoriaInclusione
+        : entry.categoriaInclusione;
+    const nextPiano =
+      patch.riferimentoPiano !== undefined
+        ? patch.riferimentoPiano
+        : patch.categoriaInclusione !== undefined
+        ? getUnifiedPianoForCategoria(patch.categoriaInclusione)
+        : entry.riferimentoPiano;
+
+    let nextSesso = entry.sessoIpotizzato;
+    let nextConf = entry.sessoConfidenza;
+    let nextSessoNota = entry.sessoNota;
+    let nextSessoManual = entry.sessoModificatoDalDocente;
+
+    if (patch.sessoIpotizzato !== undefined) {
+      nextSesso = patch.sessoIpotizzato;
+      nextConf = 'ALTA';
+      nextSessoManual = patch.sessoModificatoDalDocente ?? true;
+      nextSessoNota = nextSessoManual ? 'Impostato manualmente dal docente' : '';
+    } else if (parsedName !== null && !entry.sessoModificatoDalDocente) {
+      if (parsedName.cleanName) {
+        const est = estimateStudentGender(parsedName.cleanName);
+        nextSesso = est.sesso;
+        nextConf = est.confidenza;
+        nextSessoNota = est.nota;
+      } else {
+        nextSesso = undefined;
+        nextConf = undefined;
+        nextSessoNota = undefined;
+      }
+    }
+
     return {
       ...entry,
       ordineRegistro: parsedName
@@ -370,18 +542,16 @@ export function updateStudentDetails(
       fasciaAutomatica: nextAuto,
       fasciaCorrente: nextCurrent,
       spostatoDalDocente: nextCurrent !== nextAuto,
-      categoriaInclusione:
-        patch.categoriaInclusione !== undefined
-          ? patch.categoriaInclusione
-          : entry.categoriaInclusione,
-      riferimentoPiano:
-        patch.riferimentoPiano !== undefined
-          ? patch.riferimentoPiano
-          : entry.riferimentoPiano,
+      categoriaInclusione: nextCategoria,
+      riferimentoPiano: nextPiano,
       notaSensibileDocente:
         patch.notaSensibileDocente !== undefined
           ? patch.notaSensibileDocente
           : entry.notaSensibileDocente,
+      sessoIpotizzato: nextSesso,
+      sessoConfidenza: nextConf,
+      sessoNota: nextSessoNota,
+      sessoModificatoDalDocente: nextSessoManual,
     };
   });
 }
@@ -696,6 +866,7 @@ function parseSingleWorksheet(
 
     const { cleanName, registerOrder } = extractRegisterOrderAndCleanName(alunnoRaw);
     const fascia = classifyMediaToFascia(media, soglie);
+    const genderEst = keepNames && cleanName ? estimateStudentGender(cleanName) : null;
     entries.push({
       id: `alunno-${counter}`,
       ordine: counter,
@@ -709,6 +880,10 @@ function parseSingleWorksheet(
       categoriaInclusione: 'nessuno',
       riferimentoPiano: '',
       notaSensibileDocente: '',
+      sessoIpotizzato: genderEst?.sesso,
+      sessoConfidenza: genderEst?.confidenza,
+      sessoNota: genderEst?.nota,
+      sessoModificatoDalDocente: false,
     });
   }
 
@@ -757,4 +932,46 @@ export function parseGradebookBuffer(
   throw new Error(
     'Intestazione del registro non riconosciuta: assicurarsi che il foglio contenga la colonna "Alunno" / "Alunni" / "Cognome" (e "Nome") e la colonna "Media" o le colonne dei voti.'
   );
+}
+
+/**
+ * Converte un elenco testuale di alunni ("COGNOME NOME", uno per riga) in voci locali
+ * pronte per le fasce di livello, l'abbinamento BES/DSA/PEI e la stima automatica del sesso.
+ */
+export function parseStudentListText(
+  rawText: string,
+  soglie: SoglieFasce = DEFAULT_SOGLIE_FASCE,
+  existingEntries: AnonymousStudentBandEntry[] = []
+): AnonymousStudentBandEntry[] {
+  const lines = (rawText ?? '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const created: AnonymousStudentBandEntry[] = [];
+  let running = [...existingEntries];
+
+  for (const line of lines) {
+    const normalizedUpper = line.toUpperCase().replace(/\s+/g, ' ');
+    if (
+      normalizedUpper === 'COGNOME NOME' ||
+      normalizedUpper === 'ALUNNO' ||
+      normalizedUpper === 'ALUNNI' ||
+      normalizedUpper === 'NOMINATIVO' ||
+      /^\d+(?:[.,]\d+)?$/.test(line)
+    ) {
+      continue;
+    }
+    const { cleanName } = extractRegisterOrderAndCleanName(line);
+    if (!cleanName) continue;
+    const entry = createManualStudentEntry(
+      running,
+      { nominativo: line, media: null },
+      soglie
+    );
+    created.push(entry);
+    running = [...running, entry];
+  }
+
+  return created;
 }

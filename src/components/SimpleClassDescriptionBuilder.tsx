@@ -39,6 +39,14 @@ export function SimpleClassDescriptionBuilder({
   );
 
   const besCount = plan.composizione.bes ?? 0;
+  const besCertCount = plan.composizione.besConCertificazione ?? 0;
+  const besSenzaCount = plan.composizione.besSenzaCertificazione ?? 0;
+  const hasBesSplit =
+    plan.composizione.besConCertificazione !== undefined ||
+    plan.composizione.besSenzaCertificazione !== undefined;
+  const effectiveBesCount = hasBesSplit
+    ? Math.max(besCount, besCertCount + besSenzaCount)
+    : besCount;
   const disabilitaCount = plan.composizione.disabilita ?? 0;
 
   const updateField = (patch: Partial<QuickClassModeSelection>) => {
@@ -54,7 +62,15 @@ export function SimpleClassDescriptionBuilder({
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-blue-200/80 bg-blue-50/50 px-3.5 py-2.5 text-xs text-slate-700 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-slate-300">
         <p className="leading-relaxed">
           Rispondi alle <strong>5 domande chiuse</strong> (eterogeneità, livello generale, socializzazione, rispetto delle regole/vivacità e motivazione) per ottenere una descrizione completa dalla libreria locale (<strong>{getQuickArchiveCombinationCount()} profili × 3 formulazioni</strong>).
-          {' '}I dati inseriti in Composizione su <strong>BES ({besCount})</strong> e <strong>disabilità ({disabilitaCount})</strong> vengono integrati con il riferimento a <strong>PDP</strong> e <strong>PEI</strong>.
+          {' '}I dati inseriti in Composizione su{' '}
+          <strong>
+            BES ({effectiveBesCount}
+            {hasBesSplit && (besCertCount > 0 || besSenzaCount > 0)
+              ? `: ${besCertCount} con cert. DSA, ${besSenzaCount} senza cert.`
+              : ''}
+            )
+          </strong>{' '}
+          e <strong>disabilità ({disabilitaCount})</strong> vengono integrati con accordo di genere/numero su <strong>PDP</strong> e <strong>PEI</strong>.
         </p>
       </div>
 

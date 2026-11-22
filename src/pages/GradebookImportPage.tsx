@@ -21,11 +21,16 @@ interface GradebookImportPageProps {
     entries: AnonymousStudentBandEntry[],
     classeRilevata: string
   ) => Promise<void>;
+  onToggleExcludeDisabilita?: (planId: string, exclude: boolean) => Promise<void>;
   onSyncComposizione?: (
     planId: string,
     totaleAlunni: number,
     totaleBes: number,
-    totaleDisabilita?: number
+    totaleDisabilita?: number,
+    besConCertificazione?: number,
+    besSenzaCertificazione?: number,
+    maschi?: number,
+    femmine?: number
   ) => Promise<void>;
   onOpenPlanEditor: (planId: string) => void;
   onOpenSettings: () => void;
@@ -36,6 +41,7 @@ export function GradebookImportPage({
   settings,
   initialPlanId,
   onApplyToPlan,
+  onToggleExcludeDisabilita,
   onSyncComposizione,
   onOpenPlanEditor,
   onOpenSettings,
@@ -95,11 +101,13 @@ export function GradebookImportPage({
     }
   };
 
+  const excludeDisabilita = selectedPlan?.analisiPartenza.escludiDisabilitaDaFasce !== false;
+
   const handleEntriesUpdate = async (next: AnonymousStudentBandEntry[]) => {
     setEntries(next);
     if (selectedPlanId) {
       await onApplyToPlan(selectedPlanId, next, classeRilevata);
-      const counts = computeLivelliFromStudents(next);
+      const counts = computeLivelliFromStudents(next, { excludeDisabilita });
       setStatusMsg(
         `Conteggi aggiornati: Basso ${counts.bassoAlunni} · Medio/basso ${counts.medioBassoAlunni} · Medio ${counts.medioAlunni} · Alto ${counts.altoAlunni}.`
       );
@@ -260,6 +268,23 @@ export function GradebookImportPage({
         entries={entries}
         soglie={settings.soglieFasce}
         classeRilevata={classeRilevata}
+        excludeDisabilita={excludeDisabilita}
+        onToggleExcludeDisabilita={
+          selectedPlanId && onToggleExcludeDisabilita
+            ? async (nextExclude) => {
+                await onToggleExcludeDisabilita(selectedPlanId, nextExclude);
+                const counts = computeLivelliFromStudents(entries, {
+                  excludeDisabilita: nextExclude,
+                });
+                setStatusMsg(
+                  nextExclude
+                    ? `Alunni con disabilità esclusi dalle fasce di livello (Basso ${counts.bassoAlunni} · Medio/basso ${counts.medioBassoAlunni} · Medio ${counts.medioAlunni} · Alto ${counts.altoAlunni}).`
+                    : `Alunni con disabilità inclusi nelle fasce di livello (Basso ${counts.bassoAlunni} · Medio/basso ${counts.medioBassoAlunni} · Medio ${counts.medioAlunni} · Alto ${counts.altoAlunni}).`
+                );
+              }
+            : undefined
+        }
+        settings={settings}
         tableExportContext={{
           livelliOverride: selectedPlan?.analisiPartenza.livelli,
           classeLabel: selectedPlan
@@ -279,10 +304,31 @@ export function GradebookImportPage({
         onChangeEntries={handleEntriesUpdate}
         onSyncComposizione={
           selectedPlanId && onSyncComposizione
-            ? async (totale, bes, disabilita = 0) => {
-                await onSyncComposizione(selectedPlanId, totale, bes, disabilita);
+            ? async (
+                totale,
+                bes,
+                disabilita = 0,
+                besConCertificazione,
+                besSenzaCertificazione,
+                maschi,
+                femmine
+              ) => {
+                await onSyncComposizione(
+                  selectedPlanId,
+                  totale,
+                  bes,
+                  disabilita,
+                  besConCertificazione,
+                  besSenzaCertificazione,
+                  maschi,
+                  femmine
+                );
                 setStatusMsg(
-                  `Composizione della classe aggiornata: ${totale} alunni totali, ${bes} BES, ${disabilita} con disabilità.`
+                  `Composizione della classe aggiornata: ${totale} alunni totali${
+                    typeof maschi === 'number' && typeof femmine === 'number'
+                      ? ` (${maschi} M, ${femmine} F)`
+                      : ''
+                  }, ${bes} BES (${besConCertificazione ?? 0} con cert. DSA, ${besSenzaCertificazione ?? 0} senza cert.), ${disabilita} con disabilità.`
                 );
               }
             : undefined

@@ -50,6 +50,7 @@ function normalizeLoadedPlan(plan: Programmazione): Programmazione {
     },
     analisiPartenza: {
       ...plan.analisiPartenza,
+      escludiDisabilitaDaFasce: plan.analisiPartenza?.escludiDisabilitaDaFasce ?? true,
       questionario: plan.analisiPartenza?.questionario
         ? {
             ...plan.analisiPartenza.questionario,

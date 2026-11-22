@@ -1215,8 +1215,111 @@ export function getCurricoloIntroNoteText(
   return base;
 }
 
-export const DEFAULT_BES_INTERVENTI_TEXT =
-  'Per gli alunni con Bisogni Educativi Speciali (BES/DSA), in coerenza con i Piani Didattici Personalizzati (PDP) e con gli eventuali Piani Educativi Individualizzati (PEI) predisposti dal Consiglio di Classe, vengono adottati strumenti compensativi (mappe concettuali, schemi guida, formulari, sintesi vocali, audiolibri, calcolatrice, tabelle di supporto, dizionari digitali e risorse multimediali accessibili) e misure dispensative (dispensa dalla lettura ad alta voce in classe, dalla copiatura rapida alla lavagna e dal carico eccessivo di compiti domestici; previsione di tempi aggiuntivi o riduzione quantitativa delle prove mantenendo inalterati gli obiettivi essenziali).';
+export function resolveBesBreakdown(
+  composizione?: Partial<import('./types').ComposizioneClasse>
+): {
+  bes: number;
+  cert: number;
+  senza: number;
+  hasSplit: boolean;
+  disabilita: number;
+} {
+  const rawBes = Math.max(0, composizione?.bes ?? 0);
+  const cert = Math.max(0, composizione?.besConCertificazione ?? 0);
+  const senza = Math.max(0, composizione?.besSenzaCertificazione ?? 0);
+  const hasSplit =
+    composizione?.besConCertificazione !== undefined ||
+    composizione?.besSenzaCertificazione !== undefined;
+  const bes = hasSplit ? Math.max(rawBes, cert + senza) : rawBes;
+  const disabilita = Math.max(0, composizione?.disabilita ?? 0);
+  return { bes, cert, senza, hasSplit, disabilita };
+}
+
+export function formatBesCompositionClause(
+  composizione?: Partial<import('./types').ComposizioneClasse>
+): string {
+  const { bes, cert, senza, hasSplit } = resolveBesBreakdown(composizione);
+  if (bes <= 0) return '';
+  const base = `${bes} ${bes === 1 ? 'alunno' : 'alunni'} con Bisogni Educativi Speciali (BES)`;
+  if (!hasSplit || (cert === 0 && senza === 0)) {
+    return base;
+  }
+  const unspecified = Math.max(0, bes - cert - senza);
+  if (cert > 0 && senza > 0 && unspecified === 0) {
+    return `${base}, di cui ${cert} con certificazione (DSA) e ${senza} senza certificazione`;
+  }
+  if (cert > 0 && senza === 0 && unspecified === 0) {
+    return `${base}, con certificazione (DSA)`;
+  }
+  if (senza > 0 && cert === 0 && unspecified === 0) {
+    return `${base}, senza certificazione`;
+  }
+  const parts: string[] = [];
+  if (cert > 0) parts.push(`${cert} con certificazione (DSA)`);
+  if (senza > 0) parts.push(`${senza} senza certificazione`);
+  if (unspecified > 0) parts.push(`${unspecified} altri BES`);
+  return parts.length > 0 ? `${base}, di cui ${parts.join(' e ')}` : base;
+}
+
+export function buildBesInterventiText(
+  composizione?: Partial<import('./types').ComposizioneClasse>
+): string {
+  const { bes, cert: rawCert, senza: rawSenza, hasSplit, disabilita: dis } =
+    resolveBesBreakdown(composizione);
+
+  const strategiesTail =
+    'vengono adottati strumenti compensativi (mappe concettuali, schemi guida, formulari, sintesi vocali, audiolibri, calcolatrice, tabelle di supporto, dizionari digitali e risorse multimediali accessibili) e misure dispensative (dispensa dalla lettura ad alta voce in classe, dalla copiatura rapida alla lavagna e dal carico eccessivo di compiti domestici; previsione di tempi aggiuntivi o riduzione quantitativa delle prove mantenendo inalterati gli obiettivi essenziali).';
+
+  if (bes === 0 && dis === 0) {
+    return (
+      'Per gli alunni con Bisogni Educativi Speciali (BES/DSA), in coerenza con i Piani Didattici Personalizzati (PDP) e con gli eventuali Piani Educativi Individualizzati (PEI) predisposti dal Consiglio di Classe, ' +
+      strategiesTail
+    );
+  }
+
+  let besSubject = '';
+  if (bes > 0) {
+    const nounBes = bes === 1 ? "l'alunno" : 'gli alunni';
+    if (hasSplit && rawCert > 0 && rawSenza > 0) {
+      besSubject = `${nounBes} con Bisogni Educativi Speciali (${rawCert} con certificazione DSA e ${rawSenza} senza certificazione)`;
+    } else if (hasSplit && rawCert > 0 && rawSenza === 0) {
+      besSubject = `${nounBes} con Bisogni Educativi Speciali con certificazione (DSA)`;
+    } else if (hasSplit && rawSenza > 0 && rawCert === 0) {
+      besSubject = `${nounBes} con Bisogni Educativi Speciali (BES) senza certificazione`;
+    } else {
+      besSubject = `${nounBes} con Bisogni Educativi Speciali (BES/DSA)`;
+    }
+  }
+
+  let disSubject = '';
+  if (dis > 0) {
+    const nounDis = dis === 1 ? "l'alunno" : 'gli alunni';
+    disSubject = `${nounDis} con disabilità certificata`;
+  }
+
+  const pdpRef =
+    bes === 1
+      ? 'il Piano Didattico Personalizzato (PDP)'
+      : 'i Piani Didattici Personalizzati (PDP)';
+  const peiRef =
+    dis === 1
+      ? 'il Piano Educativo Individualizzato (PEI)'
+      : 'i Piani Educativi Individualizzati (PEI)';
+
+  if (bes > 0 && dis > 0) {
+    return `Per ${besSubject} e per ${disSubject}, in coerenza con ${pdpRef} e ${peiRef} predisposti dal Consiglio di Classe, ${strategiesTail}`;
+  }
+
+  if (bes > 0) {
+    const pred = bes === 1 ? 'predisposto' : 'predisposti';
+    return `Per ${besSubject}, in coerenza con ${pdpRef} ${pred} dal Consiglio di Classe, ${strategiesTail}`;
+  }
+
+  const predPei = dis === 1 ? 'predisposto' : 'predisposti';
+  return `Per ${disSubject}, in coerenza con ${peiRef} ${predPei} dal Consiglio di Classe, vengono attivati obiettivi personalizzati, mediatori didattici, strumenti compensativi e verifiche calibrate sul percorso individuale.`;
+}
+
+export const DEFAULT_BES_INTERVENTI_TEXT = buildBesInterventiText();
 
 export const DEFAULT_SOGLIE_FASCE = {
   sogliaMinimaValida: 4,
@@ -1475,6 +1578,7 @@ export const DEFAULT_SCHOOL_SETTINGS: SchoolSettings = {
   privacyAcknowledgedAt: null,
   soglieFasce: DEFAULT_SOGLIE_FASCE,
   soglieQuoteCaratteristiche: DEFAULT_SOGLIE_QUOTE_CARATTERISTICHE,
+  saveBehavior: 'default_folder',
 };
 
 export function createEmptyProgrammazione(
@@ -1543,7 +1647,15 @@ export function createEmptyProgrammazione(
       maschi: overrides?.composizione?.maschi,
       femmine: overrides?.composizione?.femmine,
       ripetenti: overrides?.composizione?.ripetenti ?? 0,
-      bes: overrides?.composizione?.bes ?? 0,
+      bes:
+        overrides?.composizione?.bes ??
+        (overrides?.composizione?.besConCertificazione !== undefined ||
+        overrides?.composizione?.besSenzaCertificazione !== undefined
+          ? (overrides?.composizione?.besConCertificazione ?? 0) +
+            (overrides?.composizione?.besSenzaCertificazione ?? 0)
+          : 0),
+      besConCertificazione: overrides?.composizione?.besConCertificazione,
+      besSenzaCertificazione: overrides?.composizione?.besSenzaCertificazione,
       disabilita: overrides?.composizione?.disabilita ?? 0,
     },
     situazione: {
@@ -1564,6 +1676,7 @@ export function createEmptyProgrammazione(
       },
       fontiRilevazione: rilevazioneDefaults.fontiRilevazione,
       altraFonte: '',
+      escludiDisabilitaDaFasce: true,
       questionario: {
         risposte: {},
         modalitaGenerazione: 'completa',
@@ -1581,7 +1694,7 @@ export function createEmptyProgrammazione(
       consolidamentoAltro: '',
       recupero: [...STRATEGIE_RECUPERO_OPTIONS],
       recuperoAltro: '',
-      besInterventiProgrammati: DEFAULT_BES_INTERVENTI_TEXT,
+      besInterventiProgrammati: buildBesInterventiText(overrides?.composizione),
     },
     curricolo: {
       indicazioniVersione,

@@ -29,10 +29,13 @@ export type FonteRilevazione =
 
 export interface ComposizioneClasse {
   alunni?: number;
+  inserimentoManualeAlunni?: boolean;
   maschi?: number;
   femmine?: number;
   ripetenti: number;
   bes: number;
+  besConCertificazione?: number;
+  besSenzaCertificazione?: number;
   disabilita?: number;
 }
 
@@ -103,6 +106,9 @@ export type CategoriaBisognoAlunno =
 
 export type RiferimentoPianoAlunno = '' | 'PDP' | 'PEI' | 'Osservazione';
 
+export type SessoIpotizzato = 'M' | 'F' | 'INDETERMINATO';
+export type SessoConfidenza = 'ALTA' | 'MEDIA' | 'BASSA';
+
 export interface AnonymousStudentBandEntry {
   id: string;
   ordine: number;
@@ -116,6 +122,10 @@ export interface AnonymousStudentBandEntry {
   categoriaInclusione?: CategoriaBisognoAlunno;
   riferimentoPiano?: RiferimentoPianoAlunno;
   notaSensibileDocente?: string;
+  sessoIpotizzato?: SessoIpotizzato;
+  sessoConfidenza?: SessoConfidenza;
+  sessoNota?: string;
+  sessoModificatoDalDocente?: boolean;
 }
 
 export type QuestionnaireIndicatorKey =
@@ -189,6 +199,8 @@ export interface AnalisiPartenza {
   questionario?: ClassQuestionnaire;
   alunniAnonimiFasce?: AnonymousStudentBandEntry[];
   registroClasseRilevata?: string;
+  /** Predefinito: true — esclude gli alunni con disabilità (L. 104/PEI) dai conteggi e dalle tabelle delle fasce di livello. */
+  escludiDisabilitaDaFasce?: boolean;
 }
 
 export interface InterventiLivello {
@@ -441,6 +453,8 @@ export interface DocxMappingSchema {
 export type ThemePreference = 'chiaro' | 'scuro' | 'sistema';
 export type TextScalePreference = 'normale' | 'grande' | 'molto_grande';
 
+export type SaveBehaviorMode = 'default_folder' | 'ask_each_time' | 'browser_download';
+
 export interface SchoolSettings {
   id: 'default';
   ministryHeader: string;
@@ -461,6 +475,8 @@ export interface SchoolSettings {
   privacyAcknowledgedAt: string | null;
   soglieFasce: SoglieFasce;
   soglieQuoteCaratteristiche?: SoglieQuoteCaratteristiche;
+  defaultSaveFolderName?: string;
+  saveBehavior?: SaveBehaviorMode;
 }
 
 export interface BackupPlainData {
@@ -498,8 +514,13 @@ export interface PianoramaBackupEnvelope {
  * tabella delle fasce di livello quando importati.
  */
 export function sanitizePlanForOfficialExport(plan: Programmazione): Programmazione {
+  const excludeDisabilita = plan.analisiPartenza.escludiDisabilitaDaFasce !== false;
   const bandEntries = (plan.analisiPartenza.alunniAnonimiFasce ?? [])
-    .filter((entry) => Boolean(entry.nominativo?.trim()))
+    .filter((entry) => {
+      if (!entry.nominativo?.trim()) return false;
+      if (excludeDisabilita && entry.categoriaInclusione === 'disabilita_pei') return false;
+      return true;
+    })
     .map((entry) => ({
       id: entry.id,
       ordine: entry.ordine,

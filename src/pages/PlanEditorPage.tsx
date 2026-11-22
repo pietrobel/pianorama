@@ -15,8 +15,10 @@ import {
   Lightbulb,
   Plus,
   RotateCcw,
+  Tag,
   Trash2,
   Upload,
+  Users,
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -43,15 +45,18 @@ import {
   TIPOLOGIE_CLASSE_OPTIONS,
   VERIFICHE_ORALI_OPTIONS,
   VERIFICHE_SCRITTE_OPTIONS,
+  buildBesInterventiText,
   formatDocenteConTitolo,
   formatFirmaDocente,
   getDefaultCurricoloForDisciplina,
   getDefaultMetodiStrumentiForDisciplina,
   getDefaultRilevazioneForDisciplina,
   getDefaultVerificheValutazioneForDisciplina,
+  resolveBesBreakdown,
 } from '../domain/defaults';
 import type {
   AnonymousStudentBandEntry,
+  CategoriaBisognoAlunno,
   ClassQuestionnaire,
   CurricoloCatalogEntry,
   CurricoloVoiceType,
@@ -64,6 +69,7 @@ import type {
   PlanStatus,
   Programmazione,
   SchoolSettings,
+  SessoIpotizzato,
   SuggestionProposal,
   SuggestionRule,
 } from '../domain/types';
@@ -85,9 +91,15 @@ import {
   type DocumentImportResult,
 } from '../engine/documentPlanImporter';
 import {
+  computeGenderCountsFromStudents,
+  computeInclusionCountsFromStudents,
   computeLivelliFromStudents,
   createManualStudentEntry,
+  getUnifiedPianoForCategoria,
   parseGradebookBuffer,
+  parseStudentListText,
+  resolveStudentGender,
+  updateStudentDetails,
 } from '../engine/gradebookImporter';
 import {
   DEFAULT_QUICK_CLASS_SELECTION,
@@ -120,7 +132,7 @@ type SectionKey =
 
 const SECTIONS: { key: SectionKey; label: string; shortLabel: string }[] = [
   { key: 'dati', label: '1. Dati generali', shortLabel: 'Dati' },
-  { key: 'composizione', label: '2. Composizione e descrizione', shortLabel: 'Classe' },
+  { key: 'composizione', label: '2. Fasce, composizione e descrizione', shortLabel: 'Classe' },
   { key: 'analisi', label: '3. Analisi e fasce di livello', shortLabel: 'Analisi' },
   { key: 'interventi', label: '4. Strategie e BES', shortLabel: 'Strategie' },
   { key: 'curricolo', label: '5. Curricolo e abilità', shortLabel: 'Curricolo' },
@@ -170,12 +182,17 @@ export function PlanEditorPage({
   const [gradebookStatus, setGradebookStatus] = useState<string | null>(null);
   const [keepNamesOffline, setKeepNamesOffline] = useState<boolean>(true);
   const gradebookFileRef = useRef<HTMLInputElement>(null);
+  const composizioneGradebookRef = useRef<HTMLInputElement>(null);
   const programDocFileRef = useRef<HTMLInputElement>(null);
   const [importingProgramDoc, setImportingProgramDoc] = useState<boolean>(false);
   const [pendingProgramDocImport, setPendingProgramDocImport] =
     useState<DocumentImportResult | null>(null);
   const [catalogImportError, setCatalogImportError] = useState<string | null>(null);
   const [simpleDescAppliedFeedback, setSimpleDescAppliedFeedback] = useState<boolean>(false);
+  const [quickAddStudentName, setQuickAddStudentName] = useState<string>('');
+  const [showPasteRosterBox, setShowPasteRosterBox] = useState<boolean>(false);
+  const [pasteRosterText, setPasteRosterText] = useState<string>('');
+  const [composizioneRosterMsg, setComposizioneRosterMsg] = useState<string | null>(null);
 
   const isFirstRender = useRef(true);
   const latestPlanId = useRef(initialPlan.id);
@@ -1270,76 +1287,656 @@ export function PlanEditorPage({
             </section>
           )}
 
-          {/* SEZIONE 2: COMPOSIZIONE E SITUAZIONE DELLA CLASSE */}
+          {/* SEZIONE 2: FASCE DI LIVELLO, COMPOSIZIONE E SITUAZIONE DELLA CLASSE */}
           {activeSection === 'composizione' && (
             <section className="space-y-5 rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
               <h2 className="text-base font-bold text-[#1F3864] dark:text-blue-300">
-                2. Composizione e situazione della classe
+                2. Fasce di livello, composizione e situazione della classe
               </h2>
 
               <PrivacyNoticeBanner compact />
 
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-6">
-                {(
-                  [
-                    ['alunni', 'Alunni totali', true],
-                    ['maschi', 'Maschi', true],
-                    ['femmine', 'Femmine', true],
-                    ['ripetenti', 'Ripetenti', false],
-                    ['bes', 'Con BES', false],
-                    ['disabilita', 'Con disabilità', false],
-                  ] as const
-                ).map(([field, label, isOptional]) => (
-                  <label key={field} className="block">
-                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      {label}
-                    </span>
-                    <input
-                      type="number"
-                      min={0}
-                      max={40}
-                      value={
-                        isOptional
-                          ? draft.composizione[field] ?? ''
-                          : draft.composizione[field] ?? 0
-                      }
-                      placeholder={isOptional ? '—' : undefined}
-                      onChange={(e) => {
-                        const rawVal = e.target.value.trim();
-                        const nextValue =
-                          rawVal === ''
-                            ? isOptional
-                              ? undefined
-                              : 0
-                            : Math.max(0, Number(rawVal) || 0);
-                        setDraft((prev) => ({
-                          ...prev,
-                          composizione: {
-                            ...prev.composizione,
-                            [field]: nextValue,
-                          },
-                          ...(field === 'alunni'
-                            ? {
-                                situazione: {
-                                  ...prev.situazione,
-                                  caratteristicheDimensioni: reconcileDimensionsWithTotalStudents(
-                                    prev.situazione.caratteristicheDimensioni,
-                                    prev.composizione.alunni ?? 0,
-                                    nextValue ?? 0
-                                  ),
+              {/* PASSO 1 (IN ALTO): Importazione Fasce di livello / elenco alunni + stima sesso + Bisogno/PEI-PDP */}
+              {(() => {
+                const rosterEntries = draft.analisiPartenza.alunniAnonimiFasce ?? [];
+                const excludeDisabilita = draft.analisiPartenza.escludiDisabilitaDaFasce !== false;
+                const inclusionSummary = computeInclusionCountsFromStudents(rosterEntries);
+                const genderSummary = computeGenderCountsFromStudents(rosterEntries);
+
+                const applyRosterAndSyncAll = (
+                  nextEntries: AnonymousStudentBandEntry[],
+                  classeRilevataOverride?: string
+                ) => {
+                  const counts = computeInclusionCountsFromStudents(nextEntries);
+                  const genders = computeGenderCountsFromStudents(nextEntries);
+                  const nextLivelli = computeLivelliFromStudents(nextEntries, {
+                    excludeDisabilita,
+                  });
+
+                  setDraft((prev) => {
+                    const prevComp = prev.composizione;
+                    const isManualTotal = Boolean(prevComp.inserimentoManualeAlunni);
+                    const nextMaschi = nextEntries.length > 0 ? genders.maschi : undefined;
+                    const nextFemmine = nextEntries.length > 0 ? genders.femmine : undefined;
+                    const nextAlunni = isManualTotal
+                      ? prevComp.alunni
+                      : nextEntries.length > 0
+                      ? genders.maschi + genders.femmine
+                      : undefined;
+
+                    const nextComp = {
+                      ...prevComp,
+                      maschi: nextMaschi,
+                      femmine: nextFemmine,
+                      alunni: nextAlunni,
+                      disabilita: counts.disabilita,
+                      besConCertificazione: counts.besConCertificazione,
+                      besSenzaCertificazione: counts.besSenzaCertificazione,
+                      bes: counts.totaleBes,
+                    };
+
+                    const currentBesText = prev.interventi.besInterventiProgrammati.trim();
+                    const prevAutoText = buildBesInterventiText(prevComp).trim();
+                    const shouldAutoUpdateBesText =
+                      !currentBesText ||
+                      currentBesText === prevAutoText ||
+                      currentBesText === DEFAULT_BES_INTERVENTI_TEXT.trim();
+
+                    return {
+                      ...prev,
+                      composizione: nextComp,
+                      situazione:
+                        typeof nextAlunni === 'number'
+                          ? {
+                              ...prev.situazione,
+                              caratteristicheDimensioni: reconcileDimensionsWithTotalStudents(
+                                prev.situazione.caratteristicheDimensioni,
+                                prevComp.alunni ?? 0,
+                                nextAlunni
+                              ),
+                            }
+                          : prev.situazione,
+                      analisiPartenza: {
+                        ...prev.analisiPartenza,
+                        alunniAnonimiFasce: nextEntries,
+                        livelli: nextLivelli,
+                        registroClasseRilevata:
+                          classeRilevataOverride !== undefined
+                            ? classeRilevataOverride
+                            : nextEntries.length === 0
+                            ? undefined
+                            : prev.analisiPartenza.registroClasseRilevata,
+                      },
+                      interventi: shouldAutoUpdateBesText
+                        ? {
+                            ...prev.interventi,
+                            besInterventiProgrammati: buildBesInterventiText(nextComp),
+                          }
+                        : prev.interventi,
+                    };
+                  });
+                };
+
+                const assignUnifiedCategoryToStudent = (
+                  studentId: string,
+                  categoriaInclusione: CategoriaBisognoAlunno
+                ) => {
+                  const riferimentoPiano = getUnifiedPianoForCategoria(categoriaInclusione);
+                  const nextEntries = updateStudentDetails(
+                    rosterEntries,
+                    studentId,
+                    { categoriaInclusione, riferimentoPiano },
+                    settings.soglieFasce
+                  );
+                  applyRosterAndSyncAll(nextEntries);
+                };
+
+                const handleCycleRosterGender = (entry: AnonymousStudentBandEntry) => {
+                  const resolved = resolveStudentGender(entry);
+                  const nextSesso: SessoIpotizzato =
+                    resolved.sesso === 'M' ? 'F' : resolved.sesso === 'F' ? 'INDETERMINATO' : 'M';
+                  const nextEntries = updateStudentDetails(
+                    rosterEntries,
+                    entry.id,
+                    { sessoIpotizzato: nextSesso, sessoModificatoDalDocente: true },
+                    settings.soglieFasce
+                  );
+                  applyRosterAndSyncAll(nextEntries);
+                };
+
+                const handleRemoveRosterStudent = (studentId: string) => {
+                  const nextEntries = rosterEntries.filter((e) => e.id !== studentId);
+                  applyRosterAndSyncAll(nextEntries);
+                };
+
+                return (
+                  <div className="space-y-3 rounded-xl border border-blue-200 bg-blue-50/40 p-4 dark:border-blue-900/60 dark:bg-blue-950/20">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <h3 className="flex items-center gap-2 text-sm font-bold text-[#1F3864] dark:text-blue-300">
+                          <Users className="h-4 w-4" />
+                          <span>
+                            1. Caricamento fasce di livello, stima sesso e alunni con Disabilità / DSA / BES (solo in locale)
+                          </span>
+                        </h3>
+                        <p className="text-xs text-slate-600 dark:text-slate-400">
+                          Importa il registro <code>.xlsx</code> delle fasce di livello oppure incolla l’elenco in formato <code>COGNOME NOME</code>: l’app stima automaticamente Maschi (<strong>BLU</strong>), Femmine (<strong>ROSA</strong>) o Indeterminati (<strong>GRIGIO</strong>, cliccabili per correggere), e ti permette di indicare subito <strong>Disabilità (PEI)</strong>, <strong>DSA (PDP)</strong> o <strong>Altri BES (PDP)</strong> sincronizzando la composizione della classe.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          ref={composizioneGradebookRef}
+                          type="file"
+                          accept=".xlsx,.xls,.ods"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = '';
+                            if (!file) return;
+                            try {
+                              const buffer = await file.arrayBuffer();
+                              const parsed = parseGradebookBuffer(buffer, settings.soglieFasce, {
+                                keepNames: true,
+                              });
+                              applyRosterAndSyncAll(parsed.entries, parsed.classeRilevata);
+                              const g = computeGenderCountsFromStudents(parsed.entries);
+                              setComposizioneRosterMsg(
+                                `Elenco importato (${parsed.entries.length} alunni: ${g.maschi} M, ${g.femmine} F${
+                                  g.indeterminati > 0 ? `, ${g.indeterminati} da confermare` : ''
+                                }). Seleziona qui sotto eventuali alunni con Disabilità (PEI), DSA (PDP) o Altri BES (PDP).`
+                              );
+                            } catch (err) {
+                              setComposizioneRosterMsg(
+                                err instanceof Error
+                                  ? err.message
+                                  : 'Impossibile leggere il file Excel selezionato.'
+                              );
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => composizioneGradebookRef.current?.click()}
+                          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-[#1F3864] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#172b4d]"
+                        >
+                          <Upload className="h-3.5 w-3.5" />
+                          Importa registro / fasce (.xlsx)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowPasteRosterBox((v) => !v)}
+                          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#1F3864] bg-white px-3 py-1.5 text-xs font-semibold text-[#1F3864] hover:bg-blue-50 dark:border-blue-400 dark:bg-slate-900 dark:text-blue-300"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          Incolla elenco (COGNOME NOME)
+                        </button>
+                      </div>
+                    </div>
+
+                    {showPasteRosterBox && (
+                      <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                        <label className="block">
+                          <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                            Incolla un alunno per riga nel formato COGNOME NOME (es. DI FRANCESCO LUCA)
+                          </span>
+                          <textarea
+                            rows={4}
+                            value={pasteRosterText}
+                            onChange={(e) => setPasteRosterText(e.target.value)}
+                            placeholder={'ROSSI MARCO\nDI FRANCESCO ANNA MARIA\nLI ZHANG MIN\nBIANCHI ANDREA'}
+                            className="mt-1 w-full rounded-lg border border-slate-300 p-2 font-mono text-xs dark:border-slate-700 dark:bg-slate-950"
+                          />
+                        </label>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowPasteRosterBox(false);
+                              setPasteRosterText('');
+                            }}
+                            className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700 dark:border-slate-700 dark:text-slate-200"
+                          >
+                            Annulla
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!pasteRosterText.trim()}
+                            onClick={() => {
+                              const parsedNew = parseStudentListText(
+                                pasteRosterText,
+                                settings.soglieFasce,
+                                rosterEntries
+                              );
+                              const merged = [...rosterEntries, ...parsedNew];
+                              applyRosterAndSyncAll(merged);
+                              const g = computeGenderCountsFromStudents(merged);
+                              setComposizioneRosterMsg(
+                                `Aggiunti ${parsedNew.length} alunni all’elenco (${g.maschi} M, ${g.femmine} F${
+                                  g.indeterminati > 0 ? `, ${g.indeterminati} da confermare` : ''
+                                }).`
+                              );
+                              setPasteRosterText('');
+                              setShowPasteRosterBox(false);
+                            }}
+                            className="rounded-lg bg-[#1F3864] px-3 py-1 text-xs font-semibold text-white hover:bg-[#172b4d] disabled:opacity-50"
+                          >
+                            Carica elenco e stima sesso
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={excludeDisabilita}
+                          onChange={(e) => {
+                            const nextExcl = e.target.checked;
+                            setDraft((prev) => ({
+                              ...prev,
+                              analisiPartenza: {
+                                ...prev.analisiPartenza,
+                                escludiDisabilitaDaFasce: nextExcl,
+                                livelli: computeLivelliFromStudents(
+                                  prev.analisiPartenza.alunniAnonimiFasce ?? [],
+                                  { excludeDisabilita: nextExcl }
+                                ),
+                              },
+                            }));
+                          }}
+                          className="h-3.5 w-3.5 accent-[#1F3864]"
+                        />
+                        <span>Escludi alunni con disabilità dalle fasce di livello (predefinito)</span>
+                      </label>
+
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          value={quickAddStudentName}
+                          onChange={(e) => setQuickAddStudentName(e.target.value)}
+                          placeholder="COGNOME NOME (singolo)..."
+                          className="w-52 rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs dark:border-slate-700 dark:bg-slate-950"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!quickAddStudentName.trim()) return;
+                            const added = createManualStudentEntry(
+                              rosterEntries,
+                              { nominativo: quickAddStudentName.trim(), media: null },
+                              settings.soglieFasce
+                            );
+                            const next = [...rosterEntries, added];
+                            applyRosterAndSyncAll(next);
+                            setQuickAddStudentName('');
+                          }}
+                          className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          Aggiungi
+                        </button>
+                      </div>
+                    </div>
+
+                    {composizioneRosterMsg && (
+                      <p className="text-xs font-medium text-[#1F3864] dark:text-blue-300">
+                        {composizioneRosterMsg}
+                      </p>
+                    )}
+
+                    {rosterEntries.length > 0 && (
+                      <>
+                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-900">
+                          <div className="flex flex-wrap items-center gap-2 font-medium text-slate-700 dark:text-slate-200">
+                            <span>Alunni caricati: <strong>{rosterEntries.length}</strong></span>
+                            <span className="rounded bg-blue-100 px-1.5 py-0.5 font-bold text-blue-900 dark:bg-blue-950/70 dark:text-blue-200">
+                              M: {genderSummary.maschi}
+                            </span>
+                            <span className="rounded bg-pink-100 px-1.5 py-0.5 font-bold text-pink-900 dark:bg-pink-950/70 dark:text-pink-200">
+                              F: {genderSummary.femmine}
+                            </span>
+                            {genderSummary.indeterminati > 0 && (
+                              <span className="rounded bg-slate-200 px-1.5 py-0.5 font-bold text-slate-800 dark:bg-slate-800 dark:text-slate-200">
+                                ?: {genderSummary.indeterminati} da confermare
+                              </span>
+                            )}
+                            <span className="text-slate-500 dark:text-slate-400">
+                              · Disabilità: <strong>{inclusionSummary.disabilita}</strong> · DSA (cert.):{' '}
+                              <strong>{inclusionSummary.besConCertificazione}</strong> · Altri BES:{' '}
+                              <strong>{inclusionSummary.besSenzaCertificazione}</strong>
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                            Fasce calcolate: B {draft.analisiPartenza.livelli.bassoAlunni} · M/B{' '}
+                            {draft.analisiPartenza.livelli.medioBassoAlunni} · M{' '}
+                            {draft.analisiPartenza.livelli.medioAlunni} · A{' '}
+                            {draft.analisiPartenza.livelli.altoAlunni}
+                          </span>
+                        </div>
+
+                        {genderSummary.indeterminati > 0 && (
+                          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+                            {genderSummary.indeterminati}{' '}
+                            {genderSummary.indeterminati === 1
+                              ? 'alunno ha sesso indeterminato'
+                              : 'alunni hanno sesso indeterminato'}{' '}
+                            (badge <strong>GRIGIO</strong>): clicca sul badge accanto al nome per scegliere <strong>M</strong> o <strong>F</strong> ed aggiornare il conteggio.
+                          </p>
+                        )}
+
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                          {rosterEntries.map((entry) => {
+                            const rawCat = entry.categoriaInclusione ?? 'nessuno';
+                            const cat = rawCat === 'svantaggio_altro' ? 'bes' : rawCat;
+                            const displayName = entry.nominativo?.trim() || entry.labelAnonimo;
+                            const genderInfo = resolveStudentGender(entry);
+                            const genderPillClass =
+                              genderInfo.sesso === 'M'
+                                ? 'border-blue-300 bg-blue-100 text-blue-900 hover:bg-blue-200 dark:border-blue-800 dark:bg-blue-950/70 dark:text-blue-200'
+                                : genderInfo.sesso === 'F'
+                                ? 'border-pink-300 bg-pink-100 text-pink-900 hover:bg-pink-200 dark:border-pink-800 dark:bg-pink-950/70 dark:text-pink-200'
+                                : 'border-slate-300 bg-slate-200 text-slate-800 hover:bg-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200';
+                            const genderShort =
+                              genderInfo.sesso === 'M' ? 'M' : genderInfo.sesso === 'F' ? 'F' : '?';
+
+                            return (
+                              <div
+                                key={entry.id}
+                                className={`space-y-2 rounded-lg border p-2.5 text-xs ${
+                                  cat === 'disabilita_pei'
+                                    ? 'border-amber-300 bg-amber-50/40 dark:border-amber-800 dark:bg-amber-950/20'
+                                    : cat === 'dsa'
+                                    ? 'border-indigo-300 bg-indigo-50/40 dark:border-indigo-800 dark:bg-indigo-950/20'
+                                    : cat === 'bes'
+                                    ? 'border-sky-300 bg-sky-50/40 dark:border-sky-800 dark:bg-sky-950/20'
+                                    : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCycleRosterGender(entry)}
+                                      title={`Sesso: ${genderInfo.sesso} · Confidenza: ${genderInfo.confidenza}${
+                                        genderInfo.nota ? ` (${genderInfo.nota})` : ''
+                                      } — Clicca per cambiare`}
+                                      aria-label={`Sesso ipotizzato per ${displayName}: ${genderInfo.sesso}. Clicca per modificare`}
+                                      className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-bold transition ${genderPillClass}`}
+                                    >
+                                      {genderShort}
+                                    </button>
+                                    <span
+                                      className="truncate font-semibold text-slate-900 dark:text-slate-100"
+                                      title={displayName}
+                                    >
+                                      {displayName}
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveRosterStudent(entry.id)}
+                                    title={`Rimuovi ${displayName}`}
+                                    aria-label={`Rimuovi ${displayName}`}
+                                    className="shrink-0 rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 dark:hover:text-red-400"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+
+                                {genderInfo.confidenza !== 'ALTA' && genderInfo.nota && (
+                                  <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                                    Stima {genderInfo.confidenza.toLowerCase()}: {genderInfo.nota}
+                                  </p>
+                                )}
+
+                                {/* Menu a tendina UNICO ed evidente per tipologia bisogno + PEI/PDP */}
+                                <label className="block">
+                                  <span className="flex items-center gap-1 text-[10px] font-semibold text-slate-600 dark:text-slate-300">
+                                    <Tag className="h-3 w-3" />
+                                    Tipologia bisogno e piano:
+                                  </span>
+                                  <select
+                                    value={cat}
+                                    onChange={(e) =>
+                                      assignUnifiedCategoryToStudent(
+                                        entry.id,
+                                        e.target.value as CategoriaBisognoAlunno
+                                      )
+                                    }
+                                    aria-label={`Tipologia bisogno e piano per ${displayName}`}
+                                    className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                                  >
+                                    <option value="nessuno">Nessun bisogno speciale</option>
+                                    <option value="disabilita_pei">Con disabilità → PEI</option>
+                                    <option value="dsa">Con DSA (certificato) → PDP</option>
+                                    <option value="bes">Altri BES (senza cert.) → PDP</option>
+                                  </select>
+                                </label>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* PASSO 2: Conteggi composizione classe (Alunni totali = Maschi + Femmine salvo spunta manuale) */}
+              {(() => {
+                const isManualAlunni = Boolean(draft.composizione.inserimentoManualeAlunni);
+                const computedTotalFromSex =
+                  typeof draft.composizione.maschi === 'number' ||
+                  typeof draft.composizione.femmine === 'number'
+                    ? (draft.composizione.maschi ?? 0) + (draft.composizione.femmine ?? 0)
+                    : undefined;
+                const alunniDisplayValue = isManualAlunni
+                  ? draft.composizione.alunni ?? ''
+                  : computedTotalFromSex ?? '';
+
+                return (
+                  <div className="space-y-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                        2. Numeri di composizione della classe
+                      </h3>
+                      <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={isManualAlunni}
+                          onChange={(e) => {
+                            const nextManual = e.target.checked;
+                            setDraft((prev) => {
+                              const prevComp = prev.composizione;
+                              const autoSum =
+                                typeof prevComp.maschi === 'number' ||
+                                typeof prevComp.femmine === 'number'
+                                  ? (prevComp.maschi ?? 0) + (prevComp.femmine ?? 0)
+                                  : undefined;
+                              const nextAlunni = nextManual ? prevComp.alunni : autoSum;
+                              return {
+                                ...prev,
+                                composizione: {
+                                  ...prevComp,
+                                  inserimentoManualeAlunni: nextManual,
+                                  alunni: nextAlunni,
                                 },
+                                ...(!nextManual &&
+                                typeof autoSum === 'number' &&
+                                autoSum !== prevComp.alunni
+                                  ? {
+                                      situazione: {
+                                        ...prev.situazione,
+                                        caratteristicheDimensioni: reconcileDimensionsWithTotalStudents(
+                                          prev.situazione.caratteristicheDimensioni,
+                                          prevComp.alunni ?? 0,
+                                          autoSum
+                                        ),
+                                      },
+                                    }
+                                  : {}),
+                              };
+                            });
+                          }}
+                          className="h-3.5 w-3.5 accent-[#1F3864]"
+                        />
+                        <span>Inserisci manualmente Alunni totali</span>
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+                      {(
+                        [
+                          ['alunni', 'Alunni totali', true],
+                          ['maschi', 'Maschi', true],
+                          ['femmine', 'Femmine', true],
+                          ['ripetenti', 'Ripetenti', false],
+                          ['bes', 'Con BES (totale)', false],
+                          ['besConCertificazione', 'BES con cert. (DSA)', false],
+                          ['besSenzaCertificazione', 'BES senza cert.', false],
+                          ['disabilita', 'Con disabilità', false],
+                        ] as const
+                      ).map(([field, label, isOptional]) => {
+                        const isLockedTotal = field === 'alunni' && !isManualAlunni;
+                        return (
+                          <label key={field} className="block">
+                            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                              {label}
+                              {isLockedTotal ? ' (= M+F)' : ''}
+                            </span>
+                            <input
+                              type="number"
+                              min={0}
+                              max={40}
+                              readOnly={isLockedTotal}
+                              disabled={isLockedTotal}
+                              value={
+                                field === 'alunni'
+                                  ? alunniDisplayValue
+                                  : isOptional
+                                  ? draft.composizione[field] ?? ''
+                                  : field === 'besConCertificazione' ||
+                                    field === 'besSenzaCertificazione'
+                                  ? draft.composizione[field] ?? ''
+                                  : draft.composizione[field] ?? 0
                               }
-                            : {}),
-                        }));
-                      }}
-                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono-num text-sm dark:border-slate-700 dark:bg-slate-950"
-                    />
-                  </label>
-                ))}
-              </div>
+                              placeholder={
+                                isOptional ||
+                                field === 'besConCertificazione' ||
+                                field === 'besSenzaCertificazione'
+                                  ? '—'
+                                  : undefined
+                              }
+                              onChange={(e) => {
+                                if (isLockedTotal) return;
+                                const rawVal = e.target.value.trim();
+                                const hasNumber = rawVal !== '';
+                                const parsed = hasNumber ? Math.max(0, Number(rawVal) || 0) : undefined;
+                                setDraft((prev) => {
+                                  const prevComp = prev.composizione;
+                                  let nextComp = { ...prevComp };
+
+                                  if (
+                                    field === 'besConCertificazione' ||
+                                    field === 'besSenzaCertificazione'
+                                  ) {
+                                    nextComp[field] = parsed;
+                                    const nextCert =
+                                      field === 'besConCertificazione'
+                                        ? parsed
+                                        : prevComp.besConCertificazione;
+                                    const nextSenza =
+                                      field === 'besSenzaCertificazione'
+                                        ? parsed
+                                        : prevComp.besSenzaCertificazione;
+                                    if (nextCert !== undefined || nextSenza !== undefined) {
+                                      nextComp.bes = (nextCert ?? 0) + (nextSenza ?? 0);
+                                    }
+                                  } else if (field === 'bes') {
+                                    const nextBesVal = parsed ?? 0;
+                                    nextComp.bes = nextBesVal;
+                                    const sumSplit =
+                                      (prevComp.besConCertificazione ?? 0) +
+                                      (prevComp.besSenzaCertificazione ?? 0);
+                                    if (nextBesVal === 0 || sumSplit > nextBesVal) {
+                                      nextComp = {
+                                        ...nextComp,
+                                        besConCertificazione: undefined,
+                                        besSenzaCertificazione: undefined,
+                                      };
+                                    }
+                                  } else if (field === 'maschi' || field === 'femmine') {
+                                    nextComp[field] = parsed;
+                                    if (!prevComp.inserimentoManualeAlunni) {
+                                      const nextM =
+                                        field === 'maschi' ? parsed : prevComp.maschi;
+                                      const nextF =
+                                        field === 'femmine' ? parsed : prevComp.femmine;
+                                      nextComp.alunni =
+                                        nextM !== undefined || nextF !== undefined
+                                          ? (nextM ?? 0) + (nextF ?? 0)
+                                          : undefined;
+                                    }
+                                  } else if (isOptional) {
+                                    nextComp[field] = parsed;
+                                  } else {
+                                    nextComp[field] = parsed ?? 0;
+                                  }
+
+                                  const currentBesText =
+                                    prev.interventi.besInterventiProgrammati.trim();
+                                  const prevAutoText = buildBesInterventiText(prevComp).trim();
+                                  const shouldAutoUpdateBesText =
+                                    !currentBesText ||
+                                    currentBesText === prevAutoText ||
+                                    currentBesText === DEFAULT_BES_INTERVENTI_TEXT.trim();
+
+                                  const nextTotalAlunni = nextComp.alunni ?? 0;
+                                  const prevTotalAlunni = prevComp.alunni ?? 0;
+                                  const totalChanged = nextTotalAlunni !== prevTotalAlunni;
+
+                                  return {
+                                    ...prev,
+                                    composizione: nextComp,
+                                    interventi: shouldAutoUpdateBesText
+                                      ? {
+                                          ...prev.interventi,
+                                          besInterventiProgrammati: buildBesInterventiText(nextComp),
+                                        }
+                                      : prev.interventi,
+                                    ...(totalChanged
+                                      ? {
+                                          situazione: {
+                                            ...prev.situazione,
+                                            caratteristicheDimensioni:
+                                              reconcileDimensionsWithTotalStudents(
+                                                prev.situazione.caratteristicheDimensioni,
+                                                prevTotalAlunni,
+                                                nextTotalAlunni
+                                              ),
+                                          },
+                                        }
+                                      : {}),
+                                  };
+                                });
+                              }}
+                              className={`mt-1 w-full rounded-lg border px-3 py-2 font-mono-num text-sm ${
+                                isLockedTotal
+                                  ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-800 dark:bg-slate-800/60 dark:text-slate-300'
+                                  : 'border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-950'
+                              }`}
+                            />
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
 
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                La descrizione unitaria della classe (composizione, caratteristiche e situazione disciplinare) viene stampata una sola volta dopo «Analisi della situazione di partenza». Modificando <strong>Alunni totali</strong>, la barra delle caratteristiche aggiorna prima lo spazio <em>non definito</em> e poi gli indicatori a destra.
+                Inserendo <strong>Maschi</strong> e <strong>Femmine</strong> il totale <em>Alunni totali</em> si calcola automaticamente (spunta <em>Inserisci manualmente Alunni totali</em> solo se desideri impostare un totale diverso). Specificando <strong>BES con cert. (DSA)</strong> e <strong>BES senza cert.</strong> il totale <em>Con BES</em> si aggiorna e i testi generati concordano in genere e numero (PEI/PDP).
               </p>
 
               {typeof draft.composizione.alunni === 'number' &&
@@ -1732,25 +2329,50 @@ export function PlanEditorPage({
                           const parsed = parseGradebookBuffer(buffer, settings.soglieFasce, {
                             keepNames: keepNamesOffline,
                           });
-                          const nextLivelli = computeLivelliFromStudents(parsed.entries);
-                          setDraft((prev) => ({
-                            ...prev,
-                            analisiPartenza: {
-                              ...prev.analisiPartenza,
-                              livelli: nextLivelli,
-                              alunniAnonimiFasce: parsed.entries,
-                              registroClasseRilevata: parsed.classeRilevata,
-                            },
-                            cronologiaModifiche: [
-                              {
-                                id: crypto.randomUUID(),
-                                timestamp: new Date().toISOString(),
-                                evento: 'Import registro voti',
-                                dettaglio: `Importati ${parsed.entries.length} alunni (${parsed.classeRilevata || 'registro Excel'}).`,
+                          setDraft((prev) => {
+                            const excl = prev.analisiPartenza.escludiDisabilitaDaFasce !== false;
+                            const nextLivelli = computeLivelliFromStudents(parsed.entries, {
+                              excludeDisabilita: excl,
+                            });
+                            const genders = keepNamesOffline
+                              ? computeGenderCountsFromStudents(parsed.entries)
+                              : null;
+                            const isManualAlunni = Boolean(
+                              prev.composizione.inserimentoManualeAlunni
+                            );
+                            const nextAlunni = isManualAlunni
+                              ? prev.composizione.alunni
+                              : genders
+                              ? genders.maschi + genders.femmine
+                              : parsed.entries.length;
+                            return {
+                              ...prev,
+                              composizione: {
+                                ...prev.composizione,
+                                ...(genders
+                                  ? { maschi: genders.maschi, femmine: genders.femmine }
+                                  : {}),
+                                ...(typeof nextAlunni === 'number'
+                                  ? { alunni: nextAlunni }
+                                  : {}),
                               },
-                              ...(prev.cronologiaModifiche ?? []),
-                            ],
-                          }));
+                              analisiPartenza: {
+                                ...prev.analisiPartenza,
+                                livelli: nextLivelli,
+                                alunniAnonimiFasce: parsed.entries,
+                                registroClasseRilevata: parsed.classeRilevata,
+                              },
+                              cronologiaModifiche: [
+                                {
+                                  id: crypto.randomUUID(),
+                                  timestamp: new Date().toISOString(),
+                                  evento: 'Import registro voti',
+                                  dettaglio: `Importati ${parsed.entries.length} alunni (${parsed.classeRilevata || 'registro Excel'}).`,
+                                },
+                                ...(prev.cronologiaModifiche ?? []),
+                              ],
+                            };
+                          });
                           setGradebookStatus(
                             `Registro importato in locale (${parsed.entries.length} alunni). I conteggi per fascia sono stati aggiornati.`
                           );
@@ -1775,21 +2397,24 @@ export function PlanEditorPage({
                     <button
                       type="button"
                       onClick={() => {
-                        const current = draft.analisiPartenza.alunniAnonimiFasce ?? [];
-                        const added = createManualStudentEntry(
-                          current,
-                          { nominativo: '', media: null },
-                          settings.soglieFasce
-                        );
-                        const next = [...current, added];
-                        setDraft((prev) => ({
-                          ...prev,
-                          analisiPartenza: {
-                            ...prev.analisiPartenza,
-                            alunniAnonimiFasce: next,
-                            livelli: computeLivelliFromStudents(next),
-                          },
-                        }));
+                        setDraft((prev) => {
+                          const current = prev.analisiPartenza.alunniAnonimiFasce ?? [];
+                          const added = createManualStudentEntry(
+                            current,
+                            { nominativo: '', media: null },
+                            settings.soglieFasce
+                          );
+                          const next = [...current, added];
+                          const excl = prev.analisiPartenza.escludiDisabilitaDaFasce !== false;
+                          return {
+                            ...prev,
+                            analisiPartenza: {
+                              ...prev.analisiPartenza,
+                              alunniAnonimiFasce: next,
+                              livelli: computeLivelliFromStudents(next, { excludeDisabilita: excl }),
+                            },
+                          };
+                        });
                       }}
                       className="inline-flex items-center gap-1 whitespace-nowrap shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
                     >
@@ -1866,6 +2491,21 @@ export function PlanEditorPage({
                     entries={draft.analisiPartenza.alunniAnonimiFasce ?? []}
                     soglie={settings.soglieFasce}
                     classeRilevata={draft.analisiPartenza.registroClasseRilevata}
+                    excludeDisabilita={draft.analisiPartenza.escludiDisabilitaDaFasce !== false}
+                    settings={settings}
+                    onToggleExcludeDisabilita={(nextExclude) => {
+                      setDraft((prev) => ({
+                        ...prev,
+                        analisiPartenza: {
+                          ...prev.analisiPartenza,
+                          escludiDisabilitaDaFasce: nextExclude,
+                          livelli: computeLivelliFromStudents(
+                            prev.analisiPartenza.alunniAnonimiFasce ?? [],
+                            { excludeDisabilita: nextExclude }
+                          ),
+                        },
+                      }));
+                    }}
                     tableExportContext={{
                       livelliOverride: draft.analisiPartenza.livelli,
                       classeLabel: [
@@ -1881,44 +2521,96 @@ export function PlanEditorPage({
                         'originale',
                     }}
                     onChangeEntries={(nextEntries: AnonymousStudentBandEntry[]) => {
-                      const nextLivelli = computeLivelliFromStudents(nextEntries);
-                      setDraft((prev) => ({
-                        ...prev,
-                        analisiPartenza: {
-                          ...prev.analisiPartenza,
-                          alunniAnonimiFasce: nextEntries,
-                          livelli: nextLivelli,
-                          registroClasseRilevata:
-                            nextEntries.length === 0
-                              ? undefined
-                              : prev.analisiPartenza.registroClasseRilevata,
-                        },
-                      }));
+                      setDraft((prev) => {
+                        const excl = prev.analisiPartenza.escludiDisabilitaDaFasce !== false;
+                        const nextLivelli = computeLivelliFromStudents(nextEntries, {
+                          excludeDisabilita: excl,
+                        });
+                        return {
+                          ...prev,
+                          analisiPartenza: {
+                            ...prev.analisiPartenza,
+                            alunniAnonimiFasce: nextEntries,
+                            livelli: nextLivelli,
+                            registroClasseRilevata:
+                              nextEntries.length === 0
+                                ? undefined
+                                : prev.analisiPartenza.registroClasseRilevata,
+                          },
+                        };
+                      });
                       if (nextEntries.length === 0) {
                         setGradebookStatus(null);
                         setGradebookError(null);
                       }
                     }}
-                    onSyncComposizione={(totaleAlunni, totaleBes, totaleDisabilita = 0) => {
-                      setDraft((prev) => ({
-                        ...prev,
-                        composizione: {
-                          ...prev.composizione,
-                          alunni: totaleAlunni,
+                    onSyncComposizione={(
+                      totaleAlunni,
+                      totaleBes,
+                      totaleDisabilita = 0,
+                      besConCertificazione,
+                      besSenzaCertificazione,
+                      maschi,
+                      femmine
+                    ) => {
+                      setDraft((prev) => {
+                        const prevComp = prev.composizione;
+                        const isManualAlunni = Boolean(prevComp.inserimentoManualeAlunni);
+                        const nextAlunni =
+                          !isManualAlunni &&
+                          typeof maschi === 'number' &&
+                          typeof femmine === 'number'
+                            ? maschi + femmine
+                            : isManualAlunni && typeof prevComp.alunni === 'number'
+                            ? prevComp.alunni
+                            : totaleAlunni;
+                        const nextComp = {
+                          ...prevComp,
+                          ...(typeof maschi === 'number' ? { maschi } : {}),
+                          ...(typeof femmine === 'number' ? { femmine } : {}),
+                          alunni: nextAlunni,
                           bes: totaleBes,
+                          besConCertificazione,
+                          besSenzaCertificazione,
                           disabilita: totaleDisabilita,
-                        },
-                        situazione: {
-                          ...prev.situazione,
-                          caratteristicheDimensioni: reconcileDimensionsWithTotalStudents(
-                            prev.situazione.caratteristicheDimensioni,
-                            prev.composizione.alunni ?? 0,
-                            totaleAlunni
-                          ),
-                        },
-                      }));
+                        };
+                        const currentBesText = prev.interventi.besInterventiProgrammati.trim();
+                        const prevAutoText = buildBesInterventiText(prevComp).trim();
+                        const shouldAutoUpdate =
+                          !currentBesText ||
+                          currentBesText === prevAutoText ||
+                          currentBesText === DEFAULT_BES_INTERVENTI_TEXT.trim();
+                        return {
+                          ...prev,
+                          composizione: nextComp,
+                          interventi: shouldAutoUpdate
+                            ? {
+                                ...prev.interventi,
+                                besInterventiProgrammati: buildBesInterventiText(nextComp),
+                              }
+                            : prev.interventi,
+                          situazione: {
+                            ...prev.situazione,
+                            caratteristicheDimensioni: reconcileDimensionsWithTotalStudents(
+                              prev.situazione.caratteristicheDimensioni,
+                              prevComp.alunni ?? 0,
+                              nextAlunni ?? totaleAlunni
+                            ),
+                          },
+                        };
+                      });
                       setGradebookStatus(
-                        `Composizione aggiornata: ${totaleAlunni} alunni totali, ${totaleBes} BES, ${totaleDisabilita} con disabilità.`
+                        `Composizione aggiornata: ${totaleAlunni} alunni totali${
+                          typeof maschi === 'number' && typeof femmine === 'number'
+                            ? ` (${maschi} M, ${femmine} F)`
+                            : ''
+                        }, ${totaleBes} BES${
+                          besConCertificazione !== undefined || besSenzaCertificazione !== undefined
+                            ? ` (${besConCertificazione ?? 0} con cert. DSA, ${
+                                besSenzaCertificazione ?? 0
+                              } senza cert.)`
+                            : ''
+                        }, ${totaleDisabilita} con disabilità.`
                       );
                     }}
                   />
@@ -2100,9 +2792,20 @@ export function PlanEditorPage({
               <div className="space-y-2 border-t border-slate-200 pt-4 dark:border-slate-800">
                 <PrivacyNoticeBanner compact />
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    Alunni con BES e interventi programmati (PDP, misure dispensative e strumenti compensativi)
-                  </span>
+                  <div>
+                    <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      Alunni con BES e interventi programmati (PDP, PEI, misure dispensative e strumenti compensativi)
+                    </span>
+                    {(() => {
+                      const b = resolveBesBreakdown(draft.composizione);
+                      if (b.bes === 0 && b.disabilita === 0) return null;
+                      return (
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Composizione rilevata: {b.bes} BES ({b.cert} con cert. DSA, {b.senza} senza cert.) · {b.disabilita} con disabilità
+                        </p>
+                      );
+                    })()}
+                  </div>
                   <button
                     type="button"
                     onClick={() =>
@@ -2110,14 +2813,14 @@ export function PlanEditorPage({
                         ...prev,
                         interventi: {
                           ...prev.interventi,
-                          besInterventiProgrammati: DEFAULT_BES_INTERVENTI_TEXT,
+                          besInterventiProgrammati: buildBesInterventiText(prev.composizione),
                         },
                       }))
                     }
                     className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                   >
                     <RotateCcw className="h-3 w-3" />
-                    Ripristina testo standard BES / PDP
+                    Rigenera testo concordato BES / PDP / PEI
                   </button>
                 </div>
                 <textarea
@@ -2742,76 +3445,103 @@ export function PlanEditorPage({
                       return (
                         <div
                           key={row.id}
-                          className="grid gap-3 rounded-lg border border-slate-200 p-3 lg:grid-cols-[1fr_1fr_auto] dark:border-slate-800"
+                          className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800"
                         >
-                          <label className="block">
-                            <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                              {isNuove ? 'Obiettivi' : 'Abilità'}
-                            </span>
-                            <textarea
-                              rows={4}
-                              value={row.abilita}
-                              onChange={(e) =>
+                          <div className="flex items-end gap-3">
+                            <label className="block flex-1">
+                              <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                                Nucleo tematico (opzionale, stampato in neretto nell’esportazione)
+                              </span>
+                              <input
+                                type="text"
+                                value={row.traguardo ?? ''}
+                                onChange={(e) =>
+                                  setDraft((prev) => ({
+                                    ...prev,
+                                    curricolo: {
+                                      ...prev.curricolo,
+                                      righeAbilitaConoscenze: prev.curricolo.righeAbilitaConoscenze.map(
+                                        (r) =>
+                                          r.id === row.id ? { ...r, traguardo: e.target.value } : r
+                                      ),
+                                    },
+                                  }))
+                                }
+                                placeholder="Es. Il numero e le operazioni, Lettura, Comprensione e produzione..."
+                                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold dark:border-slate-700 dark:bg-slate-950"
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() =>
                                 setDraft((prev) => ({
                                   ...prev,
                                   curricolo: {
                                     ...prev.curricolo,
-                                    righeAbilitaConoscenze: prev.curricolo.righeAbilitaConoscenze.map(
-                                      (r) => (r.id === row.id ? { ...r, abilita: e.target.value } : r)
-                                    ),
+                                    righeAbilitaConoscenze:
+                                      prev.curricolo.righeAbilitaConoscenze.filter(
+                                        (r) => r.id !== row.id
+                                      ),
                                   },
                                 }))
                               }
-                              placeholder={
-                                isNuove
-                                  ? 'Obiettivi specifici di apprendimento...'
-                                  : 'Abilità disciplinari...'
-                              }
-                              className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-                            />
-                          </label>
-                          <label className="block">
-                            <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                              Conoscenze (Contenuti)
-                            </span>
-                            <textarea
-                              rows={4}
-                              value={row.conoscenze}
-                              onChange={(e) =>
-                                setDraft((prev) => ({
-                                  ...prev,
-                                  curricolo: {
-                                    ...prev.curricolo,
-                                    righeAbilitaConoscenze: prev.curricolo.righeAbilitaConoscenze.map(
-                                      (r) =>
-                                        r.id === row.id ? { ...r, conoscenze: e.target.value } : r
-                                    ),
-                                  },
-                                }))
-                              }
-                              placeholder="Conoscenze / contenuti disciplinari raggruppati per nucleo..."
-                              className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm dark:border-slate-700 dark:bg-slate-950"
-                            />
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setDraft((prev) => ({
-                                ...prev,
-                                curricolo: {
-                                  ...prev.curricolo,
-                                  righeAbilitaConoscenze:
-                                    prev.curricolo.righeAbilitaConoscenze.filter(
-                                      (r) => r.id !== row.id
-                                    ),
-                                },
-                              }))
-                            }
-                            aria-label="Elimina riga programma"
-                            className="self-start rounded-lg p-2 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                              aria-label="Elimina riga programma"
+                              className="rounded-lg p-2 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                          <div className="grid gap-3 lg:grid-cols-2">
+                            <label className="block">
+                              <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                                {isNuove ? 'Obiettivi' : 'Abilità'}
+                              </span>
+                              <textarea
+                                rows={4}
+                                value={row.abilita}
+                                onChange={(e) =>
+                                  setDraft((prev) => ({
+                                    ...prev,
+                                    curricolo: {
+                                      ...prev.curricolo,
+                                      righeAbilitaConoscenze: prev.curricolo.righeAbilitaConoscenze.map(
+                                        (r) => (r.id === row.id ? { ...r, abilita: e.target.value } : r)
+                                      ),
+                                    },
+                                  }))
+                                }
+                                placeholder={
+                                  isNuove
+                                    ? 'Obiettivi specifici di apprendimento...'
+                                    : 'Abilità disciplinari...'
+                                }
+                                className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                              />
+                            </label>
+                            <label className="block">
+                              <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                                Conoscenze (Contenuti)
+                              </span>
+                              <textarea
+                                rows={4}
+                                value={row.conoscenze}
+                                onChange={(e) =>
+                                  setDraft((prev) => ({
+                                    ...prev,
+                                    curricolo: {
+                                      ...prev.curricolo,
+                                      righeAbilitaConoscenze: prev.curricolo.righeAbilitaConoscenze.map(
+                                        (r) =>
+                                          r.id === row.id ? { ...r, conoscenze: e.target.value } : r
+                                      ),
+                                    },
+                                  }))
+                                }
+                                placeholder="Conoscenze / contenuti disciplinari raggruppati per nucleo..."
+                                className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                              />
+                            </label>
+                          </div>
                         </div>
                       );
                     })}

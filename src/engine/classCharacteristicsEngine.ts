@@ -1180,8 +1180,10 @@ export function computeStudentCountFromPct(pct: number, alunniTotali: number): n
  * (estratto dal testo o salvato in ordineRegistro) e restituisce nomi privi di numeri in Title Case.
  */
 export function sortAndCleanStudentNamesForBands(
-  entries: AnonymousStudentBandEntry[]
+  entries: AnonymousStudentBandEntry[],
+  options?: { excludeDisabilita?: boolean }
 ): Record<'basso' | 'medio_basso' | 'medio' | 'alto', string[]> {
+  const excludeDisabilita = options?.excludeDisabilita ?? true;
   type Item = {
     cleanName: string;
     cognome: string;
@@ -1197,6 +1199,9 @@ export function sortAndCleanStudentNamesForBands(
   };
 
   for (const entry of entries) {
+    if (excludeDisabilita && entry.categoriaInclusione === 'disabilita_pei') {
+      continue;
+    }
     const parsed = extractRegisterOrderAndCleanName(entry.nominativo ?? '');
     if (!parsed.cleanName) continue;
     const registerOrder = parsed.registerOrder ?? entry.ordineRegistro ?? null;
@@ -1246,7 +1251,8 @@ export function getStudentNamesByLevelBand(
   bands: Record<'basso' | 'medio_basso' | 'medio' | 'alto', string[]>;
 } {
   const list = plan.analisiPartenza.alunniAnonimiFasce ?? [];
-  const bands = sortAndCleanStudentNamesForBands(list);
+  const excludeDisabilita = plan.analisiPartenza.escludiDisabilitaDaFasce !== false;
+  const bands = sortAndCleanStudentNamesForBands(list, { excludeDisabilita });
   const hasAnyImportedStudents =
     bands.basso.length > 0 ||
     bands.medio_basso.length > 0 ||

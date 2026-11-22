@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   extractNormalizedBulletEntries,
   formatCurricoloCellLines,
+  formatUnifiedCurricoloColumns,
   normalizeDocumentText,
   normalizeProgrammazioneTexts,
 } from '../domain/textSanitizer';
@@ -33,6 +34,7 @@ import {
   STRATEGIE_CONSOLIDAMENTO_OPTIONS,
   STRATEGIE_POTENZIAMENTO_OPTIONS,
   STRATEGIE_RECUPERO_OPTIONS,
+  buildBesInterventiText,
   createDefaultClassDimensions,
   createEmptyProgrammazione,
   formatDocenteConTitolo,
@@ -66,6 +68,7 @@ import {
   getActiveDimensionsForDocument,
   getEffectiveDimensionText,
   getPhraseVariantsCount,
+  getStudentNamesByLevelBand,
   isDimensionAllNessuno,
   moveDimensionHandle,
   quotaPercentualeToExpression,
@@ -98,15 +101,25 @@ import {
 } from '../engine/documentPlanImporter';
 import {
   classifyMediaToFascia,
+  computeGenderCountsFromStudents,
+  computeInclusionCountsFromStudents,
   computeLivelliFromStudents,
   createManualStudentEntry,
   extractCognomeOnly,
+  getUnifiedPianoForCategoria,
   moveStudentToFascia,
   parseGradebookBuffer,
   parseItalianDecimal,
+  parseStudentListText,
   restoreAutomaticFasce,
   updateStudentDetails,
 } from '../engine/gradebookImporter';
+import {
+  STUDENT_GENDER_DICTIONARY,
+  estimateStudentGender,
+  estimateStudentGendersBatch,
+  formatGenderEstimationLine,
+} from '../engine/studentGenderEstimator';
 import {
   cloneProgrammazioneWithOptions,
   getSectionOptionsForPreset,
@@ -121,6 +134,7 @@ import { applySuggestionAction, evaluateSuggestionRules } from '../engine/sugges
 import { generateProgrammazioneDocxBytes } from '../export/docxGenerator';
 import {
   buildLivelliTableClipboardContent,
+  buildLivelliTableColumns,
   generateLivelliTableDocxBytes,
 } from '../export/livelliTableExport';
 import { generateProgrammazionePdfBytes } from '../export/pdfGenerator';
@@ -1219,7 +1233,10 @@ Utilizzare con sicurezza le tecniche di calcolo \\tab Eseguire espressioni con f
     expect(rt.plan.interventi.consolidamentoAltro).toBe('Tutoraggio tra pari');
     expect(rt.plan.interventi.recuperoAltro).toBe('Sportello pomeridiano settimanale');
     expect(rt.plan.interventi.besInterventiProgrammati).toContain('PDP e PEI');
-    expect(rt.plan.curricolo.righeAbilitaConoscenze).toHaveLength(2);
+    expect(rt.plan.curricolo.righeAbilitaConoscenze).toHaveLength(1);
+    expect(rt.plan.curricolo.righeAbilitaConoscenze[0].abilita).toContain('Leggere e comprendere testi espositivi e narrativi complessi.');
+    expect(rt.plan.curricolo.righeAbilitaConoscenze[0].abilita).toContain('Pianificare e revisionare elaborati di diversa tipologia.');
+    expect(rt.plan.curricolo.righeAbilitaConoscenze[0].conoscenze).toContain('Ortografia, punteggiatura, connettivi testuali.');
     expect(rt.plan.curricolo.attivitaProgrammate).toBe(
       'Letture animate e progetto biblioteca scolastica.'
     );
@@ -2812,5 +2829,512 @@ Utilizzare con sicurezza le tecniche di calcolo \\tab Eseguire espressioni con f
     const xml = await zip.file('word/document.xml')!.async('string');
     expect(xml).toContain('• Analizza fenomeni naturali.');
     expect(xml).toContain('• Comunica concetti scientifici con proprietà di linguaggio.');
+  });
+
+  it('esporta tutti gli obiettivi/abilità e conoscenze in un’unica riga a 2 colonne con i nomi dei nuclei tematici in neretto (DOCX originale/moderno e PDF) e li ricostruisce al round-trip', async () => {
+    const plan = createEmptyProgrammazione(DEFAULT_SCHOOL_SETTINGS, {
+      disciplina: 'Matematica',
+      classe: 'Prima',
+      sezione: 'A',
+      layoutDocumento: 'originale',
+      indicazioniVersione: 'nuove',
+    });
+    plan.curricolo.competenzeAttese = [
+      'L’alunno si muove con sicurezza nel calcolo scritto e mentale.',
+    ];
+    plan.curricolo.righeAbilitaConoscenze = [
+      {
+        id: 'n1',
+        competenze: '',
+        traguardo: 'Numeri',
+        abilita: 'Eseguire operazioni con i numeri naturali.\nCalcolare potenze ed espressioni.',
+        conoscenze: 'Numeri naturali e proprietà.\nPotenze in N.',
+      },
+      {
+        id: 'n2',
+        competenze: '',
+        traguardo: 'Spazio e figure',
+        abilita: 'Classificare angoli e poligoni.',
+        conoscenze: 'Enti geometrici fondamentali e triangoli.',
+      },
+    ];
+
+    const unified = formatUnifiedCurricoloColumns(plan.curricolo.righeAbilitaConoscenze);
+    expect(unified.leftLines).toEqual([
+      { text: 'Numeri', isNucleoTitle: true },
+      { text: '• Eseguire operazioni con i numeri naturali.', isNucleoTitle: false },
+      { text: '• Calcolare potenze ed espressioni.', isNucleoTitle: false },
+      { text: 'Spazio e figure', isNucleoTitle: true },
+      { text: '• Classificare angoli e poligoni.', isNucleoTitle: false },
+    ]);
+    expect(unified.rightLines).toEqual([
+      { text: 'Numeri', isNucleoTitle: true },
+      { text: '• Numeri naturali e proprietà.', isNucleoTitle: false },
+      { text: '• Potenze in N.', isNucleoTitle: false },
+      { text: 'Spazio e figure', isNucleoTitle: true },
+      { text: '• Enti geometrici fondamentali e triangoli.', isNucleoTitle: false },
+    ]);
+
+    // 1. DOCX originale: esattamente UNA riga dati sotto "OBIETTIVI | CONOSCENZE" e nuclei con <w:b/>
+    const origBytes = await generateProgrammazioneDocxBytes(plan, DEFAULT_SCHOOL_SETTINGS, mapping);
+    const origZip = await JSZip.loadAsync(origBytes.buffer as ArrayBuffer);
+    const origXml = await origZip.file('word/document.xml')!.async('string');
+
+    const tragIdx = origXml.indexOf('TRAGUARDI PER LO SVILUPPO');
+    const tblStart = origXml.lastIndexOf('<w:tbl>', tragIdx);
+    const tblEnd = origXml.indexOf('</w:tbl>', tragIdx);
+    const tblXml = origXml.slice(tblStart, tblEnd + 8);
+    const obHeaderIdx = tblXml.indexOf('OBIETTIVI');
+    const afterObHeader = tblXml.slice(obHeaderIdx);
+    // Una sola riga dati dopo la riga di intestazione OBIETTIVI | CONOSCENZE (quindi esattamente 2 <w:tr> da header in poi)
+    const trMatchesAfterHeader = afterObHeader.match(/<w:tr>/g) ?? [];
+    expect(trMatchesAfterHeader).toHaveLength(1);
+    expect(afterObHeader).toMatch(/<w:b\/>[\s\S]{0,200}Numeri/);
+    expect(afterObHeader).toMatch(/<w:b\/>[\s\S]{0,200}Spazio e figure/);
+
+    // Round-trip DOCX ricostruisce i 2 nuclei separati
+    const rtDocx = await importProgrammazioneFromBuffer(
+      origBytes.buffer as ArrayBuffer,
+      'matematica_1A_unica_riga.docx',
+      DEFAULT_SCHOOL_SETTINGS
+    );
+    expect(rtDocx.plan.curricolo.righeAbilitaConoscenze.length).toBeGreaterThanOrEqual(2);
+    expect(rtDocx.plan.curricolo.righeAbilitaConoscenze.some((r) => r.traguardo === 'Numeri')).toBe(
+      true
+    );
+    expect(
+      rtDocx.plan.curricolo.righeAbilitaConoscenze.some((r) => r.traguardo === 'Spazio e figure')
+    ).toBe(true);
+
+    // 2. DOCX moderno: 1 riga dati nella tabella OBIETTIVI | CONOSCENZE e nuclei in grassetto
+    const modPlan = {
+      ...plan,
+      datiGenerali: { ...plan.datiGenerali, layoutDocumento: 'moderno' as const },
+    };
+    const modBytes = await generateProgrammazioneDocxBytes(modPlan, DEFAULT_SCHOOL_SETTINGS, mapping);
+    const modZip = await JSZip.loadAsync(modBytes.buffer as ArrayBuffer);
+    const modXml = await modZip.file('word/document.xml')!.async('string');
+    const modObIdx = modXml.indexOf('OBIETTIVI');
+    const modTblStart = modXml.lastIndexOf('<w:tbl>', modObIdx);
+    const modTblEnd = modXml.indexOf('</w:tbl>', modObIdx);
+    const modTblXml = modXml.slice(modTblStart, modTblEnd + 8);
+    expect(modTblXml.match(/<w:tr>/g) ?? []).toHaveLength(2); // 1 header + 1 data row
+    expect(modTblXml).toMatch(/<w:b\/>[\s\S]{0,200}Numeri/);
+    expect(modTblXml).toMatch(/<w:b\/>[\s\S]{0,200}Spazio e figure/);
+
+    // 3. PDF: entrambi i nuclei e le voci appaiono nel testo e vengono ricostruiti al round-trip
+    const pdfBytes = generateProgrammazionePdfBytes(plan, DEFAULT_SCHOOL_SETTINGS, mapping);
+    const rtPdf = await importProgrammazioneFromBuffer(
+      pdfBytes.buffer as ArrayBuffer,
+      'matematica_1A_unica_riga.pdf',
+      DEFAULT_SCHOOL_SETTINGS
+    );
+    expect(rtPdf.plan.curricolo.righeAbilitaConoscenze.some((r) => r.traguardo === 'Numeri')).toBe(
+      true
+    );
+    expect(
+      rtPdf.plan.curricolo.righeAbilitaConoscenze.some((r) => r.traguardo === 'Spazio e figure')
+    ).toBe(true);
+  });
+
+  it('concorda descrizione classe, BES con/senza certificazione e testi PDP/PEI in genere e numero (singolare vs plurale)', () => {
+    // Caso 1: 1 disabile + 1 BES con certificazione (DSA) => singolare rigoroso
+    const planSingular = createEmptyProgrammazione(DEFAULT_SCHOOL_SETTINGS, {
+      disciplina: 'Italiano',
+      classe: 'Prima',
+      sezione: 'B',
+      composizione: {
+        alunni: 20,
+        maschi: 10,
+        femmine: 10,
+        ripetenti: 0,
+        bes: 1,
+        besConCertificazione: 1,
+        besSenzaCertificazione: 0,
+        disabilita: 1,
+      },
+    });
+    const quickSing = generateQuickClassDescription(
+      planSingular,
+      DEFAULT_QUICK_CLASS_SELECTION,
+      0
+    );
+    expect(quickSing).toContain('1 alunno con Bisogni Educativi Speciali (BES), con certificazione (DSA)');
+    expect(quickSing).toContain('1 alunno con disabilità certificata');
+    expect(quickSing).toContain('al Piano Didattico Personalizzato (PDP)');
+    expect(quickSing).toContain('al Piano Educativo Individualizzato (PEI)');
+    expect(quickSing).not.toContain('Piani Didattici Personalizzati');
+    expect(quickSing).not.toContain('Piani Educativi Individualizzati');
+
+    const introSing = buildClassCompositionIntro(planSingular, 0);
+    expect(introSing).toContain('al Piano Didattico Personalizzato (PDP)');
+    expect(introSing).toContain('al Piano Educativo Individualizzato (PEI)');
+
+    const besTextSing = buildBesInterventiText(planSingular.composizione);
+    expect(besTextSing).toContain('il Piano Didattico Personalizzato (PDP)');
+    expect(besTextSing).toContain('il Piano Educativo Individualizzato (PEI)');
+    expect(besTextSing).toContain('con certificazione (DSA)');
+
+    // Caso 2: 2 disabili + 3 BES (2 con certificazione DSA + 1 senza certificazione) => plurale + ripartizione
+    const planPlural = createEmptyProgrammazione(DEFAULT_SCHOOL_SETTINGS, {
+      disciplina: 'Italiano',
+      classe: 'Prima',
+      sezione: 'C',
+      composizione: {
+        alunni: 22,
+        maschi: 11,
+        femmine: 11,
+        ripetenti: 0,
+        bes: 3,
+        besConCertificazione: 2,
+        besSenzaCertificazione: 1,
+        disabilita: 2,
+      },
+    });
+    const quickPl0 = generateQuickClassDescription(planPlural, DEFAULT_QUICK_CLASS_SELECTION, 0);
+    expect(quickPl0).toContain(
+      '3 alunni con Bisogni Educativi Speciali (BES), di cui 2 con certificazione (DSA) e 1 senza certificazione'
+    );
+    expect(quickPl0).toContain('2 alunni con disabilità certificata');
+    expect(quickPl0).toContain('ai rispettivi Piani Didattici Personalizzati (PDP)');
+    expect(quickPl0).toContain('ai rispettivi Piani Educativi Individualizzati (PEI)');
+
+    const quickPl1 = generateQuickClassDescription(planPlural, DEFAULT_QUICK_CLASS_SELECTION, 1);
+    expect(quickPl1).toContain('ai rispettivi PEI');
+    expect(quickPl1).toContain('ai rispettivi PDP');
+
+    const besTextPl = buildBesInterventiText(planPlural.composizione);
+    expect(besTextPl).toContain('2 con certificazione DSA e 1 senza certificazione');
+    expect(besTextPl).toContain('i Piani Didattici Personalizzati (PDP)');
+    expect(besTextPl).toContain('i Piani Educativi Individualizzati (PEI)');
+
+    // Caso 3: 1 BES senza certificazione, 0 disabilità
+    const planNoCert = createEmptyProgrammazione(DEFAULT_SCHOOL_SETTINGS, {
+      composizione: {
+        alunni: 18,
+        bes: 1,
+        besConCertificazione: 0,
+        besSenzaCertificazione: 1,
+        disabilita: 0,
+      },
+    });
+    const quickNoCert = generateQuickClassDescription(planNoCert, DEFAULT_QUICK_CLASS_SELECTION, 2);
+    expect(quickNoCert).toContain('1 alunno con Bisogni Educativi Speciali (BES), senza certificazione');
+    expect(quickNoCert).toContain('al Piano Didattico Personalizzato (PDP)');
+    expect(quickNoCert).not.toContain('PEI');
+  });
+
+  it('abbina alunni a Disabilità/DSA/BES dall’elenco fasce, sincronizza i conteggi ed esclude gli alunni con disabilità dalle fasce per impostazione predefinita', () => {
+    const entries = [
+      createManualStudentEntry(
+        [],
+        {
+          nominativo: 'Rossi Mario',
+          media: 5.0,
+          categoriaInclusione: 'disabilita_pei',
+          riferimentoPiano: 'PEI',
+        },
+        DEFAULT_SOGLIE_FASCE
+      ),
+      createManualStudentEntry(
+        [],
+        {
+          nominativo: 'Bianchi Anna',
+          media: 6.1,
+          categoriaInclusione: 'dsa',
+          riferimentoPiano: 'PDP',
+        },
+        DEFAULT_SOGLIE_FASCE
+      ),
+      createManualStudentEntry(
+        [],
+        {
+          nominativo: 'Verdi Luca',
+          media: 7.5,
+          categoriaInclusione: 'bes',
+          riferimentoPiano: 'PDP',
+        },
+        DEFAULT_SOGLIE_FASCE
+      ),
+      createManualStudentEntry(
+        [],
+        {
+          nominativo: 'Neri Giulia',
+          media: 9.2,
+          categoriaInclusione: 'nessuno',
+        },
+        DEFAULT_SOGLIE_FASCE
+      ),
+    ];
+
+    // 1. Conteggio categorie inclusione per Composizione
+    const counts = computeInclusionCountsFromStudents(entries);
+    expect(counts).toEqual({
+      totaleAlunni: 4,
+      disabilita: 1,
+      besConCertificazione: 1,
+      besSenzaCertificazione: 1,
+      totaleBes: 2,
+    });
+
+    // 2. Predefinito: disabilita_pei escluso dalle fasce di livello
+    expect(computeLivelliFromStudents(entries)).toEqual({
+      bassoAlunni: 0,
+      medioBassoAlunni: 1,
+      medioAlunni: 1,
+      altoAlunni: 1,
+    });
+    // Opt-in esplicito: includi disabilita nelle fasce
+    expect(computeLivelliFromStudents(entries, { excludeDisabilita: false })).toEqual({
+      bassoAlunni: 1,
+      medioBassoAlunni: 1,
+      medioAlunni: 1,
+      altoAlunni: 1,
+    });
+
+    // 3. Sanitizzazione ufficiale + esportazione tabella alunni rispettano escludiDisabilitaDaFasce e rimuovono i campi sensibili
+    const plan = createEmptyProgrammazione(DEFAULT_SCHOOL_SETTINGS, {
+      disciplina: 'Italiano',
+      classe: 'Prima',
+      sezione: 'A',
+    });
+    expect(plan.analisiPartenza.escludiDisabilitaDaFasce).toBe(true);
+    plan.analisiPartenza.alunniAnonimiFasce = entries;
+    plan.analisiPartenza.livelli = computeLivelliFromStudents(entries);
+
+    const bandsExcluded = getStudentNamesByLevelBand(plan);
+    expect(bandsExcluded.bands.basso).toEqual([]);
+    expect(bandsExcluded.bands.medio_basso).toEqual(['Bianchi Anna']);
+    expect(bandsExcluded.bands.medio).toEqual(['Verdi Luca']);
+    expect(bandsExcluded.bands.alto).toEqual(['Neri Giulia']);
+
+    const tableExcluded = buildLivelliTableColumns(
+      plan.analisiPartenza.livelli,
+      entries,
+      true
+    );
+    expect(tableExcluded.columns.find((c) => c.key === 'basso')?.names).toEqual([]);
+    expect(tableExcluded.columns.find((c) => c.key === 'medio_basso')?.names).toEqual([
+      'Bianchi Anna',
+    ]);
+
+    const sanitized = sanitizePlanForOfficialExport(plan);
+    expect(sanitized.analisiPartenza.alunniAnonimiFasce).toHaveLength(3);
+    expect(
+      sanitized.analisiPartenza.alunniAnonimiFasce?.every(
+        (s) =>
+          (!s.categoriaInclusione || s.categoriaInclusione === 'nessuno') &&
+          !s.riferimentoPiano &&
+          !s.notaSensibileDocente &&
+          s.media === null
+      )
+    ).toBe(true);
+
+    // Con escludiDisabilitaDaFasce = false l'alunno rientra nelle fasce ma resta sanitizzato
+    plan.analisiPartenza.escludiDisabilitaDaFasce = false;
+    const bandsIncluded = getStudentNamesByLevelBand(plan);
+    expect(bandsIncluded.bands.basso).toEqual(['Rossi Mario']);
+  });
+
+  it('classifica deterministicamente il sesso degli alunni dal formato COGNOME NOME usando il dizionario PDF completo', () => {
+    // 1. Verifica caricamento completo delle 821 voci dal dizionario elenco_nomi_genere_1fd930a7.pdf
+    expect(STUDENT_GENDER_DICTIONARY.size).toBe(821);
+
+    // 2. Nomi standard in elenco con confidenza ALTA (> 95%)
+    const marco = estimateStudentGender('ROSSI MARCO');
+    expect(marco).toEqual({
+      nomeOriginale: 'ROSSI MARCO',
+      cognome: 'ROSSI',
+      nomi: 'MARCO',
+      sesso: 'M',
+      colore: 'BLU',
+      confidenza: 'ALTA',
+      nota: '',
+    });
+    expect(formatGenderEstimationLine(marco)).toBe(
+      'ROSSI MARCO | ROSSI | MARCO | M | BLU | ALTA | '
+    );
+
+    const giulia = estimateStudentGender('Bianchi Giulia');
+    expect(giulia.sesso).toBe('F');
+    expect(giulia.colore).toBe('ROSA');
+    expect(giulia.confidenza).toBe('ALTA');
+    expect(giulia.nota).toBe('');
+
+    // 3. Particelle di cognome unite alla parola successiva
+    const diFrancesco = estimateStudentGender('DI FRANCESCO LUCA');
+    expect(diFrancesco.cognome).toBe('DI FRANCESCO');
+    expect(diFrancesco.nomi).toBe('LUCA');
+    expect(diFrancesco.sesso).toBe('M');
+    expect(diFrancesco.confidenza).toBe('ALTA');
+
+    const dAngelo = estimateStudentGender("D'ANGELO CHIARA");
+    expect(dAngelo.cognome).toBe('D ANGELO');
+    expect(dAngelo.nomi).toBe('CHIARA');
+    expect(dAngelo.sesso).toBe('F');
+    expect(dAngelo.colore).toBe('ROSA');
+    expect(dAngelo.confidenza).toBe('ALTA');
+
+    const dAngeloSpace = estimateStudentGender("D' ANGELO NICOLA");
+    expect(dAngeloSpace.cognome).toBe('D ANGELO');
+    expect(dAngeloSpace.sesso).toBe('M'); // NICOLA è in elenco M:98, non usa desinenza -A
+    expect(dAngeloSpace.confidenza).toBe('ALTA');
+
+    // 4. Regola cognome prima parola di 2 lettere (es. LI, MA)
+    const liZhangMin = estimateStudentGender('LI ZHANG MIN');
+    expect(liZhangMin.cognome).toBe('LI ZHANG');
+    expect(liZhangMin.nomi).toBe('MIN');
+    expect(liZhangMin.sesso).toBe('M');
+    expect(liZhangMin.colore).toBe('BLU');
+    expect(liZhangMin.confidenza).toBe('BASSA'); // MIN è M;51
+
+    const maLin = estimateStudentGender('MA LIN');
+    expect(maLin.cognome).toBe('MA');
+    expect(maLin.nomi).toBe('LIN');
+    expect(maLin.sesso).toBe('M');
+    expect(maLin.confidenza).toBe('BASSA'); // LIN è M;51
+
+    // 5. Prefissi composti GIAN / PIER
+    const gianLuca = estimateStudentGender('VERDI GIAN LUCA');
+    expect(gianLuca.nomi).toBe('GIANLUCA');
+    expect(gianLuca.sesso).toBe('M');
+    expect(gianLuca.confidenza).toBe('ALTA');
+
+    const pierPaolo = estimateStudentGender('NERI PIER-PAOLO');
+    expect(pierPaolo.nomi).toBe('PIERPAOLO');
+    expect(pierPaolo.sesso).toBe('M');
+    expect(pierPaolo.confidenza).toBe('ALTA');
+
+    // 6. Regola MARIA come secondo nome
+    const lucaMaria = estimateStudentGender('ROSSI LUCA MARIA');
+    expect(lucaMaria.sesso).toBe('M');
+    expect(lucaMaria.colore).toBe('BLU');
+    expect(lucaMaria.confidenza).toBe('MEDIA');
+    expect(lucaMaria.nota).toContain('Maria preceduto da Luca');
+
+    const annaMaria = estimateStudentGender('ROSSI ANNA MARIA');
+    expect(annaMaria.sesso).toBe('F');
+    expect(annaMaria.colore).toBe('ROSA');
+    expect(annaMaria.confidenza).toBe('ALTA');
+    expect(annaMaria.nota).toBe('');
+
+    // 7. Confidenza MEDIA (70-95% e conflitto penultimo nome)
+    const andrea = estimateStudentGender('BIANCHI ANDREA');
+    expect(andrea.sesso).toBe('M');
+    expect(andrea.colore).toBe('BLU');
+    expect(andrea.confidenza).toBe('MEDIA');
+    expect(andrea.nota).not.toBe('');
+
+    const conflict = estimateStudentGender('ROSSI GIULIA MARCO');
+    expect(conflict.sesso).toBe('M');
+    expect(conflict.confidenza).toBe('MEDIA');
+    expect(conflict.nota).toContain('conflitto');
+
+    // 8. Nomi ambigui 51% e Yuxin;U;51
+    const alex = estimateStudentGender('ROSSI ALEX');
+    expect(alex.sesso).toBe('M');
+    expect(alex.colore).toBe('BLU');
+    expect(alex.confidenza).toBe('BASSA');
+    expect(alex.nota).toBe('nome ambiguo, genere più diffuso');
+
+    const yuxin = estimateStudentGender('CHEN YUXIN');
+    expect(yuxin.sesso).toBe('INDETERMINATO');
+    expect(yuxin.colore).toBe('GRIGIO');
+    expect(yuxin.confidenza).toBe('BASSA');
+
+    // 9. Regola desinenza per nomi non in elenco + righe non valide
+    const desA = estimateStudentGender('ROSSI CLARISSA');
+    expect(desA.sesso).toBe('F');
+    expect(desA.colore).toBe('ROSA');
+    expect(desA.confidenza).toBe('BASSA');
+    expect(desA.nota).toContain('desinenza -A');
+
+    const desO = estimateStudentGender('VERDI LORISIO');
+    expect(desO.sesso).toBe('M');
+    expect(desO.colore).toBe('BLU');
+    expect(desO.confidenza).toBe('BASSA');
+    expect(desO.nota).toContain('desinenza -O');
+
+    const indet = estimateStudentGender('BIANCHI CHLOE');
+    expect(indet.sesso).toBe('INDETERMINATO');
+    expect(indet.colore).toBe('GRIGIO');
+    expect(indet.confidenza).toBe('BASSA');
+    expect(indet.nota).toContain('desinenza');
+
+    const batch = estimateStudentGendersBatch(['', 'ROSSI']);
+    expect(batch[0].sesso).toBe('INDETERMINATO');
+    expect(batch[0].nota).toBe('riga non valida');
+    expect(batch[1].sesso).toBe('INDETERMINATO');
+    expect(batch[1].nota).toBe('riga non valida');
+  });
+
+  it('integra stima sesso, elenco incollato COGNOME NOME, menu unico PEI/PDP e sanitizzazione esportazione', () => {
+    expect(getUnifiedPianoForCategoria('disabilita_pei')).toBe('PEI');
+    expect(getUnifiedPianoForCategoria('dsa')).toBe('PDP');
+    expect(getUnifiedPianoForCategoria('bes')).toBe('PDP');
+    expect(getUnifiedPianoForCategoria('nessuno')).toBe('');
+
+    const parsed = parseStudentListText(
+      ['ROSSI MARCO', 'DI FRANCESCO GIULIA', 'CHEN YUXIN'].join('\n'),
+      DEFAULT_SOGLIE_FASCE
+    );
+    expect(parsed).toHaveLength(3);
+    expect(parsed[0].sessoIpotizzato).toBe('M');
+    expect(parsed[1].sessoIpotizzato).toBe('F');
+    expect(parsed[2].sessoIpotizzato).toBe('INDETERMINATO');
+
+    expect(computeGenderCountsFromStudents(parsed)).toEqual({
+      maschi: 1,
+      femmine: 1,
+      indeterminati: 1,
+      totale: 3,
+    });
+
+    // Assegnazione categoria aggiorna automaticamente PEI/PDP in un solo passaggio
+    let updated = updateStudentDetails(
+      parsed,
+      parsed[0].id,
+      { categoriaInclusione: 'disabilita_pei' },
+      DEFAULT_SOGLIE_FASCE
+    );
+    expect(updated[0].riferimentoPiano).toBe('PEI');
+
+    updated = updateStudentDetails(
+      updated,
+      parsed[1].id,
+      { categoriaInclusione: 'dsa' },
+      DEFAULT_SOGLIE_FASCE
+    );
+    expect(updated[1].riferimentoPiano).toBe('PDP');
+
+    // Override manuale del genere da parte del docente e verifica conteggi
+    updated = updateStudentDetails(
+      updated,
+      parsed[2].id,
+      { sessoIpotizzato: 'F', sessoModificatoDalDocente: true },
+      DEFAULT_SOGLIE_FASCE
+    );
+    expect(computeGenderCountsFromStudents(updated)).toEqual({
+      maschi: 1,
+      femmine: 2,
+      indeterminati: 0,
+      totale: 3,
+    });
+
+    // I metadati locali di sesso non vengono esportati nei file ufficiali DOCX/PDF
+    const plan = createEmptyProgrammazione(DEFAULT_SCHOOL_SETTINGS, {
+      disciplina: 'Italiano',
+      classe: 'Prima',
+      sezione: 'A',
+    });
+    plan.analisiPartenza.alunniAnonimiFasce = updated;
+    const sanitized = sanitizePlanForOfficialExport(plan);
+    expect(sanitized.analisiPartenza.alunniAnonimiFasce).toHaveLength(2); // disabilità esclusa di default
+    expect(sanitized.analisiPartenza.alunniAnonimiFasce?.[0].sessoIpotizzato).toBeUndefined();
+    expect(sanitized.analisiPartenza.alunniAnonimiFasce?.[0].sessoNota).toBeUndefined();
+    expect(sanitized.analisiPartenza.alunniAnonimiFasce?.[0].sessoConfidenza).toBeUndefined();
+    expect(
+      sanitized.analisiPartenza.alunniAnonimiFasce?.[0].sessoModificatoDalDocente
+    ).toBeUndefined();
   });
 });

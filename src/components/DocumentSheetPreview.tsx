@@ -21,7 +21,8 @@ import type {
 } from '../domain/types';
 import {
   extractNormalizedBulletEntries,
-  formatCurricoloCellLines,
+  formatUnifiedCurricoloColumns,
+  type CurricoloFormattedLine,
 } from '../domain/textSanitizer';
 import {
   buildUnifiedClassDescriptionText,
@@ -843,34 +844,45 @@ export function DocumentSheetPreview({
                 <td className="w-1/2 border border-black px-2.5 py-1.5">{leftCurricoloHeader}</td>
                 <td className="w-1/2 border border-black px-2.5 py-1.5">CONOSCENZE</td>
               </tr>
-              {plan.curricolo.righeAbilitaConoscenze.length > 0 ? (
-                plan.curricolo.righeAbilitaConoscenze.map((row) => {
-                  const renderCell = (text: string, hint?: string) => {
-                    const formattedLines = formatCurricoloCellLines(text, hint);
-                    if (formattedLines.length === 0) return '—';
-                    return formattedLines.map((item, idx) => (
-                      <div key={idx} className={item.isNucleoTitle ? 'font-bold' : undefined}>
-                        {item.text}
-                      </div>
-                    ));
-                  };
-                  return (
-                    <tr key={row.id}>
-                      <td className="border border-black px-2.5 py-2 align-top">
-                        {renderCell(row.abilita, row.traguardo)}
-                      </td>
-                      <td className="border border-black px-2.5 py-2 align-top">
-                        {renderCell(row.conoscenze, row.traguardo)}
-                      </td>
-                    </tr>
-                  );
-                })
-              ) : (
-                <tr>
-                  <td className="h-24 border border-black px-2.5 py-2" />
-                  <td className="h-24 border border-black px-2.5 py-2" />
-                </tr>
-              )}
+              {(() => {
+                const unified = formatUnifiedCurricoloColumns(
+                  plan.curricolo.righeAbilitaConoscenze
+                );
+                const hasContent =
+                  unified.leftLines.length > 0 || unified.rightLines.length > 0;
+                const renderCell = (lines: CurricoloFormattedLine[]) => {
+                  if (lines.length === 0) return '—';
+                  return lines.map((item, idx) => (
+                    <div
+                      key={idx}
+                      className={
+                        item.isNucleoTitle
+                          ? idx > 0
+                            ? 'mt-2.5 font-bold'
+                            : 'font-bold'
+                          : undefined
+                      }
+                    >
+                      {item.text}
+                    </div>
+                  ));
+                };
+                return hasContent ? (
+                  <tr>
+                    <td className="border border-black px-2.5 py-2 align-top">
+                      {renderCell(unified.leftLines)}
+                    </td>
+                    <td className="border border-black px-2.5 py-2 align-top">
+                      {renderCell(unified.rightLines)}
+                    </td>
+                  </tr>
+                ) : (
+                  <tr>
+                    <td className="h-24 border border-black px-2.5 py-2" />
+                    <td className="h-24 border border-black px-2.5 py-2" />
+                  </tr>
+                );
+              })()}
             </tbody>
           </table>
         ) : (
@@ -922,35 +934,46 @@ export function DocumentSheetPreview({
                 </tr>
               </thead>
               <tbody>
-                {plan.curricolo.righeAbilitaConoscenze.length > 0 ? (
-                  plan.curricolo.righeAbilitaConoscenze.map((row) => {
-                    const renderCell = (text: string, hint?: string) => {
-                      const formattedLines = formatCurricoloCellLines(text, hint);
-                      if (formattedLines.length === 0) return '—';
-                      return formattedLines.map((item, idx) => (
-                        <div key={idx} className={item.isNucleoTitle ? 'font-bold' : undefined}>
-                          {item.text}
-                        </div>
-                      ));
-                    };
-                    return (
-                      <tr key={row.id}>
-                        <td className={`${cellBorderClass} px-2.5 py-2 align-top`}>
-                          {renderCell(row.abilita, row.traguardo)}
-                        </td>
-                        <td className={`${cellBorderClass} px-2.5 py-2 align-top`}>
-                          {renderCell(row.conoscenze, row.traguardo)}
-                        </td>
-                      </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan={2} className={`${cellBorderClass} px-3 py-3 italic text-slate-500`}>
-                      Nessuna riga inserita nel programma disciplinare.
-                    </td>
-                  </tr>
-                )}
+                {(() => {
+                  const unified = formatUnifiedCurricoloColumns(
+                    plan.curricolo.righeAbilitaConoscenze
+                  );
+                  const hasContent =
+                    unified.leftLines.length > 0 || unified.rightLines.length > 0;
+                  const renderCell = (lines: CurricoloFormattedLine[]) => {
+                    if (lines.length === 0) return '—';
+                    return lines.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className={
+                          item.isNucleoTitle
+                            ? idx > 0
+                              ? 'mt-2.5 font-bold'
+                              : 'font-bold'
+                            : undefined
+                        }
+                      >
+                        {item.text}
+                      </div>
+                    ));
+                  };
+                  return hasContent ? (
+                    <tr>
+                      <td className={`${cellBorderClass} px-2.5 py-2 align-top`}>
+                        {renderCell(unified.leftLines)}
+                      </td>
+                      <td className={`${cellBorderClass} px-2.5 py-2 align-top`}>
+                        {renderCell(unified.rightLines)}
+                      </td>
+                    </tr>
+                  ) : (
+                    <tr>
+                      <td colSpan={2} className={`${cellBorderClass} px-3 py-3 italic text-slate-500`}>
+                        Nessuna riga inserita nel programma disciplinare.
+                      </td>
+                    </tr>
+                  );
+                })()}
               </tbody>
             </table>
           </>

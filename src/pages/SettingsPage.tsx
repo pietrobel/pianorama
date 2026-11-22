@@ -2,6 +2,7 @@ import {
   CheckCircle2,
   Download,
   ExternalLink,
+  FolderOpen,
   Monitor,
   Moon,
   RefreshCw,
@@ -10,10 +11,11 @@ import {
   ShieldCheck,
   Smartphone,
   Sun,
+  Trash2,
 } from 'lucide-react';
 import type { UpdateCheckStatus } from '../pwa/pwaUpdateManager';
 import { OFFICIAL_PWA_URL } from '../pwa/pwaUpdateManager';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { PlessoSelect } from '../components/PlessoSelect';
 import {
@@ -25,12 +27,19 @@ import type {
   DocenteGenere,
   DocumentLayoutStyle,
   DocxMappingSchema,
+  SaveBehaviorMode,
   SchoolSettings,
   SoglieFasce,
   SoglieQuoteCaratteristiche,
   TextScalePreference,
   ThemePreference,
 } from '../domain/types';
+import {
+  clearSavedDefaultDirectory,
+  getSavedDefaultDirectory,
+  isDirectoryPickerSupported,
+  pickAndSaveDefaultDirectory,
+} from '../storage/saveDirectoryService';
 
 interface SettingsPageProps {
   settings: SchoolSettings;
@@ -83,6 +92,7 @@ export function SettingsPage({
     ...settings,
     defaultDocenteGenere: settings.defaultDocenteGenere ?? 'F',
     defaultLayoutDocumento: settings.defaultLayoutDocumento ?? 'originale',
+    saveBehavior: settings.saveBehavior ?? 'default_folder',
   });
   const [mappingText, setMappingText] = useState<string>(() => JSON.stringify(mapping, null, 2));
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
@@ -90,6 +100,19 @@ export function SettingsPage({
   const [mappingError, setMappingError] = useState<string | null>(null);
   const [confirmResetMap, setConfirmResetMap] = useState(false);
   const [showCustomInstitution, setShowCustomInstitution] = useState(false);
+  const [folderNotice, setFolderNotice] = useState<string | null>(null);
+  const [hasStoredDirHandle, setHasStoredDirHandle] = useState<boolean>(false);
+
+  useEffect(() => {
+    let active = true;
+    void getSavedDefaultDirectory().then((saved) => {
+      if (!active) return;
+      setHasStoredDirHandle(Boolean(saved));
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleSaveGeneral = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -499,6 +522,116 @@ export function SettingsPage({
               <option value="moderno">Stile moderno PIANORAMA (blu istituzionale)</option>
             </select>
           </label>
+        </div>
+
+        {/* Cartella predefinita di salvataggio */}
+        <div className="space-y-3 border-t border-slate-200 pt-4 dark:border-slate-800">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                Cartella predefinita di salvataggio (DOCX, PDF e Backup)
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Scegli la cartella del computer in cui salvare automaticamente i file esportati, oppure seleziona la cartella al momento del salvataggio.
+                {!isDirectoryPickerSupported() &&
+                  ' In questo browser è attivo il fallback automatico alla cartella Download.'}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  setFolderNotice(null);
+                  const res = await pickAndSaveDefaultDirectory();
+                  if (res.status === 'selected') {
+                    const next: SchoolSettings = {
+                      ...form,
+                      defaultSaveFolderName: res.name,
+                      saveBehavior: 'default_folder',
+                    };
+                    setForm(next);
+                    setHasStoredDirHandle(true);
+                    await onSaveSettings(next);
+                    setStatusMsg(`Cartella predefinita impostata su «${res.name}».`);
+                  } else if (res.status === 'unsupported') {
+                    setFolderNotice(res.reason);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#1F3864] bg-white px-3 py-1.5 text-xs font-semibold text-[#1F3864] hover:bg-blue-50 dark:border-blue-400 dark:bg-slate-900 dark:text-blue-300 dark:hover:bg-slate-800"
+              >
+                <FolderOpen className="h-3.5 w-3.5" />
+                Scegli cartella predefinita...
+              </button>
+              {form.defaultSaveFolderName && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await clearSavedDefaultDirectory();
+                    const next: SchoolSettings = {
+                      ...form,
+                      defaultSaveFolderName: undefined,
+                    };
+                    setForm(next);
+                    setHasStoredDirHandle(false);
+                    await onSaveSettings(next);
+                    setStatusMsg('Cartella predefinita rimossa (verrà usato il comportamento selezionato).');
+                  }}
+                  className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Rimuovi
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-800/40">
+              <span className="font-semibold text-slate-600 dark:text-slate-400">
+                Cartella attuale:{' '}
+              </span>
+              <strong className="text-slate-900 dark:text-slate-100">
+                {form.defaultSaveFolderName
+                  ? `${form.defaultSaveFolderName}${
+                      hasStoredDirHandle ? '' : ' (riautorizza alla prima esportazione)'
+                    }`
+                  : 'Nessuna (cartella Download del browser)'}
+              </strong>
+            </div>
+            <label className="block">
+              <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Comportamento all’esportazione
+              </span>
+              <select
+                value={form.saveBehavior ?? 'default_folder'}
+                onChange={(e) => {
+                  const next: SchoolSettings = {
+                    ...form,
+                    saveBehavior: e.target.value as SaveBehaviorMode,
+                  };
+                  setForm(next);
+                  void onSaveSettings(next);
+                }}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium dark:border-slate-700 dark:bg-slate-950"
+              >
+                <option value="default_folder">
+                  Salva nella cartella predefinita (o Download se non impostata)
+                </option>
+                <option value="ask_each_time">
+                  Chiedi sempre la cartella al salvataggio
+                </option>
+                <option value="browser_download">
+                  Usa sempre il download standard del browser
+                </option>
+              </select>
+            </label>
+          </div>
+
+          {folderNotice && (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+              {folderNotice}
+            </p>
+          )}
         </div>
 
         {/* Aspetto e accessibilità */}

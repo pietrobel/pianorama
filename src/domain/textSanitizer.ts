@@ -199,9 +199,31 @@ export interface CurricoloFormattedLine {
   isPlaceholder?: boolean;
 }
 
+export function looksLikeCurriculumSentenceNotHeading(trimmed: string): boolean {
+  if (/^[a-zà-ÿ]/.test(trimmed)) return true;
+  if (
+    /^(?:[A-Za-zÀ-ÿ]+(?:(?:ar|er|ir|rr)(?:e|si|mi|ti|ci|vi))|Saper(?:e)?|Esser(?:e)?)\s+\S+/i.test(
+      trimmed
+    )
+  ) {
+    return true;
+  }
+  if (/^(?:l[’'](?:alunn[oa]|alliev[oa])|l[oa]\s+student(?:e|essa)|gli\s+alunni)\b/i.test(trimmed)) {
+    return true;
+  }
+  if (
+    /\b(?:comprende|utilizza|riconosce|espone|esegue|interpreta|rappresenta|analizza|scrive|legge|produce|applica|conosce|descrive|individua|distingue|osserva|partecipa|interagisce|comunica|sostiene|coglie|calcola|formula|progetta|organizza|collabora|adotta|orienta|riflette|esplora|rispetta|ricerca|seleziona|elabora|valuta|usa|verifica|argomenta|colloca|muove|spiega|costruisce|ricava|sceglie|sviluppa|crea|gestisce|controlla|mantiene|risolve|prevede)\b/i.test(
+      trimmed
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * Normalizza il contenuto di una cella Obiettivi/Abilità o Conoscenze per la pubblicazione
- * (anteprima, DOCX, PDF), garantendo che l'eventuale intestazione del nucleo resti in grassetto
+ * (anteprima, DOCX, PDF), garantendo che ogni intestazione di nucleo resti in grassetto
  * senza punto elenco e ogni obiettivo/contenuto abbia sempre il proprio punto dell'elenco puntato.
  */
 export function formatCurricoloCellLines(
@@ -237,10 +259,6 @@ export function formatCurricoloCellLines(
 
   if (rawLines.length === 0) return [];
 
-  const hasFollowerWithMarker = rawLines
-    .slice(1)
-    .some((l) => /^(?:[•\-*▪▫◦●○☐☑☒]|\d+[.)]\s)/.test(l));
-
   const out: CurricoloFormattedLine[] = [];
 
   for (let idx = 0; idx < rawLines.length; idx++) {
@@ -248,34 +266,35 @@ export function formatCurricoloCellLines(
     const startsWithBullet = trimmed.startsWith('•');
     const startsWithNumbering = /^\d+[.)]\s/.test(trimmed);
     const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
-    const looksLikeObjectiveClause =
-      /^(?:[A-Za-zÀ-ÿ]+(?:(?:ar|er|ir|rr)(?:e|si|mi|ti|ci|vi))|Saper(?:e)?|Esser(?:e)?)\s+\S+/i.test(
-        trimmed
-      ) ||
-      /^(?:Il|Lo|La|I|Gli|Le|Un|Uno|Una|L[’'])\s+/i.test(trimmed) ||
-      /^[a-zà-ÿ]/.test(trimmed);
+    const hasFollowerWithMarkerAfter = rawLines
+      .slice(idx + 1)
+      .some((l) => /^(?:[•\-*▪▫◦●○☐☑☒]|\d+[.)]\s)/.test(l));
 
+    const cleanKey = trimmed.replace(/:$/, '').trim().toLowerCase();
     const isHintMatch =
+      idx === 0 &&
       normalizedHintKey.length > 0 &&
-      trimmed.replace(/:$/, '').trim().toLowerCase() === normalizedHintKey;
+      cleanKey === normalizedHintKey;
 
     const isUnHintedNucleoTitle =
-      hint.length === 0 &&
-      rawLines.length > 1 &&
-      hasFollowerWithMarker &&
-      trimmed.length <= 26 &&
-      wordCount <= 3 &&
-      !/[.!?;:]$/.test(trimmed) &&
-      !looksLikeObjectiveClause;
+      rawLines.length > idx + 1 &&
+      hasFollowerWithMarkerAfter &&
+      trimmed.length <= 78 &&
+      wordCount <= 12 &&
+      !/[.!?;]$/.test(trimmed) &&
+      !looksLikeCurriculumSentenceNotHeading(trimmed);
 
     const isNucleoTitle =
-      idx === 0 &&
       !startsWithBullet &&
       !startsWithNumbering &&
+      !PLACEHOLDER_ONLY_RX.test(trimmed) &&
       (isHintMatch || isUnHintedNucleoTitle);
 
     if (isNucleoTitle) {
-      out.push({ text: trimmed, isNucleoTitle: true });
+      const headingText = trimmed.replace(/:$/, '').trim();
+      if (headingText) {
+        out.push({ text: headingText, isNucleoTitle: true });
+      }
       continue;
     }
 
@@ -300,6 +319,53 @@ export function formatCurricoloCellLines(
   }
 
   return out;
+}
+
+/**
+ * Unifica tutte le righe del programma in due sole colonne (Obiettivi/Abilità e Conoscenze)
+ * pronte per essere pubblicate in un'unica riga di tabella con tutti i rispettivi nuclei tematici in neretto.
+ */
+export function formatUnifiedCurricoloColumns(
+  rows: import('./types').AbilitaConoscenzaRow[]
+): {
+  leftLines: CurricoloFormattedLine[];
+  rightLines: CurricoloFormattedLine[];
+} {
+  const appendRowSide = (
+    acc: CurricoloFormattedLine[],
+    lastNucleoRef: { key: string },
+    rawText: string,
+    nucleoHint?: string
+  ) => {
+    const rawTrimmed = normalizeDocumentText(rawText ?? '').trim();
+    if (!rawTrimmed || PLACEHOLDER_ONLY_RX.test(rawTrimmed)) return;
+    const lines = formatCurricoloCellLines(rawTrimmed, nucleoHint);
+    const nonPlaceholder = lines.filter((l) => !l.isPlaceholder);
+    if (nonPlaceholder.length === 0) return;
+
+    for (const line of nonPlaceholder) {
+      if (line.isNucleoTitle) {
+        const nextKey = line.text.replace(/:$/, '').trim().toLowerCase();
+        if (nextKey && nextKey === lastNucleoRef.key) {
+          continue;
+        }
+        lastNucleoRef.key = nextKey;
+      }
+      acc.push(line);
+    }
+  };
+
+  const leftLines: CurricoloFormattedLine[] = [];
+  const rightLines: CurricoloFormattedLine[] = [];
+  const lastLeftNucleo = { key: '' };
+  const lastRightNucleo = { key: '' };
+
+  for (const row of rows) {
+    appendRowSide(leftLines, lastLeftNucleo, row.abilita, row.traguardo);
+    appendRowSide(rightLines, lastRightNucleo, row.conoscenze, row.traguardo);
+  }
+
+  return { leftLines, rightLines };
 }
 
 export function normalizeProgrammazioneTexts(plan: Programmazione): Programmazione {
